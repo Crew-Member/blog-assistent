@@ -6,6 +6,7 @@ COPY package.json package-lock.json ./
 COPY packages/api/package.json packages/api/
 COPY packages/web/package.json packages/web/
 COPY packages/api/src/db/prisma packages/api/src/db/prisma
+COPY packages/api/scripts packages/api/scripts
 RUN npm ci
 COPY . .
 RUN npm run build && npm prune --omit=dev
