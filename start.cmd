@@ -74,7 +74,9 @@ call npm install
 if errorlevel 1 goto :npm_failed
 
 rem ---- 5. Datenbank-Schema --------------------------------------------------
-echo [5/6] Wende Datenbank-Aenderungen an ...
+echo [5/6] Bereite die Datenbank-Anbindung vor ...
+call npm run prisma:generate -w @blog/api
+if errorlevel 1 goto :migrate_failed
 call npm run prisma:deploy -w @blog/api
 if errorlevel 1 goto :migrate_failed
 
