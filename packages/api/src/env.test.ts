@@ -100,6 +100,13 @@ describe("describeAiSetup", () => {
     expect(lines).toContain("ANTHROPIC_BASE_URL ist gesetzt, wird aber ignoriert");
   });
 
+  it("weist auf ungewoehnliche Key-Typen hin, ohne sie als falsch zu bezeichnen", () => {
+    const lines = describeAiSetup(config({ ANTHROPIC_API_KEY: "sk-ant-usr" + "b".repeat(90) }), { preset: {}, fromFile: {} }).join("\n");
+    expect(lines).toContain('Normale API-Keys beginnen mit "sk-ant-api"');
+    expect(lines).toContain("sk-ant-usr");
+    expect(lines).not.toContain('beginnt nicht mit "sk-ant-"');
+  });
+
   it("meldet den Platzhalter-Modus", () => {
     expect(describeAiSetup(config({ AI_PROVIDER: "fake" }), { preset: {}, fromFile: {} })[0]).toContain("Platzhalter");
   });

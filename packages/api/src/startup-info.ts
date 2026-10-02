@@ -24,6 +24,10 @@ export function describeAiSetup(config: Config, origin: EnvOrigin): string[] {
     lines.push("         Loesung: die Umgebungsvariable entfernen (Windows: Einstellungen > Umgebungsvariablen) oder PowerShell/Terminal neu starten.");
   }
   if (!key.startsWith("sk-ant-")) lines.push('WARNUNG: Der Key beginnt nicht mit "sk-ant-". Vermutlich ist er falsch oder unvollstaendig kopiert.');
+  else if (!key.startsWith("sk-ant-api")) {
+    lines.push(`HINWEIS: Normale API-Keys beginnen mit "sk-ant-api". Dieser beginnt mit "${key.slice(0, 10)}" - moeglicherweise ein anderer Schluesseltyp.`);
+    lines.push("         Lehnt die API den Key ab, in der Anthropic Console unter API Keys einen neuen Key erstellen und diesen eintragen.");
+  }
   if (/\s/.test(key) || key.length < 40) lines.push("WARNUNG: Der Key enthaelt Leerzeichen oder ist auffallend kurz.");
 
   for (const name of ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN"]) {
