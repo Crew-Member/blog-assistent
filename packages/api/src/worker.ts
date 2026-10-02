@@ -27,7 +27,10 @@ export class Worker {
       await this.tick().catch((error) => console.error("Worker-Fehler:", error));
       if (!this.stopped) this.timer = setTimeout(loop, this.intervalMs);
     };
-    void this.recover().then(loop);
+    // Ist die DB beim Start (noch) nicht erreichbar, nicht abstuerzen: Fehler melden, der Loop versucht es weiter.
+    void this.recover()
+      .catch((error) => console.error("Worker-Start: Wiederherstellung fehlgeschlagen:", error instanceof Error ? error.message : error))
+      .then(loop);
   }
 
   stop(): void {

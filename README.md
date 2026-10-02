@@ -52,13 +52,21 @@ Ebenso ist der WordPress-Import nur gegen simulierte Antworten getestet.
 ## Schnellstart (Entwicklung)
 
 ```bash
-cp .env.example .env        # ADMIN_PASSWORD, SESSION_SECRET, ANTHROPIC_API_KEY ausfüllen
+cp .env.example .env        # im Projektstamm; dann ADMIN_PASSWORD, SESSION_SECRET, ANTHROPIC_API_KEY ausfüllen
 docker compose up -d        # nur Postgres (Port 5433)
 npm install
-npm run prisma:migrate      # Schema anwenden
+npm run prisma:migrate      # Schema anwenden (liest die .env im Projektstamm)
 npm run dev:api             # http://localhost:3100
 npm run dev:web             # http://localhost:5174 (Proxy auf die API)
 ```
+
+Die `.env` wird automatisch geladen – von der API (`dev:api`, `start`) und von den Prisma-Skripten
+(`prisma:migrate`, `prisma:deploy`). Dabei gilt:
+
+- Gesucht wird im aktuellen Ordner und in bis zu drei Elternordnern, die `.env` im Projektstamm genügt also.
+- Bereits gesetzte Umgebungsvariablen (Shell, Docker) haben Vorrang vor der Datei.
+- Fehlen Pflichtwerte, nennt die API beim Start genau, welche, und ob/wo sie eine `.env` gefunden hat.
+- Docker (`docker compose --profile app ...`) liest die `.env` selbst; dafür ist nichts weiter nötig.
 
 Ohne API-Key ausprobieren: `AI_PROVIDER=fake` setzen – dann liefert die KI Platzhalter-Texte, der gesamte Ablauf ist trotzdem nutzbar.
 

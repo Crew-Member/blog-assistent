@@ -23,3 +23,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
   return config;
 }
+
+/** Verstaendliche Meldung statt eines rohen Zod-Fehlers. */
+export function formatConfigError(error: unknown, envFile?: string): string {
+  const where = envFile ? `Gelesen aus: ${envFile}` : "Es wurde keine .env-Datei gefunden (Vorlage: .env.example nach .env kopieren).";
+  if (error instanceof z.ZodError) {
+    const lines = error.issues.map((i) => `  - ${i.path.join(".") || "?"}: ${i.message}`);
+    return `Konfiguration unvollständig oder ungültig:\n${lines.join("\n")}\n${where}`;
+  }
+  return `${error instanceof Error ? error.message : String(error)}\n${where}`;
+}
