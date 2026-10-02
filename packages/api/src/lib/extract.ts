@@ -35,7 +35,7 @@ export function detectKind(filename: string, mimeType: string): { kind: Document
   return { kind: "unsupported", mimeType };
 }
 
-function stripHtml(html: string): string {
+export function stripHtml(html: string): string {
   return html
     .replace(/<(script|style)[\s\S]*?<\/\1>/gi, "")
     .replace(/<br\s*\/?>|<\/(p|div|li|h[1-6]|tr)>/gi, "\n")

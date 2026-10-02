@@ -1,4 +1,4 @@
-import type { SiteProfile, TopicProposal } from "./types.js";
+import type { SiteProfile, StyleSampleInput, TopicProposal } from "./types.js";
 
 export function siteBlock(site: SiteProfile): string {
   return [
@@ -58,3 +58,32 @@ export function topicBlock(topic: TopicProposal): string {
     .filter(Boolean)
     .join("\n");
 }
+
+export function styleSamplesBlock(samples: StyleSampleInput[]): string {
+  if (samples.length === 0) return "";
+  const body = samples.map((s, i) => `<beispiel nr="${i + 1}" titel="${s.title.replace(/"/g, "'")}">\n${s.text.slice(0, 3500)}\n</beispiel>`).join("\n");
+  return `Bestehende Beitraege dieser Website als Stilvorlage (Satzbau, Ansprache, Gliederung, Detailtiefe). Uebernimm niemals Inhalte oder Fakten daraus:\n${body}`;
+}
+
+export const FACTCHECK_SYSTEM = `Du bist unabhaengiger Faktenpruefer fuer Fachbeitraege im Bereich Recht und Datenschutz. Du hast den Beitrag nicht geschrieben.
+
+Du bekommst: den Beitragsentwurf (HTML), Recherchenotizen mit Quellen, Eckdaten und - soweit vorhanden - die Originalunterlagen (Urteile, Mails).
+
+Vorgehen:
+1. Gehe den Beitrag Aussage fuer Aussage durch. Pruefe jede Tatsachenbehauptung - besonders Gericht, Aktenzeichen, Datum, Normen, Fristen, Betraege, Rechtsfolgen und wer was entschieden hat - gegen die Originalunterlagen, die Recherchenotizen und die Eckdaten.
+2. Eine Aussage gilt nur als belegt, wenn sie dort steht. Eigenes Wissen ersetzt keinen Beleg.
+3. Fuer jede Aussage mit Problem trage einen Eintrag in issues ein:
+   - problem: "unsupported" (nicht belegt), "contradicted" (widerspricht den Belegen), "imprecise" (verkuerzt oder uebertrieben, sodass es falsch wirken kann).
+   - evidence: kurz, was die Belege tatsaechlich sagen (oder dass nichts dazu steht).
+   - action: "removed" (Aussage aus dem Text genommen), "softened" (vorsichtiger formuliert, z. B. "nach Auffassung des Gerichts", "in der Regel"), "flagged" (Text unveraendert, aber der Redakteur muss pruefen - nur wenn die Aussage fuer den Beitrag unverzichtbar ist und du sie nicht entschaerfen kannst).
+4. Korrigiere den Beitrag entsprechend und gib in revisedHtml das vollstaendige HTML zurueck. Aendere nur, was die Pruefung erfordert; Struktur, Stil und belegte Passagen bleiben unveraendert. Erlaubte Tags: h2, h3, p, ul, ol, li, strong, em, blockquote, a. Keine neuen Fakten hinzufuegen. Kein Disclaimer.
+5. Entfernte oder entschaerfte Aussagen duerfen keine Luecken im Lesefluss hinterlassen; passe angrenzende Saetze an.
+6. summary: zwei bis drei Saetze fuer den Redakteur - wie belastbar ist der Beitrag, was war auffaellig.
+Wenn alles belegt ist, ist issues leer und revisedHtml identisch mit dem Entwurf. Sei streng, aber erfinde keine Probleme.`;
+
+export const STYLE_SYSTEM = `Du analysierst bestehende Beitraege einer Website und beschreibst ihren Schreibstil, damit kuenftige Beitraege konsistent klingen.
+
+Liefere:
+- tone: ein bis zwei Saetze zur Tonalitaet (Ansprache Sie/du/wir, Foermlichkeit, Haltung).
+- styleGuide: ein knapper, konkret anwendbarer Leitfaden (8 bis 15 Stichpunkte als Text mit Zeilenumbruechen): typische Beitragslaenge, Gliederung, Einstieg und Schluss, Satzlaenge, Umgang mit Fachbegriffen und Paragrafen, Zitierweise von Urteilen, Formulierungen oder Wendungen, die vermieden werden sollen.
+Beschreibe nur, was in den Beispielen erkennbar ist; erfinde keine Vorgaben. Keine Inhalte der Beispiele wiedergeben.`;

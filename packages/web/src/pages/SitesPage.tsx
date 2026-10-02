@@ -1,8 +1,72 @@
 import { useState } from "react";
-import { api, type Site } from "../api";
+import { api, type Site, type StyleSample } from "../api";
 import { useLoad } from "../hooks";
 
 const EMPTY = { name: "", baseUrl: "", language: "de", audience: "", tone: "", styleGuide: "", disclaimer: "" };
+
+function StyleSamples({ site, onApply }: { site: Site; onApply: (tone: string, styleGuide: string) => void }) {
+  const { data: samples, reload } = useLoad(() => api.get<StyleSample[]>(`/api/sites/${site.id}/style-samples`));
+  const [title, setTitle] = useState("");
+  const [text, setText] = useState("");
+  const [count, setCount] = useState(3);
+  const [message, setMessage] = useState<string>();
+  const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+
+  async function run(action: () => Promise<void>) {
+    setBusy(true);
+    setError(undefined);
+    setMessage(undefined);
+    try {
+      await action();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="stack">
+      <strong>Beispielbeiträge (Stilvorlage)</strong>
+      <span className="muted">Die KI orientiert sich beim Schreiben an Satzbau, Ansprache und Gliederung dieser Beiträge – Inhalte übernimmt sie nicht. Die jeweils drei neuesten werden verwendet.</span>
+      {samples?.map((s) => (
+        <div key={s.id} className="row spread">
+          <span>{s.title} <span className="muted">({s.text.length.toLocaleString("de-DE")} Zeichen)</span></span>
+          <button type="button" className="link" onClick={() => run(async () => { await api.del(`/api/style-samples/${s.id}`); await reload(); })}>entfernen</button>
+        </div>
+      ))}
+      <div className="row">
+        <label className="narrow">Anzahl<input type="number" min={1} max={10} value={count} onChange={(e) => setCount(Number(e.target.value))} /></label>
+        <button type="button" className="secondary" disabled={busy || !site.baseUrl} title={site.baseUrl ? "" : "Adresse der Website fehlt"} onClick={() => run(async () => {
+          const r = await api.post<{ imported: number; skipped: number }>(`/api/sites/${site.id}/style-samples/import-wordpress`, { count });
+          setMessage(`${r.imported} Beitrag/Beiträge importiert, ${r.skipped} übersprungen.`);
+          await reload();
+        })}>Neueste Beiträge von der Website importieren</button>
+        <button type="button" className="secondary" disabled={busy || !samples?.length} onClick={() => run(async () => {
+          const r = await api.post<{ tone: string; styleGuide: string }>(`/api/sites/${site.id}/derive-style`);
+          onApply(r.tone, r.styleGuide);
+          setMessage("Vorschlag in Tonalität und Leitfaden eingetragen – bitte prüfen und speichern.");
+        })}>Stil aus Beispielen ableiten</button>
+      </div>
+      <details>
+        <summary>Beitrag selbst einfügen</summary>
+        <div className="stack">
+          <label>Titel<input value={title} onChange={(e) => setTitle(e.target.value)} /></label>
+          <label>Text<textarea rows={6} value={text} onChange={(e) => setText(e.target.value)} placeholder="Beitragstext hier einfügen (mindestens 200 Zeichen)" /></label>
+          <div><button type="button" className="secondary" disabled={busy || !title.trim() || !text.trim()} onClick={() => run(async () => {
+            await api.post(`/api/sites/${site.id}/style-samples`, { title, text });
+            setTitle("");
+            setText("");
+            await reload();
+          })}>Als Beispiel speichern</button></div>
+        </div>
+      </details>
+      {message && <span className="muted">{message}</span>}
+      {error && <span className="error">{error}</span>}
+    </div>
+  );
+}
 
 function SiteForm({ initial, onSaved, onCancel }: { initial?: Site; onSaved: () => void; onCancel?: () => void }) {
   const [form, setForm] = useState(initial ?? EMPTY);
@@ -34,6 +98,7 @@ function SiteForm({ initial, onSaved, onCancel }: { initial?: Site; onSaved: () 
       <label>Tonalität<textarea rows={2} value={form.tone} onChange={set("tone")} placeholder="z. B. sachlich, präzise, Sie-Ansprache, keine Werbesprache" /></label>
       <label>Stilleitfaden / Beispiele<textarea rows={5} value={form.styleGuide} onChange={set("styleGuide")} placeholder="Gewünschte Länge, Gliederung, Besonderheiten – oder Auszüge aus bestehenden Beiträgen als Stilvorlage" /></label>
       <label>Disclaimer (wird unter jeden Beitrag gesetzt)<textarea rows={3} value={form.disclaimer} onChange={set("disclaimer")} /></label>
+      {initial && <StyleSamples site={initial} onApply={(tone, styleGuide) => setForm({ ...form, tone, styleGuide })} />}
       {error && <p className="error">{error}</p>}
       <div className="row">
         <button type="submit">{initial ? "Speichern" : "Website anlegen"}</button>

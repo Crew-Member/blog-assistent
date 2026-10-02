@@ -1,0 +1,23 @@
+Von der Rechtsprechung nach wie vor nicht abschließend geklärt ist die Frage, ob die Verletzung von Datenschutzrecht von Konkurrenten rechtlich verfolgt werden kann. Während etwa das LG Stuttgart (Urteil vom 20.05.2019, Az. 35 O 68/18 KfH), das LG Magdeburg (Urteil vom 18.01.2019, Az. 36 O 48/18), das LG Wiesbaden (Urteil vom 05.11.2018, Az. 5 O 214/18) und das LG Bochum (Urteil vom 07.08.2018, Az. I-12 O 85/18) eine gerichtliche Durchsetzbarkeit der DSGVO durch Konkurrenten ablehnen, vertreten das OLG Hamburg (Urteil vom 25.10.2018, Az. 3 U 66/17) und das LG Würzburg (Beschluss vom 13.09.2018, Az. 11 O 1741/18) eine gegensätzliche Auffassung.
+
+Das OLG Naumburg hat sich Anfang November in zwei ähnlich gelagerten Fällen (Urteil vom 07.11.2019, Az. 9 U 39/18 und Urteil vom 07.11.2019, Az. 9 U 6/19) im Ergebnis auf die Seite von OLG Hamburg und OLG Würzburg „geschlagen“ und damit gleichzeitig die oben genannte Entscheidung des LG Magdeburg aufgehoben.
+
+1. Worum ging es?
+
+Thematisch ging es in beiden Entscheidungen um den Online-Vertrieb von apothekenpflichtigen Medikamenten auf der Plattform „Amazon Marketplace“. Der Kläger – ein Apotheker aus München ‑ hatte den Beklagten ‑ ebenfalls Apotheker ‑ jeweils auf Unterlassung dieses Online-Vertriebs in Anspruch genommen. Zur Begründung gab er u. a. an, der Online-Vertrieb von Medikamenten verstoße gegen das Datenschutzrecht. Grundlage dieser Argumentation war, dass bei der Bestellung von Medikamenten auch Gesundheitsdaten offenbart werden, wofür nach dem Datenschutzrecht eine ausdrückliche Einwilligung des Betroffenen erforderlich ist.
+
+2. Rechtlicher Hintergrund
+
+Die Durchsetzung von Rechtsansprüchen gegenüber Konkurrenten gehört zum Wettbewerbsrecht. Rechtsgrundlage ist das Gesetz gegen den unlauteren Wettbewerb (UWG). Die Ahndung von Verstößen gegen Datenschutzrecht auf Grundlage des UWG setzt u. a. voraus, dass es sich bei den als verletzt gerügten datenschutzrechtlichen Vorschriften um sog. „Marktverhaltensregeln“ i. S. v. § 3a UWG handelt. Genau diese Frage wird von der Rechtsprechung bislang nicht einheitlich beantwortet und führt zu der oben skizzierten widersprüchlichen Rechtsprechung.
+
+3. Entscheidung des OLG Naumburg
+
+Das OLG Naumburg entschied in beiden Verfahren, dass die einschlägigen Regelungen des Datenschutzrechts jedenfalls in den konkret vorliegenden Fällen auch Marktverhaltensregeln darstellen. Hierzu führt es wörtlich jeweils aus:
+
+„Der Senat schließt sich der Auffassung des hanseatischen Oberlandesgerichts Hamburg an. Selbstverständlich schützen Datenschutzregeln in erster Linie das informationelle Selbstbestimmungsrecht des Betroffenen. Gleichwohl verfolgt die DSGVO auch andere Zielsetzungen: In den Erwägungsgründen 6 – 8 der DS-RL heißt es, dass die Richtlinie auch den grenzüberschreitenden Verkehr personenbezogener Daten auf ein einheitliches Schutzniveau heben soll (Erwägungsgründe 6 und 7), weil ein unterschiedliches Schutzniveau ein Hemmnis für die Ausübung von Wirtschaftstätigkeiten auf Gemeinschaftsebene darstellen und den Wettbewerb verfälschen könne (Erwägungsgrund 7 S. 2), und die Regelungen der Richtlinie auch der Beseitigung solcher Hemmnisse diene, um einen grenzüberschreitenden Fluss personenbezogener Daten kohärent in allen Mitgliedsstaaten und in Übereinstimmung mit dem Ziel des Binnenmarktes zu regeln (Erwägungsgrund 8).
+
+Vor Inkrafttreten der DSGVO war außerdem in der Rechtsprechung bereits anerkannt, dass die Nutzung von Daten zu Werbezwecken nach § 28 Abs. 3 BDSG a.F. als Marktverhaltensregel anzusehen ist (…).
+
+c) Im vorliegenden Fall hat der Beklagte die Plattform Amazon Marketplace in das Feilbieten der von ihm betriebenen Medikamente und Medizinprodukte in der Weise einbezogen, dass er die Popularität dieser Plattform nutzt, um Kunden zu gewinnen. Er setzt damit die Plattform als Werbeträger ein. Amazon selbst wertet die Daten – wenn auch anonym ‑ aus, um zu werben: ‚Kunden, die sich Produkt A angesehen haben, interessieren sich auch für Produkte B!‘. Dies zielt auf den Markt ab und berührt die wettbewerblichen Interessen der Marktteilnehmer. Denn durch die Auswertung der Absatzdaten können Kunden zielgerichtet angesprochen werden.“
+
+Im Ergebnis dieser Einschätzung können auch Wettbewerber rechtlich gegen Datenschutzverstöße vorgehen. Einen solchen Datenschutzverstoß liegt nach Auffassung des OLG Naumburg in den entschiedenen Fällen darin, dass im Rahmen der Online-Bestellung auf dem „Amazon-Marketplace“ auch Gesundheitsdaten des Bestellers verarbeitet werden, ohne dass von diesem eine ausdrückliche Einwilligung vorliegt.

@@ -1,6 +1,7 @@
-import type { PrismaClient } from "@prisma/client";
-import type { AiDocument, AiService, SiteProfile, TopicProposal } from "./ai/types.js";
+import { Prisma, type PrismaClient } from "@prisma/client";
+import type { AiDocument, AiService, DraftResult, FactCheckResult, ResearchResult, SiteProfile, TopicProposal } from "./ai/types.js";
 import { escapeHtml, sanitizePostHtml } from "./lib/html.js";
+import { checkReferences, type ReferenceCheck } from "./lib/references.js";
 import { slugify } from "./lib/slug.js";
 import type { FileStorage } from "./lib/storage.js";
 
@@ -22,24 +23,27 @@ function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
 }
 
-/** Schritt 1: Unterlagen lesen und Themen vorschlagen. */
-export async function analyzeSubmission({ prisma, ai, storage }: PipelineDeps, submissionId: string): Promise<void> {
-  try {
-    const submission = await prisma.submission.findUniqueOrThrow({
-      where: { id: submissionId },
-      include: { site: true, documents: { orderBy: { createdAt: "asc" } } },
-    });
-
-    const documents: AiDocument[] = [];
-    for (const doc of submission.documents) {
-      if (doc.extractedText !== null) {
-        documents.push({ filename: doc.filename, kind: "text", mimeType: doc.mimeType, text: doc.extractedText });
-      } else {
-        const data = await storage.load(doc.storageKey);
-        const kind = doc.mimeType === "application/pdf" ? "pdf" : "image";
-        documents.push({ filename: doc.filename, kind, mimeType: doc.mimeType, base64: data.toString("base64") });
-      }
+async function loadAiDocuments({ prisma, storage }: PipelineDeps, submissionId: string): Promise<AiDocument[]> {
+  const docs = await prisma.document.findMany({ where: { submissionId }, orderBy: { createdAt: "asc" } });
+  const result: AiDocument[] = [];
+  for (const doc of docs) {
+    if (doc.extractedText !== null) {
+      result.push({ filename: doc.filename, kind: "text", mimeType: doc.mimeType, text: doc.extractedText });
+    } else {
+      const data = await storage.load(doc.storageKey);
+      const kind = doc.mimeType === "application/pdf" ? "pdf" : "image";
+      result.push({ filename: doc.filename, kind, mimeType: doc.mimeType, base64: data.toString("base64") });
     }
+  }
+  return result;
+}
+
+/** Schritt 1: Unterlagen lesen und Themen vorschlagen. */
+export async function analyzeSubmission(deps: PipelineDeps, submissionId: string): Promise<void> {
+  const { prisma, ai } = deps;
+  try {
+    const submission = await prisma.submission.findUniqueOrThrow({ where: { id: submissionId }, include: { site: true } });
+    const documents = await loadAiDocuments(deps, submissionId);
 
     const topics = await ai.analyze({ site: profileOf(submission.site), note: submission.note, documents });
 
@@ -74,10 +78,60 @@ function clip(text: string, max: number): string {
   return t.length <= max ? t : `${t.slice(0, max - 1).trimEnd()}…`;
 }
 
-/** Schritt 2+3: Recherche und Entwurf fuer ein ausgewaehltes Thema. */
-export async function generatePost({ prisma, ai }: PipelineDeps, postId: string): Promise<void> {
+export type FactCheckStatus = "passed" | "revised" | "needs_review" | "skipped";
+
+export interface StoredFactCheck {
+  status: FactCheckStatus;
+  summary: string;
+  issues: FactCheckResult["issues"];
+  references: Pick<ReferenceCheck, "kind" | "text" | "found">[];
+  ranAt: string;
+  error?: string;
+}
+
+/** Wertet das Ergebnis des Faktenchecks aus und ergaenzt die deterministische Fundstellen-Pruefung. */
+export function evaluateFactCheck(
+  draft: DraftResult,
+  check: FactCheckResult,
+  evidence: string[],
+  now = new Date(),
+): { html: string; stored: StoredFactCheck; unverified: string[] } {
+  const html = sanitizePostHtml(check.revisedHtml);
+  const references = checkReferences(html, evidence);
+  const missing = references.filter((r) => !r.found);
+  const flagged = check.issues.filter((i) => i.action === "flagged");
+  const shrunk = html.length < sanitizePostHtml(draft.contentHtml).length * 0.4;
+
+  let status: FactCheckStatus = "passed";
+  if (check.issues.length > 0) status = "revised";
+  if (flagged.length > 0 || missing.length > 0 || shrunk) status = "needs_review";
+
+  const unverified = [
+    ...flagged.map((i) => i.claim),
+    ...missing.map((r) => `${r.text} – in Recherche und Unterlagen nicht wiederzufinden, bitte prüfen`),
+    ...(shrunk ? ["Der Faktencheck hat den Text stark gekürzt – bitte Inhalt auf Vollständigkeit prüfen"] : []),
+  ];
+  return {
+    html,
+    unverified,
+    stored: {
+      status,
+      summary: check.summary,
+      issues: check.issues,
+      references: references.map(({ kind, text, found }) => ({ kind, text, found })),
+      ranAt: now.toISOString(),
+    },
+  };
+}
+
+/** Schritt 2-4: Recherche, Entwurf und Faktencheck fuer ein ausgewaehltes Thema. */
+export async function generatePost(deps: PipelineDeps, postId: string): Promise<void> {
+  const { prisma, ai } = deps;
   try {
-    const post = await prisma.post.findUniqueOrThrow({ where: { id: postId }, include: { site: true, topic: true } });
+    const post = await prisma.post.findUniqueOrThrow({
+      where: { id: postId },
+      include: { site: { include: { styleSamples: { orderBy: { createdAt: "desc" }, take: 3 } } }, topic: true },
+    });
     const site = profileOf(post.site);
     const topic: TopicProposal = {
       title: post.topic.title,
@@ -87,26 +141,46 @@ export async function generatePost({ prisma, ai }: PipelineDeps, postId: string)
       keywords: asStringArray(post.topic.keywords),
     };
 
-    const research = await ai.research({ site, topic });
-    await prisma.post.update({ where: { id: postId }, data: { status: "DRAFTING", researchNotes: research.notes } });
+    const research: ResearchResult = await ai.research({ site, topic });
+    await prisma.post.update({ where: { id: postId }, data: { status: "DRAFTING", researchNotes: research.notes, factCheck: Prisma.DbNull } });
 
-    const draft = await ai.draft({ site, topic, research });
+    const styleSamples = post.site.styleSamples.map((s) => ({ title: s.title, text: s.text }));
+    const draft = await ai.draft({ site, topic, research, styleSamples });
+    const draftFields = {
+      title: clip(draft.title, 120),
+      slug: slugify(draft.slug || draft.title),
+      metaDescription: clip(draft.metaDescription, 160),
+      focusKeyword: draft.focusKeyword.trim(),
+      secondaryKeywords: draft.secondaryKeywords,
+      excerpt: draft.excerpt.trim(),
+      sources: draft.sources,
+    };
+    // Entwurf sofort sichern: schlaegt der Faktencheck fehl, geht die Arbeit nicht verloren.
     await prisma.post.update({
       where: { id: postId },
-      data: {
-        status: "DRAFT_READY",
-        error: null,
-        title: clip(draft.title, 120),
-        slug: slugify(draft.slug || draft.title),
-        metaDescription: clip(draft.metaDescription, 160),
-        focusKeyword: draft.focusKeyword.trim(),
-        secondaryKeywords: draft.secondaryKeywords,
-        excerpt: draft.excerpt.trim(),
-        contentHtml: assemblePostHtml(draft.contentHtml, post.site.disclaimer),
-        sources: draft.sources,
-        unverifiedClaims: draft.unverifiedClaims,
-      },
+      data: { ...draftFields, status: "FACTCHECKING", contentHtml: assemblePostHtml(draft.contentHtml, post.site.disclaimer), unverifiedClaims: draft.unverifiedClaims },
     });
+
+    const documents = await loadAiDocuments(deps, post.topic.submissionId);
+    const evidence = [
+      research.notes,
+      topic.summary,
+      ...topic.keyFacts,
+      ...research.sources.map((s) => s.title),
+      ...documents.flatMap((d) => (d.text ? [d.text] : [])),
+    ];
+
+    try {
+      const check = await ai.factCheck({ site, topic, research, draft, documents });
+      const { html, stored, unverified } = evaluateFactCheck(draft, check, evidence);
+      await prisma.post.update({
+        where: { id: postId },
+        data: { status: "DRAFT_READY", error: null, contentHtml: assemblePostHtml(html, post.site.disclaimer), unverifiedClaims: unverified, factCheck: stored as unknown as Prisma.InputJsonValue },
+      });
+    } catch (error) {
+      const stored: StoredFactCheck = { status: "skipped", summary: "Der Faktencheck konnte nicht durchgeführt werden – der Entwurf ist ungeprüft.", issues: [], references: [], ranAt: new Date().toISOString(), error: errorMessage(error) };
+      await prisma.post.update({ where: { id: postId }, data: { status: "DRAFT_READY", error: null, factCheck: stored as unknown as Prisma.InputJsonValue } });
+    }
   } catch (error) {
     await prisma.post.update({ where: { id: postId }, data: { status: "FAILED", error: errorMessage(error) } });
   }

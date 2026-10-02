@@ -52,9 +52,36 @@ export const draftResultSchema = z.object({
 });
 export type DraftResult = z.infer<typeof draftResultSchema>;
 
+export interface StyleSampleInput {
+  title: string;
+  text: string;
+}
+
+export const factCheckResultSchema = z.object({
+  summary: z.string(),
+  issues: z.array(
+    z.object({
+      claim: z.string(),
+      problem: z.enum(["unsupported", "contradicted", "imprecise"]),
+      evidence: z.string(),
+      action: z.enum(["removed", "softened", "flagged"]),
+    }),
+  ),
+  /** Vollstaendiges, korrigiertes Beitrags-HTML (unveraendert, wenn nichts zu korrigieren war). */
+  revisedHtml: z.string().min(1),
+});
+export type FactCheckResult = z.infer<typeof factCheckResultSchema>;
+
+export const styleDerivationSchema = z.object({ tone: z.string(), styleGuide: z.string() });
+export type StyleDerivation = z.infer<typeof styleDerivationSchema>;
+
 /** Abstraktion ueber die KI-Schritte, damit Pipeline und Tests ohne echte API laufen koennen. */
 export interface AiService {
   analyze(input: { site: SiteProfile; note: string; documents: AiDocument[] }): Promise<TopicProposal[]>;
   research(input: { site: SiteProfile; topic: TopicProposal }): Promise<ResearchResult>;
-  draft(input: { site: SiteProfile; topic: TopicProposal; research: ResearchResult }): Promise<DraftResult>;
+  draft(input: { site: SiteProfile; topic: TopicProposal; research: ResearchResult; styleSamples: StyleSampleInput[] }): Promise<DraftResult>;
+  /** Unabhaengige Pruefung des Entwurfs gegen Recherche und Originalunterlagen; liefert korrigiertes HTML. */
+  factCheck(input: { site: SiteProfile; topic: TopicProposal; research: ResearchResult; draft: DraftResult; documents: AiDocument[] }): Promise<FactCheckResult>;
+  /** Leitet aus Beispielbeitraegen Tonalitaet und Stilleitfaden ab. */
+  deriveStyle(input: { site: SiteProfile; samples: StyleSampleInput[] }): Promise<StyleDerivation>;
 }

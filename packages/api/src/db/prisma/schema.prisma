@@ -23,6 +23,18 @@ model Site {
 
   submissions Submission[]
   posts       Post[]
+  styleSamples StyleSample[]
+}
+
+// Beispielbeitrag einer Website als Stilvorlage (importiert aus WordPress oder eingefuegt).
+model StyleSample {
+  id        String   @id @default(cuid())
+  siteId    String
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  title     String
+  url       String   @default("")
+  text      String
+  createdAt DateTime @default(now())
 }
 
 enum SubmissionStatus {
@@ -78,6 +90,7 @@ enum PostStatus {
   QUEUED
   RESEARCHING
   DRAFTING
+  FACTCHECKING
   DRAFT_READY
   FAILED
 }
@@ -101,6 +114,8 @@ model Post {
   sources           Json       @default("[]")
   // Aussagen im Text, fuer die keine Quelle gefunden wurde -> manuell pruefen.
   unverifiedClaims  Json       @default("[]")
+  // Ergebnis des Faktencheck-Durchlaufs: { status, summary, issues[], references[], ranAt } oder { status: "skipped", error }
+  factCheck         Json?
   researchNotes     String?
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt

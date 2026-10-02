@@ -40,7 +40,7 @@ export interface Site {
 }
 
 export type SubmissionStatus = "UPLOADED" | "ANALYZING" | "ANALYZED" | "FAILED";
-export type PostStatus = "QUEUED" | "RESEARCHING" | "DRAFTING" | "DRAFT_READY" | "FAILED";
+export type PostStatus = "QUEUED" | "RESEARCHING" | "DRAFTING" | "FACTCHECKING" | "DRAFT_READY" | "FAILED";
 
 export interface SubmissionListItem {
   id: string;
@@ -71,6 +71,30 @@ export interface SubmissionDetail {
   topics: TopicWithPosts[];
 }
 
+export interface FactCheck {
+  status: "passed" | "revised" | "needs_review" | "skipped";
+  summary: string;
+  issues: { claim: string; problem: "unsupported" | "contradicted" | "imprecise"; evidence: string; action: "removed" | "softened" | "flagged" }[];
+  references: { kind: "aktenzeichen" | "norm" | "datum"; text: string; found: boolean }[];
+  ranAt: string;
+  error?: string;
+}
+
+export interface SeoCheck {
+  id: string;
+  label: string;
+  ok: boolean;
+  detail: string;
+}
+
+export interface StyleSample {
+  id: string;
+  title: string;
+  url: string;
+  text: string;
+  createdAt: string;
+}
+
 export interface PostDetail {
   id: string;
   status: PostStatus;
@@ -84,6 +108,8 @@ export interface PostDetail {
   contentHtml: string | null;
   sources: { title: string; url: string; note: string }[];
   unverifiedClaims: string[];
+  factCheck: FactCheck | null;
+  seoChecks: SeoCheck[];
   researchNotes: string | null;
   site: { id: string; name: string; baseUrl: string };
   topic: { id: string; title: string; submissionId: string };
@@ -110,8 +136,9 @@ export const POST_LABEL: Record<PostStatus, string> = {
   QUEUED: "In Warteschlange",
   RESEARCHING: "Recherche läuft …",
   DRAFTING: "Entwurf wird geschrieben …",
+  FACTCHECKING: "Faktencheck läuft …",
   DRAFT_READY: "Entwurf fertig",
   FAILED: "Fehlgeschlagen",
 };
 
-export const isBusy = (status: string) => ["UPLOADED", "ANALYZING", "QUEUED", "RESEARCHING", "DRAFTING"].includes(status);
+export const isBusy = (status: string) => ["UPLOADED", "ANALYZING", "QUEUED", "RESEARCHING", "DRAFTING", "FACTCHECKING"].includes(status);

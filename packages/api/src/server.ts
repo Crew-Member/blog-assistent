@@ -7,16 +7,22 @@ import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { PrismaClient } from "@prisma/client";
 import { z } from "zod";
+import type { AiService } from "./ai/types.js";
 import type { Config } from "./config.js";
 import type { FileStorage } from "./lib/storage.js";
 import { extractDocument, detectKind } from "./lib/extract.js";
 import { sanitizePostHtml } from "./lib/html.js";
+import { seoChecks } from "./lib/seo.js";
 import { slugify } from "./lib/slug.js";
+import { fetchWordPressPosts } from "./lib/wordpress.js";
 
 export interface ServerDeps {
   config: Config;
   prisma: PrismaClient;
   storage: FileStorage;
+  ai: AiService;
+  /** Fuer Tests austauschbar (WordPress-Import). */
+  fetcher?: typeof fetch;
   /** Verzeichnis mit dem gebauten Frontend (optional). */
   webDir?: string;
 }
@@ -36,6 +42,13 @@ const siteSchema = z.object({
   disclaimer: z.string().max(4000).default(""),
 });
 
+const styleSampleSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  url: z.string().trim().max(500).default(""),
+  text: z.string().trim().min(200, "Beispieltext ist zu kurz (mindestens 200 Zeichen)").max(60000),
+});
+const MAX_STYLE_SAMPLES = 20;
+
 const postUpdateSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
   slug: z.string().trim().max(120).optional(),
@@ -51,7 +64,7 @@ function safeEqual(a: string, b: string): boolean {
   return ba.length === bb.length && timingSafeEqual(ba, bb);
 }
 
-export function buildServer({ config, prisma, storage, webDir }: ServerDeps): FastifyInstance {
+export function buildServer({ config, prisma, storage, ai, fetcher, webDir }: ServerDeps): FastifyInstance {
   const app = Fastify({ logger: process.env.NODE_ENV !== "test", trustProxy: true, bodyLimit: 2 * 1024 * 1024 });
 
   app.register(fastifyCookie, { secret: config.SESSION_SECRET });
@@ -118,6 +131,58 @@ export function buildServer({ config, prisma, storage, webDir }: ServerDeps): Fa
   app.delete<{ Params: { id: string } }>("/api/sites/:id", async (request, reply) => {
     const { count } = await prisma.site.deleteMany({ where: { id: request.params.id } });
     return count ? reply.code(204).send() : reply.code(404).send({ error: "Website nicht gefunden" });
+  });
+
+  // --- Stilvorlagen ---------------------------------------------------------
+  app.get<{ Params: { id: string } }>("/api/sites/:id/style-samples", async (request) =>
+    prisma.styleSample.findMany({ where: { siteId: request.params.id }, orderBy: { createdAt: "desc" }, select: { id: true, title: true, url: true, createdAt: true, text: true } }),
+  );
+
+  app.post<{ Params: { id: string } }>("/api/sites/:id/style-samples", async (request, reply) => {
+    const body = styleSampleSchema.safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: body.error.issues[0]?.message ?? "Ungültige Eingabe" });
+    const site = await prisma.site.findUnique({ where: { id: request.params.id }, select: { id: true, _count: { select: { styleSamples: true } } } });
+    if (!site) return reply.code(404).send({ error: "Website nicht gefunden" });
+    if (site._count.styleSamples >= MAX_STYLE_SAMPLES) return reply.code(409).send({ error: `Höchstens ${MAX_STYLE_SAMPLES} Beispielbeiträge pro Website` });
+    return reply.code(201).send(await prisma.styleSample.create({ data: { ...body.data, siteId: site.id } }));
+  });
+
+  app.post<{ Params: { id: string } }>("/api/sites/:id/style-samples/import-wordpress", async (request, reply) => {
+    const parsed = z.object({ count: z.number().int().min(1).max(10).default(3) }).safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: "Anzahl muss zwischen 1 und 10 liegen" });
+    const site = await prisma.site.findUnique({ where: { id: request.params.id }, select: { id: true, baseUrl: true } });
+    if (!site) return reply.code(404).send({ error: "Website nicht gefunden" });
+    if (!site.baseUrl) return reply.code(400).send({ error: "Für die Website ist keine Adresse hinterlegt" });
+    let posts;
+    try {
+      posts = await fetchWordPressPosts(site.baseUrl, parsed.data.count, fetcher);
+    } catch (error) {
+      return reply.code(502).send({ error: `Import nicht möglich: ${error instanceof Error ? error.message : String(error)}` });
+    }
+    const existing = new Set((await prisma.styleSample.findMany({ where: { siteId: site.id }, select: { url: true } })).map((s) => s.url));
+    const fresh = posts.filter((p) => p.text.length >= 200 && !(p.url && existing.has(p.url)));
+    await prisma.styleSample.createMany({ data: fresh.map((p) => ({ siteId: site.id, title: p.title, url: p.url, text: p.text.slice(0, 60000) })) });
+    return { imported: fresh.length, skipped: posts.length - fresh.length };
+  });
+
+  app.delete<{ Params: { id: string } }>("/api/style-samples/:id", async (request, reply) => {
+    const { count } = await prisma.styleSample.deleteMany({ where: { id: request.params.id } });
+    return count ? reply.code(204).send() : reply.code(404).send({ error: "Beispielbeitrag nicht gefunden" });
+  });
+
+  // Schlaegt Tonalitaet und Leitfaden aus den Beispielbeitraegen vor - wird nicht gespeichert, der Nutzer uebernimmt es im Formular.
+  app.post<{ Params: { id: string } }>("/api/sites/:id/derive-style", async (request, reply) => {
+    const site = await prisma.site.findUnique({ where: { id: request.params.id }, include: { styleSamples: { orderBy: { createdAt: "desc" }, take: 5 } } });
+    if (!site) return reply.code(404).send({ error: "Website nicht gefunden" });
+    if (site.styleSamples.length === 0) return reply.code(400).send({ error: "Bitte zuerst Beispielbeiträge hinzufügen" });
+    try {
+      return await ai.deriveStyle({
+        site: { name: site.name, language: site.language, audience: site.audience, tone: site.tone, styleGuide: site.styleGuide },
+        samples: site.styleSamples.map((s) => ({ title: s.title, text: s.text })),
+      });
+    } catch (error) {
+      return reply.code(502).send({ error: `Stilableitung fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}` });
+    }
   });
 
   // --- Uploads / Submissions ---------------------------------------------
@@ -237,7 +302,11 @@ export function buildServer({ config, prisma, storage, webDir }: ServerDeps): Fa
       where: { id: request.params.id },
       include: { site: { select: { id: true, name: true, baseUrl: true } }, topic: { select: { id: true, title: true, submissionId: true } } },
     });
-    return post ?? reply.code(404).send({ error: "Beitrag nicht gefunden" });
+    if (!post) return reply.code(404).send({ error: "Beitrag nicht gefunden" });
+    const seo = post.status === "DRAFT_READY"
+      ? seoChecks({ title: post.title ?? "", slug: post.slug ?? "", metaDescription: post.metaDescription ?? "", focusKeyword: post.focusKeyword ?? "", contentHtml: post.contentHtml ?? "" })
+      : [];
+    return { ...post, seoChecks: seo };
   });
 
   app.put<{ Params: { id: string } }>("/api/posts/:id", async (request, reply) => {

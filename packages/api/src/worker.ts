@@ -18,7 +18,7 @@ export class Worker {
   async recover(): Promise<void> {
     const { prisma } = this.deps;
     await prisma.submission.updateMany({ where: { status: "ANALYZING" }, data: { status: "UPLOADED" } });
-    await prisma.post.updateMany({ where: { status: { in: ["RESEARCHING", "DRAFTING"] } }, data: { status: "QUEUED" } });
+    await prisma.post.updateMany({ where: { status: { in: ["RESEARCHING", "DRAFTING", "FACTCHECKING"] } }, data: { status: "QUEUED" } });
   }
 
   start(): void {

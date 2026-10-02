@@ -4,27 +4,41 @@ KI-gestützte Erstellung von Blogbeiträgen für mehrere WordPress-Websites (Kan
 Mails, PDFs und Urteile per Drag & Drop hochladen → die KI schlägt Themen vor, recherchiert zu den
 ausgewählten Themen im Web und schreibt einen Entwurf mit Quellen, Keywords und Meta-Daten.
 
-## Stand: Meilenstein 1 (Kern)
+## Stand: Meilenstein 2 (Qualität)
 
 | Funktion | Stand |
 |---|---|
 | Websites mit Stilprofil (Zielgruppe, Ton, Leitfaden, Disclaimer) | ✅ |
+| Beispielbeiträge als Stilvorlage: aus WordPress importieren (REST-API) oder einfügen; „Stil ableiten“ schlägt Tonalität und Leitfaden vor | ✅ |
 | Upload per Drag & Drop: PDF, E-Mail (`.eml`), Word (`.docx`), Text/Markdown/HTML, Bilder | ✅ |
 | Analyse der Unterlagen → Themenvorschläge (Claude liest PDFs nativ) | ✅ |
 | Web-Recherche mit Quellen (Claude-Websuche) | ✅ |
 | Entwurf inkl. Fokus-Keyword, Nebenbegriffen, Slug, Meta-Description, Auszug, Quellenliste | ✅ |
-| Kennzeichnung nicht belegter Aussagen (`unverifiedClaims`) | ✅ (einfache Form) |
+| **Faktencheck** als eigener, unabhängiger KI-Durchlauf gegen Recherche **und Originalunterlagen**; korrigiert den Text (entfernen/entschärfen) und protokolliert jede Beanstandung | ✅ |
+| **Belegprüfung im Code**: Aktenzeichen, Normen und Daten im Beitrag müssen in Recherche/Eckdaten/Unterlagen vorkommen, sonst Hinweis „bitte prüfen“ | ✅ |
+| **SEO-Checkliste** (Titel-/Meta-Länge, Keyword in Titel/Meta/Einstieg/Slug, Textlänge, Zwischenüberschriften) | ✅ |
 | Vorschau und manuelle Bearbeitung im Browser | ✅ |
 | Disclaimer + „Stand“-Datum werden vom System angehängt, nicht von der KI | ✅ |
-| Eigener Faktencheck-Durchlauf gegen die Quellen | Meilenstein 2 |
 | Bild-Prompts, Bildgenerierung, KI-Kennzeichnung | Meilenstein 3 |
-| WordPress-Anbindung (Entwurf ins CMS), Freigabe-Workflow | Meilenstein 4 |
+| WordPress-Anbindung (Entwurf ins CMS, Kategorien), Freigabe-Workflow | Meilenstein 4 |
+| Bestehende Beiträge überarbeiten (aktualisieren) | geplant |
 
 Outlook-`.msg`-Dateien werden nicht unterstützt – bitte als `.eml` oder PDF speichern.
+
+### Wie der Faktencheck arbeitet
+
+1. Ein zweiter Claude-Durchlauf bekommt den Entwurf, die Recherchenotizen, die Eckdaten und die Originalunterlagen (PDFs/Mails) und prüft jede Tatsachenbehauptung. Als belegt gilt nur, was dort steht.
+2. Beanstandete Aussagen werden entfernt, entschärft oder (nur wenn unverzichtbar) markiert; der korrigierte Text ersetzt den Entwurf.
+3. Unabhängig davon prüft der Code, ob jedes Aktenzeichen, jede Norm und jedes Datum im Text auch in den Belegen vorkommt. Nicht Auffindbares erscheint unter „Offen – bitte prüfen“.
+4. Status am Beitrag: *bestanden*, *korrigiert*, *bitte prüfen* oder *nicht durchgeführt* (z. B. API-Fehler – der Entwurf bleibt dann erhalten, ist aber als ungeprüft gekennzeichnet).
+
+Der Faktencheck verringert das Risiko falscher Angaben, ersetzt aber nicht die fachliche Prüfung vor der Veröffentlichung.
+Er kennt nur das, was in den Belegen steht; PDFs liest Claude, die Belegprüfung im Code sieht aber nur Text (Recherche, Eckdaten, Mails/Word).
 
 **Hinweis zum Teststand:** Der gesamte Ablauf ist automatisiert und im Browser mit der Platzhalter-KI
 (`AI_PROVIDER=fake`) getestet. Die echten Claude-Aufrufe (`src/ai/claude.ts`) sind gegen die SDK-Typen
 geprüft, aber noch nicht mit einem echten API-Key gelaufen – das ist der erste Schritt nach dem Einrichten.
+Ebenso ist der WordPress-Import nur gegen simulierte Antworten getestet.
 
 ## Architektur
 
@@ -33,6 +47,7 @@ geprüft, aber noch nicht mit einem echten API-Key gelaufen – das ist der erst
 - Ablauf: `Submission` (Upload) → `analyze` → `Topic`s → Klick „Beitrag erstellen“ → `Post` `QUEUED` → `research` (Websuche) → `draft` → `DRAFT_READY`
 - KI-Zugriff nur über das Interface `AiService` (`src/ai/types.ts`): `ClaudeAiService` (echt) und `FakeAiService` (Platzhalter für Tests/Ausprobieren)
 - Prompts liegen gesammelt in `packages/api/src/ai/prompts.ts`
+- Testdaten: `packages/api/src/fixtures/` enthält zwei echte Beiträge (OLG Naumburg, Deutsche Wohnen) für die Belegprüfung
 
 ## Schnellstart (Entwicklung)
 
@@ -74,4 +89,5 @@ blog.kdsb.gmbh {
 - Nur ein Benutzer: Login per Passwort (`ADMIN_PASSWORD`), signiertes httpOnly-/SameSite-Strict-Cookie, Login-Drosselung. Das Passwort nur über HTTPS eingeben.
 - Hochgeladene Unterlagen und Texte gehen zur Verarbeitung an die Anthropic-API. Die Unterlagen sollen keine vertraulichen Mandantendaten enthalten.
 - Vom Modell erzeugtes HTML wird serverseitig auf eine kleine Tag-Menge bereinigt.
+- Der WordPress-Import ruft nur öffentliche Adressen ab (interne/private IP-Bereiche und Weiterleitungen dorthin werden blockiert).
 - Inhalte immer vor Veröffentlichung fachlich prüfen – die KI kann sich bei Rechtsfragen irren.

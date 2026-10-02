@@ -1,4 +1,4 @@
-import type { AiDocument, AiService, DraftResult, ResearchResult, SiteProfile, TopicProposal } from "./types.js";
+import type { AiDocument, AiService, DraftResult, FactCheckResult, ResearchResult, SiteProfile, StyleDerivation, StyleSampleInput, TopicProposal } from "./types.js";
 
 /** Platzhalter-Implementierung ohne API-Aufrufe - fuer Tests und zum Ausprobieren der Oberflaeche. */
 export class FakeAiService implements AiService {
@@ -22,7 +22,7 @@ export class FakeAiService implements AiService {
     };
   }
 
-  async draft(input: { site: SiteProfile; topic: TopicProposal; research: ResearchResult }): Promise<DraftResult> {
+  async draft(input: { site: SiteProfile; topic: TopicProposal; research: ResearchResult; styleSamples?: StyleSampleInput[] }): Promise<DraftResult> {
     return {
       title: input.topic.title.slice(0, 65),
       slug: "beispielthema",
@@ -34,5 +34,13 @@ export class FakeAiService implements AiService {
       sources: input.research.sources.map((s) => ({ ...s, note: "Platzhalter" })),
       unverifiedClaims: [],
     };
+  }
+
+  async factCheck(input: { draft: DraftResult }): Promise<FactCheckResult> {
+    return { summary: "Platzhalter-Faktencheck (AI_PROVIDER=fake): keine Beanstandungen.", issues: [], revisedHtml: input.draft.contentHtml };
+  }
+
+  async deriveStyle(input: { samples: StyleSampleInput[] }): Promise<StyleDerivation> {
+    return { tone: "Platzhalter-Tonalität (AI_PROVIDER=fake)", styleGuide: `- Platzhalter-Leitfaden aus ${input.samples.length} Beispiel(en)` };
   }
 }

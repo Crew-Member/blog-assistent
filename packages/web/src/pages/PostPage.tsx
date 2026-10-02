@@ -1,6 +1,49 @@
 import { useEffect, useState } from "react";
-import { POST_LABEL, api, isBusy, type PostDetail } from "../api";
+import { POST_LABEL, api, isBusy, type FactCheck, type PostDetail } from "../api";
 import { useLoad } from "../hooks";
+
+const FACT_LABEL: Record<FactCheck["status"], string> = {
+  passed: "Faktencheck bestanden – keine Beanstandungen",
+  revised: "Faktencheck: Text wurde korrigiert",
+  needs_review: "Faktencheck: bitte vor Veröffentlichung prüfen",
+  skipped: "Faktencheck nicht durchgeführt – Entwurf ungeprüft",
+};
+const PROBLEM_LABEL = { unsupported: "nicht belegt", contradicted: "widerspricht den Belegen", imprecise: "ungenau" } as const;
+const ACTION_LABEL = { removed: "entfernt", softened: "entschärft", flagged: "unverändert – bitte prüfen" } as const;
+const REF_LABEL = { aktenzeichen: "Aktenzeichen", norm: "Norm", datum: "Datum" } as const;
+
+function FactCheckPanel({ check, claims }: { check: FactCheck; claims: string[] }) {
+  const missing = check.references.filter((r) => !r.found);
+  return (
+    <div className={`card ${check.status === "passed" || check.status === "revised" ? "" : "warn"}`}>
+      <strong>{FACT_LABEL[check.status]}</strong>
+      <p>{check.summary}</p>
+      {check.error && <p className="error">{check.error}</p>}
+      {check.issues.length > 0 && (
+        <ul>
+          {check.issues.map((i, n) => (
+            <li key={n}>
+              „{i.claim}“ – {PROBLEM_LABEL[i.problem]}, {ACTION_LABEL[i.action]}
+              <div className="muted">{i.evidence}</div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {check.references.length > 0 && (
+        <p className="muted">
+          Fundstellen im Text: {check.references.length}, davon in Recherche/Unterlagen wiederzufinden: {check.references.length - missing.length}.
+          {missing.length > 0 && <> Nicht wiederzufinden: {missing.map((r) => `${REF_LABEL[r.kind]} ${r.text}`).join("; ")}</>}
+        </p>
+      )}
+      {claims.length > 0 && (
+        <>
+          <strong>Offen – bitte prüfen:</strong>
+          <ul>{claims.map((c, i) => <li key={i}>{c}</li>)}</ul>
+        </>
+      )}
+    </div>
+  );
+}
 
 export function PostPage({ id }: { id: string }) {
   const { data, error, reload } = useLoad(() => api.get<PostDetail>(`/api/posts/${id}`), (p) => isBusy(p.status));
@@ -44,11 +87,15 @@ export function PostPage({ id }: { id: string }) {
 
       {data.status === "DRAFT_READY" && (
         <>
-          {data.unverifiedClaims.length > 0 && (
-            <div className="card warn">
-              <strong>Bitte vor Veröffentlichung prüfen – nicht belegt:</strong>
-              <ul>{data.unverifiedClaims.map((c, i) => <li key={i}>{c}</li>)}</ul>
-            </div>
+          {data.factCheck ? (
+            <FactCheckPanel check={data.factCheck} claims={data.unverifiedClaims} />
+          ) : (
+            data.unverifiedClaims.length > 0 && (
+              <div className="card warn">
+                <strong>Bitte vor Veröffentlichung prüfen – nicht belegt:</strong>
+                <ul>{data.unverifiedClaims.map((c, i) => <li key={i}>{c}</li>)}</ul>
+              </div>
+            )
           )}
           <div className="grid">
             <div className="stack">
@@ -87,6 +134,18 @@ export function PostPage({ id }: { id: string }) {
                 <div className="card">
                   <strong>Quellen</strong>
                   <ul>{data.sources.map((s, i) => <li key={i}><a href={s.url} target="_blank" rel="noreferrer noopener">{s.title || s.url}</a><div className="muted">{s.note}</div></li>)}</ul>
+                </div>
+              )}
+              {data.seoChecks.length > 0 && (
+                <div className="card">
+                  <strong>SEO-Prüfung</strong>
+                  <ul className="files">
+                    {data.seoChecks.map((c) => (
+                      <li key={c.id}>
+                        <span className={c.ok ? "ok" : "error"}>{c.ok ? "✓" : "✗"}</span> {c.label} <span className="muted">– {c.detail}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
               {data.secondaryKeywords.length > 0 && <div>{data.secondaryKeywords.map((k) => <span key={k} className="tag">{k}</span>)}</div>}

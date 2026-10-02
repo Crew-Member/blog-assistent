@@ -10,8 +10,9 @@ import { Worker } from "./worker.js";
 const config = loadConfig();
 const storage = new FileStorage(config.STORAGE_DIR);
 const here = path.dirname(fileURLToPath(import.meta.url));
-const app = buildServer({ config, prisma, storage, webDir: path.resolve(here, "../../web/dist") });
-const worker = new Worker({ prisma, ai: createAiService(config), storage });
+const ai = createAiService(config);
+const app = buildServer({ config, prisma, storage, ai, webDir: path.resolve(here, "../../web/dist") });
+const worker = new Worker({ prisma, ai, storage });
 
 const shutdown = async () => {
   worker.stop();

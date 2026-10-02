@@ -13,6 +13,9 @@ import { Worker } from "./worker.js";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 
+/** FakeAiService mit einzelnen ueberschriebenen Schritten (Spread wuerde die Prototyp-Methoden verlieren). */
+const fakeWith = (overrides: Partial<AiService>): AiService => Object.assign(new FakeAiService(), overrides);
+
 describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
   const prisma = new PrismaClient();
   const config = loadConfig({ DATABASE_URL: process.env.DATABASE_URL, ADMIN_PASSWORD: "geheim-passwort", SESSION_SECRET: "x".repeat(40), AI_PROVIDER: "fake" } as NodeJS.ProcessEnv);
@@ -21,6 +24,7 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
   let ai: AiService;
   let worker: Worker;
   let cookie: string;
+  let wpFetcher: typeof fetch = (async () => new Response("[]")) as typeof fetch;
 
   const boundary = "----testboundary";
   function multipart(files: { name: string; type: string; content: string | Buffer }[], note = "") {
@@ -49,7 +53,7 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
   async function setup(service: AiService) {
     ai = service;
     const storage = new FileStorage(dir);
-    app = buildServer({ config, prisma, storage });
+    app = buildServer({ config, prisma, storage, ai, fetcher: wpFetcher });
     worker = new Worker({ prisma, ai, storage });
     await app.ready();
     const login = await app.inject({ method: "POST", url: "/api/auth/login", payload: { password: "geheim-passwort" } });
@@ -110,15 +114,14 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
 
   it("uebergibt PDF als Base64 und Mails als Text an die KI", async () => {
     const seen: { kind: string; hasBase64: boolean; text?: string }[] = [];
-    await setup({
-      ...new FakeAiService(),
-      analyze: async (input) => {
-        for (const d of input.documents) seen.push({ kind: d.kind, hasBase64: Boolean(d.base64), text: d.text });
-        return new FakeAiService().analyze(input);
-      },
-      research: (i) => new FakeAiService().research(i),
-      draft: (i) => new FakeAiService().draft(i),
-    });
+    await setup(
+      fakeWith({
+        analyze: async (input) => {
+          for (const d of input.documents) seen.push({ kind: d.kind, hasBase64: Boolean(d.base64), text: d.text });
+          return new FakeAiService().analyze(input);
+        },
+      }),
+    );
     const siteId = await createSite();
     const up = multipart([
       { name: "u.pdf", type: "application/pdf", content: "%PDF-1.4 test" },
@@ -140,14 +143,14 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
 
   it("markiert Fehler der KI am Beitrag und erlaubt einen neuen Versuch", async () => {
     let fail = true;
-    await setup({
-      analyze: (i) => new FakeAiService().analyze(i),
-      research: async (i) => {
-        if (fail) throw new Error("Rate limit");
-        return new FakeAiService().research(i);
-      },
-      draft: (i) => new FakeAiService().draft(i),
-    });
+    await setup(
+      fakeWith({
+        research: async (i) => {
+          if (fail) throw new Error("Rate limit");
+          return new FakeAiService().research(i);
+        },
+      }),
+    );
     const siteId = await createSite();
     const up = multipart([{ name: "a.txt", type: "text/plain", content: "Text" }]);
     const s = (await app.inject({ method: "POST", url: `/api/sites/${siteId}/submissions`, payload: up.payload, headers: up.headers })).json();
@@ -178,5 +181,113 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().contentHtml).toBe("<p>ok</p>");
     expect(res.json().slug).toBe("neuer-slug-aeoe");
+  });
+
+  /** Upload + Analyse + Beitrag anlegen + Worker laufen lassen; liefert die Beitrags-ID. */
+  async function makePost(siteId: string): Promise<string> {
+    const up = multipart([{ name: "a.txt", type: "text/plain", content: "Das OLG Naumburg entschied am 07.11.2019 (Az. 9 U 39/18)." }]);
+    const s = (await app.inject({ method: "POST", url: `/api/sites/${siteId}/submissions`, payload: up.payload, headers: up.headers })).json();
+    await worker.tick();
+    const topics = (await app.inject({ method: "GET", url: `/api/submissions/${s.id}`, headers: { cookie } })).json().topics;
+    const post = (await app.inject({ method: "POST", url: `/api/topics/${topics[0].id}/posts`, headers: { cookie } })).json();
+    await worker.tick();
+    return post.id as string;
+  }
+  const getPost = async (id: string) => (await app.inject({ method: "GET", url: `/api/posts/${id}`, headers: { cookie } })).json();
+
+  it("fuehrt den Faktencheck aus und liefert SEO-Pruefungen", async () => {
+    const post = await getPost(await makePost(await createSite()));
+    expect(post.status).toBe("DRAFT_READY");
+    expect(post.factCheck.status).toBe("passed");
+    expect(Array.isArray(post.seoChecks)).toBe(true);
+    expect(post.seoChecks.find((c: { id: string }) => c.id === "title-length")).toBeTruthy();
+  });
+
+  it("uebernimmt Korrekturen des Faktenchecks und markiert unbelegte Fundstellen", async () => {
+    await setup(
+      fakeWith({
+        draft: async (i) => ({
+          ...(await new FakeAiService().draft(i)),
+          contentHtml: "<p>Das OLG Köln (Az. 6 U 99/19) hat entschieden. Das OLG Naumburg (Az. 9 U 39/18) auch. Außerdem gilt immer Regel X.</p><p>" + "Text ".repeat(40) + "</p>",
+        }),
+        factCheck: async (i) => ({
+          summary: "Eine Aussage war nicht belegt.",
+          issues: [{ claim: "Außerdem gilt immer Regel X.", problem: "unsupported", evidence: "Nicht in den Unterlagen", action: "removed" }],
+          revisedHtml: i.draft.contentHtml.replace(" Außerdem gilt immer Regel X.", ""),
+        }),
+      }),
+    );
+    const post = await getPost(await makePost(await createSite()));
+    expect(post.status).toBe("DRAFT_READY");
+    expect(post.contentHtml).not.toContain("Regel X");
+    expect(post.factCheck.status).toBe("needs_review"); // 6 U 99/19 ist nirgends belegt
+    expect(post.factCheck.issues).toHaveLength(1);
+    expect(post.unverifiedClaims.join(" ")).toContain("6 U 99/19");
+    expect(post.unverifiedClaims.join(" ")).not.toContain("9 U 39/18");
+  });
+
+  it("behaelt den Entwurf, wenn der Faktencheck fehlschlaegt, und kennzeichnet ihn als ungeprueft", async () => {
+    await setup(fakeWith({ factCheck: async () => { throw new Error("API down"); } }));
+    const post = await getPost(await makePost(await createSite()));
+    expect(post.status).toBe("DRAFT_READY");
+    expect(post.contentHtml).toContain("Platzhalter");
+    expect(post.factCheck.status).toBe("skipped");
+    expect(post.factCheck.error).toContain("API down");
+  });
+
+  it("verwaltet Stilvorlagen und gibt sie an den Entwurf weiter", async () => {
+    let received: { title: string; text: string }[] = [];
+    await setup(fakeWith({ draft: async (i) => { received = i.styleSamples; return new FakeAiService().draft(i); } }));
+    const siteId = await createSite();
+    const text = "Dies ist ein Beispielbeitrag. ".repeat(20);
+
+    const tooShort = await app.inject({ method: "POST", url: `/api/sites/${siteId}/style-samples`, headers: { cookie }, payload: { title: "x", text: "kurz" } });
+    expect(tooShort.statusCode).toBe(400);
+
+    const created = await app.inject({ method: "POST", url: `/api/sites/${siteId}/style-samples`, headers: { cookie }, payload: { title: "OLG Naumburg", text } });
+    expect(created.statusCode).toBe(201);
+    await makePost(siteId);
+    expect(received).toEqual([{ title: "OLG Naumburg", text: text.trim() }]);
+
+    const derived = await app.inject({ method: "POST", url: `/api/sites/${siteId}/derive-style`, headers: { cookie } });
+    expect(derived.statusCode).toBe(200);
+    expect(derived.json().styleGuide).toContain("1 Beispiel");
+
+    expect((await app.inject({ method: "DELETE", url: `/api/style-samples/${created.json().id}`, headers: { cookie } })).statusCode).toBe(204);
+    const emptyDerive = await app.inject({ method: "POST", url: `/api/sites/${siteId}/derive-style`, headers: { cookie } });
+    expect(emptyDerive.statusCode).toBe(400);
+  });
+
+  it("importiert Beispielbeitraege aus WordPress ohne Duplikate und blockiert interne Adressen", async () => {
+    const content = "<p>" + "Beitragstext mit genug Inhalt. ".repeat(15) + "</p>";
+    wpFetcher = (async () => new Response(JSON.stringify([{ title: { rendered: "Beitrag A" }, link: "https://93.184.216.34/a", content: { rendered: content } }]))) as typeof fetch;
+    const create = async (baseUrl: string) =>
+      (await app.inject({ method: "POST", url: "/api/sites", headers: { cookie }, payload: { name: `S ${baseUrl}`, baseUrl } })).json().id as string;
+    await setup(new FakeAiService()); // baut den Server mit dem aktuellen wpFetcher neu auf
+    const siteId = await create("https://93.184.216.34");
+
+    const first = await app.inject({ method: "POST", url: `/api/sites/${siteId}/style-samples/import-wordpress`, headers: { cookie } });
+    expect(first.json()).toEqual({ imported: 1, skipped: 0 });
+    const second = await app.inject({ method: "POST", url: `/api/sites/${siteId}/style-samples/import-wordpress`, headers: { cookie } });
+    expect(second.json()).toEqual({ imported: 0, skipped: 1 });
+
+    const internal = await create("http://127.0.0.1:8080");
+    const blocked = await app.inject({ method: "POST", url: `/api/sites/${internal}/style-samples/import-wordpress`, headers: { cookie } });
+    expect(blocked.statusCode).toBe(502);
+    expect(blocked.json().error).toContain("intern");
+  });
+
+  it("gibt die gewuenschte Anzahl an den WordPress-Import weiter", async () => {
+    const urls: string[] = [];
+    wpFetcher = (async (url: string) => {
+      urls.push(url);
+      return new Response("[]");
+    }) as typeof fetch;
+    await setup(new FakeAiService());
+    const siteId = (await app.inject({ method: "POST", url: "/api/sites", headers: { cookie }, payload: { name: "S", baseUrl: "https://93.184.216.34" } })).json().id as string;
+    await app.inject({ method: "POST", url: `/api/sites/${siteId}/style-samples/import-wordpress`, headers: { cookie }, payload: { count: 8 } });
+    expect(urls[0]).toContain("per_page=8");
+    const invalid = await app.inject({ method: "POST", url: `/api/sites/${siteId}/style-samples/import-wordpress`, headers: { cookie }, payload: { count: 99 } });
+    expect(invalid.statusCode).toBe(400);
   });
 });

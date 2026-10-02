@@ -1,11 +1,16 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { ANALYZE_SYSTEM, DRAFT_SYSTEM, RESEARCH_SYSTEM, siteBlock, topicBlock } from "./prompts.js";
+import { ANALYZE_SYSTEM, DRAFT_SYSTEM, FACTCHECK_SYSTEM, RESEARCH_SYSTEM, STYLE_SYSTEM, siteBlock, styleSamplesBlock, topicBlock } from "./prompts.js";
 import {
   analyzeResultSchema,
   draftResultSchema,
+  factCheckResultSchema,
+  styleDerivationSchema,
   type AiDocument,
   type AiService,
   type DraftResult,
+  type FactCheckResult,
+  type StyleDerivation,
+  type StyleSampleInput,
   type ResearchResult,
   type ResearchSource,
   type SiteProfile,
@@ -70,6 +75,37 @@ const DRAFT_SCHEMA = {
     unverifiedClaims: stringArray,
   },
   required: ["title", "slug", "metaDescription", "focusKeyword", "secondaryKeywords", "excerpt", "contentHtml", "sources", "unverifiedClaims"],
+  additionalProperties: false,
+} as const;
+
+const FACTCHECK_SCHEMA = {
+  type: "object",
+  properties: {
+    summary: { type: "string" },
+    issues: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          claim: { type: "string" },
+          problem: { type: "string", enum: ["unsupported", "contradicted", "imprecise"] },
+          evidence: { type: "string" },
+          action: { type: "string", enum: ["removed", "softened", "flagged"] },
+        },
+        required: ["claim", "problem", "evidence", "action"],
+        additionalProperties: false,
+      },
+    },
+    revisedHtml: { type: "string" },
+  },
+  required: ["summary", "issues", "revisedHtml"],
+  additionalProperties: false,
+} as const;
+
+const STYLE_SCHEMA = {
+  type: "object",
+  properties: { tone: { type: "string" }, styleGuide: { type: "string" } },
+  required: ["tone", "styleGuide"],
   additionalProperties: false,
 } as const;
 
@@ -196,20 +232,49 @@ export class ClaudeAiService implements AiService {
     return { notes, sources: [...sources.values()] };
   }
 
-  async draft(input: { site: SiteProfile; topic: TopicProposal; research: ResearchResult }): Promise<DraftResult> {
+  async draft(input: { site: SiteProfile; topic: TopicProposal; research: ResearchResult; styleSamples: StyleSampleInput[] }): Promise<DraftResult> {
     const sourceList = input.research.sources.map((s) => `- ${s.title}: ${s.url}`).join("\n") || "(keine)";
     const content: Anthropic.ContentBlockParam[] = [
       {
         type: "text",
         text: [
           siteBlock(input.site),
+          styleSamplesBlock(input.styleSamples),
           topicBlock(input.topic),
           `Recherchenotizen:\n${input.research.notes}`,
           `Gefundene Quellen (nur diese duerfen in sources erscheinen):\n${sourceList}`,
           "Schreibe jetzt den Beitrag.",
-        ].join("\n\n"),
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
       },
     ];
     return this.structured(DRAFT_SYSTEM, content, DRAFT_SCHEMA, (v) => draftResultSchema.parse(v));
+  }
+
+  async factCheck(input: { site: SiteProfile; topic: TopicProposal; research: ResearchResult; draft: DraftResult; documents: AiDocument[] }): Promise<FactCheckResult> {
+    const sourceList = input.research.sources.map((s) => `- ${s.title}: ${s.url}`).join("\n") || "(keine)";
+    const content: Anthropic.ContentBlockParam[] = [
+      ...input.documents.map(documentBlock),
+      {
+        type: "text",
+        text: [
+          siteBlock(input.site),
+          topicBlock(input.topic),
+          `Recherchenotizen:\n${input.research.notes}`,
+          `Gefundene Quellen:\n${sourceList}`,
+          `Beitragsentwurf (HTML), Titel: ${input.draft.title}\n${input.draft.contentHtml}`,
+          "Pruefe den Beitragsentwurf jetzt gegen die Belege oben.",
+        ].join("\n\n"),
+      },
+    ];
+    return this.structured(FACTCHECK_SYSTEM, content, FACTCHECK_SCHEMA, (v) => factCheckResultSchema.parse(v));
+  }
+
+  async deriveStyle(input: { site: SiteProfile; samples: StyleSampleInput[] }): Promise<StyleDerivation> {
+    const content: Anthropic.ContentBlockParam[] = [
+      { type: "text", text: `${siteBlock(input.site)}\n\n${styleSamplesBlock(input.samples)}\n\nBeschreibe den Stil dieser Website.` },
+    ];
+    return this.structured(STYLE_SYSTEM, content, STYLE_SCHEMA, (v) => styleDerivationSchema.parse(v));
   }
 }
