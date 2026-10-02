@@ -4,12 +4,16 @@ import type { AiDocument, AiService, DraftResult, FactCheckResult, ResearchResul
 import { escapeHtml, sanitizePostHtml } from "./lib/html.js";
 import { checkReferences, type ReferenceCheck } from "./lib/references.js";
 import { slugify } from "./lib/slug.js";
+import type { ImageProvider } from "./image/provider.js";
+import { embedAiGeneratedXmp } from "./lib/png.js";
 import type { FileStorage } from "./lib/storage.js";
 
 export interface PipelineDeps {
   prisma: PrismaClient;
   ai: AiService;
   storage: FileStorage;
+  /** Optional: ohne Anbieter gibt es nur Prompts, Stockfoto-Suche und Upload. */
+  images?: ImageProvider;
 }
 
 function profileOf(site: { name: string; language: string; audience: string; tone: string; styleGuide: string }): SiteProfile {
@@ -184,5 +188,33 @@ export async function generatePost(deps: PipelineDeps, postId: string): Promise<
     }
   } catch (error) {
     await prisma.post.update({ where: { id: postId }, data: { status: "FAILED", error: errorMessage(error) } });
+  }
+}
+
+export const AI_LABEL = "Bild: KI-generiert";
+
+/** Bildunterschrift inkl. KI-Kennzeichnung (wenn das Bild KI-generiert ist und die Website es verlangt). */
+export function finalCaption(caption: string, aiGenerated: boolean, labelAiImages: boolean): string {
+  const base = caption.trim();
+  if (!aiGenerated || !labelAiImages || /KI-generiert/i.test(base)) return base;
+  return base ? `${base} (${AI_LABEL})` : AI_LABEL;
+}
+
+/** Erzeugt das Bild zu einem geplanten Prompt ueber den konfigurierten Anbieter und legt es ab. */
+export async function generateImage({ prisma, storage, images }: PipelineDeps, postId: string): Promise<void> {
+  try {
+    if (!images) throw new Error("Bildgenerierung ist nicht eingerichtet (IMAGE_PROVIDER).");
+    const image = await prisma.postImage.findUniqueOrThrow({ where: { postId } });
+    if (!image.prompt.trim()) throw new Error("Es gibt keinen Bild-Prompt.");
+    const generated = await images.generate({ prompt: image.prompt });
+    const data = embedAiGeneratedXmp(generated.data, `KI-generiert (${images.name})`);
+    const key = await storage.save(data);
+    if (image.storageKey) await storage.remove(image.storageKey);
+    await prisma.postImage.update({
+      where: { postId },
+      data: { status: "READY", error: null, origin: "AI", aiGenerated: true, storageKey: key, mimeType: generated.mimeType, wpMediaId: null },
+    });
+  } catch (error) {
+    await prisma.postImage.updateMany({ where: { postId }, data: { status: "FAILED", error: errorMessage(error) } });
   }
 }

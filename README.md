@@ -4,7 +4,7 @@ KI-gestützte Erstellung von Blogbeiträgen für mehrere WordPress-Websites (Kan
 Mails, PDFs und Urteile per Drag & Drop hochladen → die KI schlägt Themen vor, recherchiert zu den
 ausgewählten Themen im Web und schreibt einen Entwurf mit Quellen, Keywords und Meta-Daten.
 
-## Stand: Meilenstein 4 (WordPress-Entwürfe)
+## Stand: Meilenstein 3 + 4 (Bilder, WordPress-Entwürfe)
 
 | Funktion | Stand |
 |---|---|
@@ -19,11 +19,24 @@ ausgewählten Themen im Web und schreibt einen Entwurf mit Quellen, Keywords und
 | **SEO-Checkliste** (Titel-/Meta-Länge, Keyword in Titel/Meta/Einstieg/Slug, Textlänge, Zwischenüberschriften) | ✅ |
 | Vorschau und manuelle Bearbeitung im Browser | ✅ |
 | Disclaimer + „Stand“-Datum werden vom System angehängt, nicht von der KI | ✅ |
-| Bild-Prompts, Bildgenerierung, KI-Kennzeichnung | Meilenstein 3 |
+| **Beitragsbild**: Die KI schreibt Bild-Prompt (Illustration oder Foto), Alt-Text und Bildunterschrift – ohne erkennbare Personen, Text oder Logos | ✅ |
+| Bild automatisch erzeugen (derzeit OpenAI-Bildmodell; weitere Anbieter über die Schnittstelle `ImageProvider` anschließbar) | ✅ (nur mit eigenem Key) |
+| Alternativ: lizenzfreie Fotos suchen (Links zu Pexels/Unsplash/Pixabay) oder eigenes Bild hochladen – Quelle und Lizenz sind Pflichtangabe | ✅ |
+| **KI-Kennzeichnung**: Bildunterschrift „Bild: KI-generiert“ (pro Website abschaltbar) und IPTC-Vermerk im PNG | ✅ |
+| Beitragsbild wird mit Alt-Text und Unterschrift in die WordPress-Mediathek geladen und als Beitragsbild gesetzt | ✅ |
 | **WordPress-Anbindung**: Beitrag per Knopfdruck als **Entwurf** anlegen (Titel, Inhalt, Slug, Auszug, Kategorien, Schlagwörter, Rank-Math-Felder); erneutes Senden aktualisiert denselben Entwurf, veröffentlichte Beiträge werden nie angefasst | ✅ |
 | **Kategorien**: Die KI schlägt aus den vorhandenen Kategorien der Website passende vor (vorausgewählt) und kann bis zu zwei neue vorschlagen, die nur nach ausdrücklicher Bestätigung angelegt werden | ✅ |
 | Veröffentlichen/Planen aus dem Tool heraus | bewusst nicht vorgesehen – das erfolgt in WordPress |
 | Bestehende Beiträge überarbeiten (aktualisieren) | geplant |
+
+### Bilder
+
+- Claude erzeugt keine Bilder, sondern schreibt den **Prompt**. Erzeugt wird das Bild von einem Bildanbieter (`IMAGE_PROVIDER`, `IMAGE_API_KEY`, `IMAGE_MODEL`, `IMAGE_QUALITY` in der `.env`). Ohne Anbieter lässt sich der Prompt in jedem anderen Bilddienst verwenden; das Ergebnis lädt man am Beitrag hoch.
+- Das OpenAI-Bildmodell `gpt-image-1` verlangt bei OpenAI eine **verifizierte Organisation**; Kosten fallen pro Bild an (je nach Qualität). Die Anzeige beim Start nennt Anbieter und Modell.
+- **Lizenz:** Bei Uploads ist die Angabe von Quelle und Lizenz Pflicht und wird gespeichert (auch in der WordPress-Mediathek). Ob ein Bild kommerziell nutzbar ist, richtet sich nach den Bedingungen des jeweiligen Anbieters bzw. der Stockfoto-Seite und muss selbst geprüft werden.
+- **Kennzeichnung:** KI-generierte Bilder erhalten in der Bildunterschrift „Bild: KI-generiert“ (pro Website abschaltbar) und – bei PNG – einen IPTC-Vermerk (`DigitalSourceType = trainedAlgorithmicMedia`) in der Datei. Das ist ein einfacher Metadaten-Vermerk, **keine** kryptografisch signierte Herkunftsangabe (C2PA). Ob und wie die Kennzeichnung rechtlich nötig ist (u. a. KI-Verordnung), ist im Einzelfall zu klären.
+- Prompts enthalten fest die Vorgabe „kein Text, keine Logos, keine erkennbaren Personen“; der Bildupload wird an den Dateikopfzeichen geprüft (nur PNG/JPEG/WebP, höchstens 10 MB).
+- Die Bildgenerierung ist bisher **nur mit simulierten Antworten getestet**, nicht mit einem echten Bildanbieter.
 
 ### WordPress einrichten
 

@@ -36,6 +36,10 @@ services:
       AI_MODEL: ${AI_MODEL:-claude-opus-5-5}
       AI_EFFORT: ${AI_EFFORT:-medium}
       RESEARCH_MAX_SEARCHES: ${RESEARCH_MAX_SEARCHES:-8}
+      IMAGE_PROVIDER: ${IMAGE_PROVIDER:-none}
+      IMAGE_API_KEY: ${IMAGE_API_KEY:-}
+      IMAGE_MODEL: ${IMAGE_MODEL:-gpt-image-1}
+      IMAGE_QUALITY: ${IMAGE_QUALITY:-medium}
       STORAGE_DIR: /data/uploads
       PORT: "3100"
     volumes:

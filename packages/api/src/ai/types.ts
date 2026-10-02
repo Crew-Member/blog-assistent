@@ -88,6 +88,15 @@ export interface CategorySuggestion {
   newCategories: string[];
 }
 
+export const imagePlanSchema = z.object({
+  style: z.enum(["illustration", "photo"]),
+  prompt: z.string().min(1),
+  altText: z.string().min(1),
+  caption: z.string(),
+  searchQuery: z.string(),
+});
+export type ImagePlan = z.infer<typeof imagePlanSchema>;
+
 /** Abstraktion ueber die KI-Schritte, damit Pipeline und Tests ohne echte API laufen koennen. */
 export interface AiService {
   analyze(input: { site: SiteProfile; note: string; documents: AiDocument[] }): Promise<TopicProposal[]>;
@@ -97,6 +106,8 @@ export interface AiService {
   factCheck(input: { site: SiteProfile; topic: TopicProposal; research: ResearchResult; draft: DraftResult; documents: AiDocument[] }): Promise<FactCheckResult>;
   /** Waehlt aus den vorhandenen WordPress-Kategorien die passenden (hoechstens drei) fuer einen fertigen Beitrag. */
   suggestCategories(input: { site: SiteProfile; post: { title: string; excerpt: string; focusKeyword: string; text: string }; categories: CategoryOption[] }): Promise<CategorySuggestion>;
+  /** Entwirft Beitragsbild: Bild-Prompt (Englisch), Alt-Text, Bildunterschrift und Suchbegriff fuer Stockfotos. */
+  planImage(input: { site: SiteProfile; post: { title: string; excerpt: string; focusKeyword: string; text: string }; style?: "illustration" | "photo" }): Promise<ImagePlan>;
   /** Leitet aus Beispielbeitraegen Tonalitaet und Stilleitfaden ab. */
   deriveStyle(input: { site: SiteProfile; samples: StyleSampleInput[] }): Promise<StyleDerivation>;
 }

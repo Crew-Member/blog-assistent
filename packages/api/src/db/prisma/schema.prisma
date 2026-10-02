@@ -20,6 +20,8 @@ model Site {
   // Wird (nicht durch die KI, sondern im Code) unter jeden Beitrag gesetzt.
   disclaimer String   @default("")
   // WordPress-Zugang (REST-API mit Anwendungspasswort). Das Passwort liegt nur verschluesselt in der DB.
+  // KI-generierte Bilder in der Bildunterschrift kennzeichnen ("Bild: KI-generiert")
+  labelAiImages Boolean @default(true)
   wpUsername    String @default("")
   wpAppPassword String @default("")
   createdAt  DateTime @default(now())
@@ -89,6 +91,44 @@ model Topic {
   posts Post[]
 }
 
+enum ImageStatus {
+  PLANNED
+  QUEUED
+  GENERATING
+  READY
+  FAILED
+}
+
+enum ImageOrigin {
+  AI
+  UPLOAD
+}
+
+// Beitragsbild (genau eines je Beitrag): geplant (Prompt/Alt-Text), KI-generiert oder hochgeladen.
+model PostImage {
+  id          String      @id @default(cuid())
+  postId      String      @unique
+  post        Post        @relation(fields: [postId], references: [id], onDelete: Cascade)
+  status      ImageStatus @default(PLANNED)
+  origin      ImageOrigin @default(AI)
+  // Bei Uploads vom Nutzer angegeben (z. B. Bild aus einem KI-Dienst); bei origin AI immer true. Steuert Kennzeichnung und Metadaten.
+  aiGenerated Boolean     @default(true)
+  error       String?
+  style       String      @default("illustration")
+  prompt      String      @default("")
+  altText     String      @default("")
+  caption     String      @default("")
+  searchQuery String      @default("")
+  // Quelle/Lizenz bei hochgeladenen Bildern (z. B. "Pexels, Pexels-Lizenz, Foto: Name")
+  sourceNote  String      @default("")
+  storageKey  String?
+  mimeType    String?
+  // Verknuepfung mit der WordPress-Mediathek; wird bei jeder Aenderung am Bild zurueckgesetzt
+  wpMediaId   Int?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
 enum PostStatus {
   QUEUED
   RESEARCHING
@@ -127,6 +167,7 @@ model Post {
   wpCategoryIds     Json       @default("[]")
   wpSeo             Json?
   wpPushedAt        DateTime?
+  image             PostImage?
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 }

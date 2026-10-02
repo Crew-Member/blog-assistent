@@ -1,4 +1,4 @@
-import { analyzeSubmission, generatePost, type PipelineDeps } from "./pipeline.js";
+import { analyzeSubmission, generateImage, generatePost, type PipelineDeps } from "./pipeline.js";
 
 /**
  * Einfacher Hintergrund-Worker: holt Auftraege aus der DB (Status UPLOADED bzw. QUEUED) und arbeitet sie nacheinander ab.
@@ -19,6 +19,7 @@ export class Worker {
     const { prisma } = this.deps;
     await prisma.submission.updateMany({ where: { status: "ANALYZING" }, data: { status: "UPLOADED" } });
     await prisma.post.updateMany({ where: { status: { in: ["RESEARCHING", "DRAFTING", "FACTCHECKING"] } }, data: { status: "QUEUED" } });
+    await prisma.postImage.updateMany({ where: { status: "GENERATING" }, data: { status: "QUEUED" } });
   }
 
   start(): void {
@@ -54,6 +55,11 @@ export class Worker {
           await generatePost(this.deps, postId);
           continue;
         }
+        const imagePostId = await this.claimImage();
+        if (imagePostId) {
+          await generateImage(this.deps, imagePostId);
+          continue;
+        }
         return;
       }
     } finally {
@@ -67,6 +73,14 @@ export class Worker {
     if (!next) return undefined;
     const { count } = await prisma.submission.updateMany({ where: { id: next.id, status: "UPLOADED" }, data: { status: "ANALYZING" } });
     return count === 1 ? next.id : undefined;
+  }
+
+  private async claimImage(): Promise<string | undefined> {
+    const { prisma } = this.deps;
+    const next = await prisma.postImage.findFirst({ where: { status: "QUEUED" }, orderBy: { updatedAt: "asc" }, select: { postId: true } });
+    if (!next) return undefined;
+    const { count } = await prisma.postImage.updateMany({ where: { postId: next.postId, status: "QUEUED" }, data: { status: "GENERATING" } });
+    return count === 1 ? next.postId : undefined;
   }
 
   private async claimPost(): Promise<string | undefined> {

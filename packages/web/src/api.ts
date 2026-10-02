@@ -37,6 +37,7 @@ export interface Site {
   tone: string;
   styleGuide: string;
   disclaimer: string;
+  labelAiImages: boolean;
   wpUsername: string;
   hasWpPassword: boolean;
 }
@@ -97,6 +98,25 @@ export interface StyleSample {
   createdAt: string;
 }
 
+export type ImageStatus = "PLANNED" | "QUEUED" | "GENERATING" | "READY" | "FAILED";
+
+export interface PostImage {
+  id: string;
+  status: ImageStatus;
+  origin: "AI" | "UPLOAD";
+  aiGenerated: boolean;
+  error: string | null;
+  style: "illustration" | "photo";
+  prompt: string;
+  altText: string;
+  caption: string;
+  searchQuery: string;
+  sourceNote: string;
+  hasFile: boolean;
+  inWordPress: boolean;
+  updatedAt: string;
+}
+
 export interface PostDetail {
   id: string;
   status: PostStatus;
@@ -118,7 +138,8 @@ export interface PostDetail {
   wpLink: string | null;
   wpSeo: { status: "set" | "manual" | "no_plugin"; message: string } | null;
   wpPushedAt: string | null;
-  site: { id: string; name: string; baseUrl: string };
+  image: PostImage | null;
+  site: { id: string; name: string; baseUrl: string; labelAiImages: boolean };
   topic: { id: string; title: string; submissionId: string };
 }
 
@@ -165,6 +186,7 @@ export interface WpPublishResult {
   link: string;
   updated: boolean;
   seo: { status: "set" | "manual" | "no_plugin"; message: string };
+  image: { status: "set" | "none" | "failed"; message: string };
 }
 
 export interface WpTestResult {

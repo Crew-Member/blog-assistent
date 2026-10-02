@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { POST_LABEL, api, isBusy, type FactCheck, type PostDetail, type WpPrepare, type WpPublishResult } from "../api";
+import { POST_LABEL, api, isBusy, type FactCheck, type PostDetail, type PostImage, type WpPrepare, type WpPublishResult } from "../api";
 import { useLoad } from "../hooks";
 
 const FACT_LABEL: Record<FactCheck["status"], string> = {
@@ -45,6 +45,162 @@ function FactCheckPanel({ check, claims }: { check: FactCheck; claims: string[] 
   );
 }
 
+
+const stockLinks = (q: string) => [
+  { name: "Pexels", url: `https://www.pexels.com/search/${encodeURIComponent(q)}/` },
+  { name: "Unsplash", url: `https://unsplash.com/s/photos/${encodeURIComponent(q.trim().replace(/\s+/g, "-"))}` },
+  { name: "Pixabay", url: `https://pixabay.com/images/search/${encodeURIComponent(q)}/` },
+];
+
+function ImagePanel({ post, onChanged }: { post: PostDetail; onChanged: () => void }) {
+  const image = post.image;
+  const features = useLoad(() => api.get<{ imageGeneration: string | null }>("/api/features"));
+  const canGenerate = Boolean(features.data?.imageGeneration);
+  const [form, setForm] = useState({ prompt: "", altText: "", caption: "", style: "illustration" as PostImage["style"] });
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const [copied, setCopied] = useState(false);
+  const [upload, setUpload] = useState<{ file?: File; source: string; ai: boolean }>({ source: "", ai: false });
+
+  useEffect(() => {
+    if (image) setForm({ prompt: image.prompt, altText: image.altText, caption: image.caption, style: image.style });
+    setDirty(false);
+  }, [image?.id, image?.updatedAt]);
+
+  async function run(action: () => Promise<unknown>) {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await action();
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const edit = (key: keyof typeof form) => (e: { target: { value: string } }) => {
+    setForm({ ...form, [key]: e.target.value });
+    setDirty(true);
+  };
+  const working = image?.status === "QUEUED" || image?.status === "GENERATING";
+  const label = post.site.labelAiImages && image?.aiGenerated;
+
+  return (
+    <div className="card stack">
+      <strong>Beitragsbild</strong>
+      {!image && (
+        <div className="row">
+          <button disabled={busy} onClick={() => run(() => api.post(`/api/posts/${post.id}/image/plan`, { style: "illustration" }))}>{busy ? "Bitte warten …" : "Bildvorschlag: Illustration"}</button>
+          <button className="secondary" disabled={busy} onClick={() => run(() => api.post(`/api/posts/${post.id}/image/plan`, { style: "photo" }))}>Bildvorschlag: Foto</button>
+          <span className="muted">Die KI schreibt Prompt, Alt-Text und Bildunterschrift – ohne erkennbare Personen, Text oder Logos.</span>
+        </div>
+      )}
+
+      {image && (
+        <div className="grid">
+          <div className="stack">
+            <label>Stil
+              <select value={form.style} onChange={edit("style")} disabled>
+                <option value="illustration">Illustration</option>
+                <option value="photo">Foto</option>
+              </select>
+            </label>
+            <label>Bild-Prompt (Englisch) <span className="muted">– auch für andere Bilddienste nutzbar</span>
+              <textarea rows={5} value={form.prompt} onChange={edit("prompt")} />
+            </label>
+            <label>Alt-Text (Barrierefreiheit, höchstens 125 Zeichen) <span className="muted">({form.altText.length})</span>
+              <input value={form.altText} onChange={edit("altText")} />
+            </label>
+            <label>Bildunterschrift<input value={form.caption} onChange={edit("caption")} /></label>
+            {label && <span className="muted">Beim Senden an WordPress wird „Bild: KI-generiert“ an die Unterschrift angehängt und im Bild vermerkt.</span>}
+            <div className="row">
+              <button disabled={busy || !dirty} onClick={() => run(() => api.put(`/api/posts/${post.id}/image`, { prompt: form.prompt, altText: form.altText, caption: form.caption }))}>Änderungen speichern</button>
+              <button
+                className="secondary"
+                disabled={busy || dirty}
+                onClick={async () => {
+                  await navigator.clipboard.writeText(form.prompt).catch(() => undefined);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+              >
+                {copied ? "Kopiert" : "Prompt kopieren"}
+              </button>
+            </div>
+            <div className="row">
+              <button disabled={busy || dirty || working || !canGenerate} title={canGenerate ? "" : "Keine Bildgenerierung eingerichtet (IMAGE_PROVIDER)"} onClick={() => run(() => api.post(`/api/posts/${post.id}/image/generate`))}>
+                {working ? "Bild wird erzeugt …" : image.hasFile && image.origin === "AI" ? "Neu generieren" : "Bild generieren"}
+              </button>
+              <button className="secondary" disabled={busy || working} onClick={() => { if (!image.hasFile || confirm("Neuen Vorschlag erstellen? Das vorhandene Bild wird ersetzt.")) void run(() => api.post(`/api/posts/${post.id}/image/plan`, { style: form.style })); }}>Neuer Vorschlag</button>
+              <button className="secondary danger" disabled={busy || working} onClick={() => run(() => api.del(`/api/posts/${post.id}/image`))}>Bild entfernen</button>
+            </div>
+            {!canGenerate && <span className="muted">Die automatische Bildgenerierung ist nicht eingerichtet. Du kannst den Prompt in einem anderen Bilddienst verwenden und das Ergebnis unten hochladen.</span>}
+            {image.status === "FAILED" && image.error && <span className="error">{image.error}</span>}
+          </div>
+
+          <div className="stack">
+            {image.hasFile ? (
+              <>
+                <img src={`/api/posts/${post.id}/image/file?v=${encodeURIComponent(image.updatedAt)}`} alt={form.altText} style={{ width: "100%", borderRadius: 6, border: "1px solid var(--line)" }} />
+                <span className="muted">
+                  {image.origin === "AI" ? "KI-generiert" : image.aiGenerated ? "Hochgeladen (KI-generiert)" : "Hochgeladen"}
+                  {image.sourceNote ? ` · ${image.sourceNote}` : ""}
+                  {image.inWordPress ? " · in WordPress" : ""}
+                </span>
+              </>
+            ) : (
+              <div className="dropzone" style={{ cursor: "default" }}>{working ? "Bild wird erzeugt …" : "Noch kein Bild"}</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {image && (
+        <details>
+          <summary>Eigenes oder lizenzfreies Bild hochladen</summary>
+          <div className="stack" style={{ marginTop: 8 }}>
+            <span className="muted">
+              Lizenzfreie Fotos suchen („{image.searchQuery || form.prompt.slice(0, 30)}“):{" "}
+              {stockLinks(image.searchQuery || "legal documents").map((l, i) => (
+                <span key={l.name}>{i > 0 && " · "}<a href={l.url} target="_blank" rel="noreferrer noopener">{l.name}</a></span>
+              ))}
+              . Lizenzbedingungen bitte selbst prüfen; Quelle und Lizenz werden mit dem Bild gespeichert.
+            </span>
+            <label>Bilddatei (PNG, JPEG oder WebP, höchstens 10 MB)<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => setUpload({ ...upload, file: e.target.files?.[0] })} /></label>
+            <label>Quelle und Lizenz (Pflicht)<input value={upload.source} onChange={(e) => setUpload({ ...upload, source: e.target.value })} placeholder="z. B. Pexels, Pexels-Lizenz, Foto: Name – oder: Eigenes Foto" /></label>
+            <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
+              <input type="checkbox" style={{ width: "auto" }} checked={upload.ai} onChange={(e) => setUpload({ ...upload, ai: e.target.checked })} />
+              Das Bild ist KI-generiert (z. B. aus einem anderen KI-Dienst) – wird entsprechend gekennzeichnet
+            </label>
+            <div>
+              <button
+                disabled={busy || !upload.file || upload.source.trim().length < 3}
+                onClick={() =>
+                  run(async () => {
+                    const body = new FormData();
+                    body.append("sourceNote", upload.source);
+                    body.append("aiGenerated", String(upload.ai));
+                    body.append("altText", form.altText);
+                    body.append("caption", form.caption);
+                    body.append("file", upload.file!, upload.file!.name);
+                    await api.post(`/api/posts/${post.id}/image/upload`, body);
+                    setUpload({ source: "", ai: false });
+                  })
+                }
+              >
+                Bild hochladen
+              </button>
+            </div>
+          </div>
+        </details>
+      )}
+      {error && <span className="error">{error}</span>}
+    </div>
+  );
+}
 
 function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: boolean; onDone: () => void }) {
   const [prep, setPrep] = useState<WpPrepare>();
@@ -147,6 +303,7 @@ function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: bool
           </div>
         </>
       )}
+      {result?.image && result.image.status !== "none" && <div className={result.image.status === "set" ? "ok" : "error"}>{result.image.message}</div>}
       {result && <div className="ok">{result.updated ? "Entwurf in WordPress aktualisiert." : "Entwurf in WordPress angelegt."} Er ist noch nicht veröffentlicht.</div>}
       {error && <div className="error">{error}</div>}
     </div>
@@ -154,7 +311,7 @@ function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: bool
 }
 
 export function PostPage({ id }: { id: string }) {
-  const { data, error, reload } = useLoad(() => api.get<PostDetail>(`/api/posts/${id}`), (p) => isBusy(p.status));
+  const { data, error, reload } = useLoad(() => api.get<PostDetail>(`/api/posts/${id}`), (p) => isBusy(p.status) || p.image?.status === "QUEUED" || p.image?.status === "GENERATING");
   const [form, setForm] = useState({ title: "", slug: "", metaDescription: "", focusKeyword: "", excerpt: "", contentHtml: "" });
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -196,6 +353,7 @@ export function PostPage({ id }: { id: string }) {
 
       {data.status === "DRAFT_READY" && (
         <>
+          <ImagePanel post={data} onChanged={() => void reload()} />
           <WordPressPanel post={data} dirty={dirty} onDone={() => void reload()} />
           {data.factCheck ? (
             <FactCheckPanel check={data.factCheck} claims={data.unverifiedClaims} />

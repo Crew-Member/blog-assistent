@@ -1,4 +1,4 @@
-import type { AiDocument, CategoryOption, CategorySuggestion, AiService, DraftResult, FactCheckResult, ResearchResult, SiteProfile, StyleDerivation, StyleSampleInput, TopicProposal } from "./types.js";
+import type { AiDocument, CategoryOption, CategorySuggestion, ImagePlan, AiService, DraftResult, FactCheckResult, ResearchResult, SiteProfile, StyleDerivation, StyleSampleInput, TopicProposal } from "./types.js";
 
 /** Platzhalter-Implementierung ohne API-Aufrufe - fuer Tests und zum Ausprobieren der Oberflaeche. */
 export class FakeAiService implements AiService {
@@ -46,5 +46,15 @@ export class FakeAiService implements AiService {
 
   async suggestCategories(input: { categories: CategoryOption[] }): Promise<CategorySuggestion> {
     return { categoryIds: input.categories.slice(0, 1).map((c) => c.id), newCategories: [] };
+  }
+
+  async planImage(input: { post: { title: string }; style?: "illustration" | "photo" }): Promise<ImagePlan> {
+    return {
+      style: input.style ?? "illustration",
+      prompt: `Flat vector illustration, balanced scales and documents, calm blue and grey palette (Platzhalter zu: ${input.post.title})`,
+      altText: "Platzhalter: stilisierte Waage und Dokumente",
+      caption: "Symbolbild",
+      searchQuery: "legal documents scales",
+    };
   }
 }

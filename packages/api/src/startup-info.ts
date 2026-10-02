@@ -7,8 +7,14 @@ export function fingerprint(key: string): string {
 }
 
 /** Zeilen fuer die Startausgabe: welcher Key/Endpoint wirklich verwendet wird und woher er stammt. */
+function describeImages(config: Config): string {
+  if (config.IMAGE_PROVIDER === "none") return "Bilder: keine Bildgenerierung eingerichtet (nur Prompts, Stockfoto-Suche und Upload).";
+  if (config.IMAGE_PROVIDER === "fake") return "Bilder: Platzhalter-Modus (IMAGE_PROVIDER=fake).";
+  return `Bilder: ${config.IMAGE_PROVIDER}, Modell ${config.IMAGE_MODEL}, Qualitaet ${config.IMAGE_QUALITY}, Schluessel ${fingerprint(config.IMAGE_API_KEY ?? "")}`;
+}
+
 export function describeAiSetup(config: Config, origin: EnvOrigin): string[] {
-  if (config.AI_PROVIDER === "fake") return ["KI: Platzhalter-Modus (AI_PROVIDER=fake), es werden keine echten KI-Aufrufe gemacht."];
+  if (config.AI_PROVIDER === "fake") return ["KI: Platzhalter-Modus (AI_PROVIDER=fake), es werden keine echten KI-Aufrufe gemacht.", describeImages(config)];
 
   const lines: string[] = [];
   const key = config.ANTHROPIC_API_KEY ?? "";
@@ -35,5 +41,6 @@ export function describeAiSetup(config: Config, origin: EnvOrigin): string[] {
       lines.push(`HINWEIS: ${name} ist gesetzt, wird aber ignoriert (Endpoint: AI_BASE_URL, Anmeldung: nur ANTHROPIC_API_KEY).`);
     }
   }
+  lines.push(describeImages(config));
   return lines;
 }

@@ -24,6 +24,7 @@ export interface WpDraftInput {
   excerpt?: string;
   categories: number[];
   tags: number[];
+  featuredMedia?: number;
 }
 
 export interface WpPostRef {
@@ -71,7 +72,7 @@ export class WordPressClient {
     this.auth = `Basic ${Buffer.from(`${username}:${appPassword.replace(/\s+/g, " ").trim()}`).toString("base64")}`;
   }
 
-  private async request<T>(path: string, init: { method?: string; body?: unknown; auth?: boolean } = {}): Promise<T> {
+  private async request<T>(path: string, init: { method?: string; body?: unknown; auth?: boolean; raw?: { data: Buffer; contentType: string; filename: string } } = {}): Promise<T> {
     const url = `${this.origin}${path}`;
     await assertPublicHttpUrl(url).catch((e: Error) => {
       throw new WordPressError(e.message);
@@ -87,8 +88,9 @@ export class WordPressClient {
           "user-agent": "kdsb-blog-assistent",
           ...(init.auth === false ? {} : { authorization: this.auth }),
           ...(init.body !== undefined ? { "content-type": "application/json" } : {}),
+          ...(init.raw ? { "content-type": init.raw.contentType, "content-disposition": `attachment; filename="${init.raw.filename.replace(/[^A-Za-z0-9._-]/g, "_")}"` } : {}),
         },
-        body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+        body: init.raw ? new Uint8Array(init.raw.data) : init.body !== undefined ? JSON.stringify(init.body) : undefined,
       });
     } catch (error) {
       throw new WordPressError(`Keine Verbindung zu ${this.origin}: ${error instanceof Error ? error.message : String(error)}`);
@@ -182,6 +184,7 @@ export class WordPressClient {
       ...(input.excerpt ? { excerpt: input.excerpt } : {}),
       categories: input.categories,
       tags: input.tags,
+      ...(input.featuredMedia ? { featured_media: input.featuredMedia } : {}),
       // Rank-Math-Felder: nur wirksam, falls die Installation sie fuer die REST-API freigibt; sonst wird das stillschweigend ignoriert.
       ...(meta ? { meta: { rank_math_description: meta.description, rank_math_focus_keyword: meta.focusKeyword } } : {}),
     };
@@ -198,6 +201,34 @@ export class WordPressClient {
       throw new WordPressError(`Der Beitrag in WordPress hat den Status „${current.status}“ und wird nicht überschrieben. Änderungen bitte direkt in WordPress vornehmen.`, 409);
     }
     return this.ref(await this.request(`/wp-json/wp/v2/posts/${id}`, { method: "POST", body: this.payload(input, meta) }));
+  }
+
+  /**
+   * Bringt ein Bild in die WordPress-Mediathek: laedt es hoch (oder aktualisiert nur die Beschreibungsfelder, wenn es schon
+   * dort liegt) und setzt Alt-Text, Bildunterschrift und Beschreibung. Liefert die Medien-ID.
+   */
+  async syncMedia(input: { existingId?: number | null; data: Buffer; mimeType: string; filename: string; alt: string; caption: string; title: string; description: string }): Promise<number> {
+    const fields = { alt_text: input.alt, caption: input.caption, title: input.title, description: input.description };
+    if (input.existingId) {
+      try {
+        await this.request(`/wp-json/wp/v2/media/${input.existingId}`, { method: "POST", body: fields });
+        return input.existingId;
+      } catch (error) {
+        if (!(error instanceof WordPressError && error.status === 404)) throw error;
+        // Datei wurde in WordPress geloescht: neu hochladen
+      }
+    }
+    let created: { id: number };
+    try {
+      created = await this.request<{ id: number }>("/wp-json/wp/v2/media", { method: "POST", raw: { data: input.data, contentType: input.mimeType, filename: input.filename } });
+    } catch (error) {
+      if (error instanceof WordPressError && error.status === 403) {
+        throw new WordPressError("Der WordPress-Benutzer darf keine Dateien hochladen (Rolle Autor oder höher nötig).", 403);
+      }
+      throw error;
+    }
+    await this.request(`/wp-json/wp/v2/media/${created.id}`, { method: "POST", body: fields });
+    return created.id;
   }
 
   /** Setzt Rank-Math-Felder ueber die Rank-Math-eigene Schnittstelle (die der WordPress-Editor selbst benutzt). */

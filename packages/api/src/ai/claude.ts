@@ -1,10 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { ANALYZE_SYSTEM, CATEGORY_SYSTEM, DRAFT_SYSTEM, FACTCHECK_SYSTEM, RESEARCH_SYSTEM, STYLE_SYSTEM, siteBlock, styleSamplesBlock, topicBlock } from "./prompts.js";
+import { ANALYZE_SYSTEM, CATEGORY_SYSTEM, DRAFT_SYSTEM, IMAGE_PLAN_SYSTEM, FACTCHECK_SYSTEM, RESEARCH_SYSTEM, STYLE_SYSTEM, siteBlock, styleSamplesBlock, topicBlock } from "./prompts.js";
 import {
   analyzeResultSchema,
   categorySuggestionSchema,
   draftResultSchema,
   factCheckResultSchema,
+  imagePlanSchema,
   styleDerivationSchema,
   type AiDocument,
   type AiService,
@@ -12,6 +13,7 @@ import {
   type CategorySuggestion,
   type DraftResult,
   type FactCheckResult,
+  type ImagePlan,
   type StyleDerivation,
   type StyleSampleInput,
   type ResearchResult,
@@ -115,6 +117,19 @@ const CATEGORY_SCHEMA = {
   type: "object",
   properties: { categoryIds: { type: "array", items: { type: "integer" } }, newCategories: { type: "array", items: { type: "string" } } },
   required: ["categoryIds", "newCategories"],
+  additionalProperties: false,
+} as const;
+
+const IMAGE_PLAN_SCHEMA = {
+  type: "object",
+  properties: {
+    style: { type: "string", enum: ["illustration", "photo"] },
+    prompt: { type: "string" },
+    altText: { type: "string" },
+    caption: { type: "string" },
+    searchQuery: { type: "string" },
+  },
+  required: ["style", "prompt", "altText", "caption", "searchQuery"],
   additionalProperties: false,
 } as const;
 
@@ -322,5 +337,24 @@ export class ClaudeAiService implements AiService {
       categoryIds: [...new Set(result.categoryIds)].filter((id) => valid.has(id)).slice(0, 3),
       newCategories: [...new Set(result.newCategories.map((n) => n.trim()).filter((n) => n && n.length <= 60 && !existingNames.has(n.toLowerCase())))].slice(0, 2),
     };
+  }
+
+  async planImage(input: { site: SiteProfile; post: { title: string; excerpt: string; focusKeyword: string; text: string }; style?: "illustration" | "photo" }): Promise<ImagePlan> {
+    const content: Anthropic.ContentBlockParam[] = [
+      {
+        type: "text",
+        text: [
+          `Website: ${input.site.name}`,
+          input.site.audience && `Zielgruppe: ${input.site.audience}`,
+          `Beitrag:\nTitel: ${input.post.title}\nFokus-Keyword: ${input.post.focusKeyword}\nAuszug: ${input.post.excerpt}\nAnfang des Textes: ${input.post.text.slice(0, 1800)}`,
+          input.style ? `Vorgegebener Stil: ${input.style}` : "Stil: frei waehlen",
+          "Entwirf das Beitragsbild.",
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+      },
+    ];
+    const plan = await this.structured(IMAGE_PLAN_SYSTEM, content, IMAGE_PLAN_SCHEMA, (v) => imagePlanSchema.parse(v));
+    return { ...plan, style: input.style ?? plan.style, altText: plan.altText.slice(0, 125), caption: plan.caption.slice(0, 120) };
   }
 }

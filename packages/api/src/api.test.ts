@@ -5,6 +5,9 @@ import { PrismaClient } from "@prisma/client";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { FakeAiService } from "./ai/fake.js";
+import { FakeImageProvider } from "./image/fake.js";
+import type { ImageProvider } from "./image/provider.js";
+import { isPng, makePlaceholderPng, readChunks } from "./lib/png.js";
 import type { AiService } from "./ai/types.js";
 import { loadConfig } from "./config.js";
 import { buildMsg } from "./lib/msgfixture.testutil.js";
@@ -51,11 +54,11 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     return res.json().id as string;
   }
 
-  async function setup(service: AiService) {
+  async function setup(service: AiService, imageProvider?: ImageProvider) {
     ai = service;
     const storage = new FileStorage(dir);
-    app = buildServer({ config, prisma, storage, ai, fetcher: wpFetcher });
-    worker = new Worker({ prisma, ai, storage });
+    app = buildServer({ config, prisma, storage, ai, images: imageProvider, fetcher: wpFetcher });
+    worker = new Worker({ prisma, ai, storage, images: imageProvider });
     await app.ready();
     const login = await app.inject({ method: "POST", url: "/api/auth/login", payload: { password: "geheim-passwort" } });
     expect(login.statusCode).toBe(200);
@@ -327,7 +330,7 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     wpFetcher = (async (url: string, init?: RequestInit) => {
       const u = new URL(url);
       const method = init?.method ?? "GET";
-      calls.push({ method, path: u.pathname, headers: Object.fromEntries(new Headers(init?.headers).entries()), body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      calls.push({ method, path: u.pathname, headers: Object.fromEntries(new Headers(init?.headers).entries()), body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined });
       const entry = routes[`${method} ${u.pathname}`];
       const reply = Array.isArray(entry) ? entry.shift() : entry;
       if (!reply) return new Response(JSON.stringify({ message: "kein Stub" }), { status: 404 });
@@ -353,7 +356,7 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     wpFetcher = (async (url: string, init?: RequestInit) => {
       const u = new URL(url);
       const method = init?.method ?? "GET";
-      calls.push({ method, path: u.pathname, headers: Object.fromEntries(new Headers(init?.headers).entries()), body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      calls.push({ method, path: u.pathname, headers: Object.fromEntries(new Headers(init?.headers).entries()), body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined });
       const entry = merged[`${method} ${u.pathname}`];
       const reply = Array.isArray(entry) ? entry.shift() : entry;
       if (!reply) return new Response(JSON.stringify({ message: "kein Stub" }), { status: 404 });
@@ -480,5 +483,159 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     const res = await app.inject({ method: "POST", url: `/api/sites/${site.id}/wordpress/test`, headers: { cookie } });
     expect(res.statusCode).toBe(502);
     expect(res.json().error).toContain("Anmeldung abgelehnt");
+  });
+
+  // --- Beitragsbild ------------------------------------------------------------
+  const jsonPost = async (url: string, payload?: unknown) => app.inject({ method: "POST", url, headers: { cookie }, payload: payload ?? {} });
+  const getImage = async (postId: string) => (await getPost(postId)).image;
+
+  it("plant ein Beitragsbild (Prompt, Alt-Text, Unterschrift) und erlaubt Anpassungen", async () => {
+    const postId = await makePost(await createSite());
+    expect(await getImage(postId)).toBeNull();
+    const plan = await jsonPost(`/api/posts/${postId}/image/plan`, { style: "photo" });
+    expect(plan.statusCode).toBe(200);
+    expect(plan.json()).toMatchObject({ status: "PLANNED", origin: "AI", aiGenerated: true, style: "photo", hasFile: false });
+    expect(plan.json().prompt).toContain("Platzhalter");
+    expect(plan.json().altText).toBeTruthy();
+
+    const edited = await app.inject({ method: "PUT", url: `/api/posts/${postId}/image`, headers: { cookie }, payload: { prompt: "Eigener Prompt", altText: "Eigener Alt-Text", aiGenerated: false } });
+    expect(edited.json()).toMatchObject({ prompt: "Eigener Prompt", altText: "Eigener Alt-Text", aiGenerated: true }); // KI-Kennzeichnung bleibt bei KI-Bildern
+  });
+
+  it("generiert das Bild im Hintergrund, kennzeichnet es in den Metadaten und liefert es nur angemeldet aus", async () => {
+    const provider = new FakeImageProvider();
+    await setup(new FakeAiService(), provider);
+    const postId = await makePost(await createSite());
+    await jsonPost(`/api/posts/${postId}/image/plan`);
+    const queued = await jsonPost(`/api/posts/${postId}/image/generate`);
+    expect(queued.json().status).toBe("QUEUED");
+    expect((await jsonPost(`/api/posts/${postId}/image/generate`)).statusCode).toBe(409);
+
+    await worker.tick();
+    const image = await getImage(postId);
+    expect(image).toMatchObject({ status: "READY", hasFile: true, aiGenerated: true });
+    expect(provider.prompts).toHaveLength(1);
+
+    const file = await app.inject({ method: "GET", url: `/api/posts/${postId}/image/file`, headers: { cookie } });
+    expect(file.headers["content-type"]).toBe("image/png");
+    expect(file.headers["x-content-type-options"]).toBe("nosniff");
+    const chunks = readChunks(file.rawPayload);
+    expect(chunks.map((c) => c.type)).toContain("iTXt");
+    expect(chunks.find((c) => c.type === "iTXt")!.data.toString("utf8")).toContain("trainedAlgorithmicMedia");
+    expect((await app.inject({ method: "GET", url: `/api/posts/${postId}/image/file` })).statusCode).toBe(401);
+  });
+
+  it("meldet Fehler des Bildanbieters am Bild und erlaubt einen neuen Versuch", async () => {
+    let fail = true;
+    const flaky: ImageProvider = { name: "test", generate: async () => { if (fail) throw new Error("Sicherheitsfilter"); return new FakeImageProvider().generate({ prompt: "" }); } };
+    await setup(new FakeAiService(), flaky);
+    const postId = await makePost(await createSite());
+    await jsonPost(`/api/posts/${postId}/image/plan`);
+    await jsonPost(`/api/posts/${postId}/image/generate`);
+    await worker.tick();
+    expect(await getImage(postId)).toMatchObject({ status: "FAILED", error: "Sicherheitsfilter" });
+    fail = false;
+    await jsonPost(`/api/posts/${postId}/image/generate`);
+    await worker.tick();
+    expect(await getImage(postId)).toMatchObject({ status: "READY", error: null });
+  });
+
+  it("erklaert, wenn keine Bildgenerierung eingerichtet ist, und bietet Features-Abfrage", async () => {
+    const postId = await makePost(await createSite());
+    await jsonPost(`/api/posts/${postId}/image/plan`);
+    const res = await jsonPost(`/api/posts/${postId}/image/generate`);
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toContain("IMAGE_PROVIDER");
+    expect((await app.inject({ method: "GET", url: "/api/features", headers: { cookie } })).json()).toEqual({ imageGeneration: null });
+    await setup(new FakeAiService(), new FakeImageProvider());
+    expect((await app.inject({ method: "GET", url: "/api/features", headers: { cookie } })).json()).toEqual({ imageGeneration: "fake" });
+  });
+
+  function uploadBody(file: Buffer, fields: Record<string, string>) {
+    const parts: Buffer[] = [];
+    for (const [k, v] of Object.entries(fields)) parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`));
+    parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="bild.png"\r\nContent-Type: image/png\r\n\r\n`), file, Buffer.from(`\r\n--${boundary}--\r\n`));
+    return { payload: Buffer.concat(parts), headers: { "content-type": `multipart/form-data; boundary=${boundary}`, cookie } };
+  }
+
+  it("nimmt hochgeladene Bilder nur mit Quellenangabe und echtem Bildformat an", async () => {
+    const postId = await makePost(await createSite());
+    const png = makePlaceholderPng(40, 20);
+
+    const noSource = uploadBody(png, { altText: "Alt" });
+    expect((await app.inject({ method: "POST", url: `/api/posts/${postId}/image/upload`, ...noSource })).json().error).toContain("Quelle und Lizenz");
+
+    const fake = uploadBody(Buffer.from("<script>alert(1)</script>"), { sourceNote: "Eigenes Foto" });
+    const rejected = await app.inject({ method: "POST", url: `/api/posts/${postId}/image/upload`, ...fake });
+    expect(rejected.statusCode).toBe(400);
+    expect(rejected.json().error).toContain("PNG-, JPEG- und WebP");
+
+    const ok = uploadBody(png, { sourceNote: "Pexels, Pexels-Lizenz", altText: "Schreibtisch mit Akten", caption: "Symbolfoto", aiGenerated: "false" });
+    const res = await app.inject({ method: "POST", url: `/api/posts/${postId}/image/upload`, ...ok });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ status: "READY", origin: "UPLOAD", aiGenerated: false, sourceNote: "Pexels, Pexels-Lizenz", hasFile: true });
+    const stored = await app.inject({ method: "GET", url: `/api/posts/${postId}/image/file`, headers: { cookie } });
+    expect(readChunks(stored.rawPayload).map((c) => c.type)).not.toContain("iTXt"); // nicht als KI-Bild markiert
+
+    // als KI-generiert deklariertes Bild bekommt den Metadaten-Vermerk
+    const ai = uploadBody(png, { sourceNote: "Supermachine, eigene Lizenz", aiGenerated: "true" });
+    expect((await app.inject({ method: "POST", url: `/api/posts/${postId}/image/upload`, ...ai })).json().aiGenerated).toBe(true);
+    const marked = await app.inject({ method: "GET", url: `/api/posts/${postId}/image/file`, headers: { cookie } });
+    expect(isPng(marked.rawPayload) && readChunks(marked.rawPayload).map((c) => c.type)).toContain("iTXt");
+  });
+
+  it("uebertraegt das Beitragsbild bei WordPress als Beitragsbild (mit Alt-Text und Kennzeichnung) und uebergeht Fehler", async () => {
+    const calls = fakeWordPress({ ...standardRoutes(), "POST /wp-json/wp/v2/media": { body: { id: 55 } }, "POST /wp-json/wp/v2/media/55": { body: { id: 55 } } });
+    await setup(new FakeAiService(), new FakeImageProvider());
+    const site = await createWpSite();
+    const postId = await makePost(site.id);
+    await jsonPost(`/api/posts/${postId}/image/plan`);
+    await jsonPost(`/api/posts/${postId}/image/generate`);
+    await worker.tick();
+
+    const pub = await jsonPost(`/api/posts/${postId}/wordpress/publish`, { categoryIds: [3], tags: [] });
+    expect(pub.json().image).toMatchObject({ status: "set" });
+    const upload = calls.find((c) => c.method === "POST" && c.path === "/wp-json/wp/v2/media")!;
+    expect(upload.headers["content-type"]).toBe("image/png");
+    expect(upload.headers["content-disposition"]).toContain("beispielthema.png");
+    const meta = calls.find((c) => c.path === "/wp-json/wp/v2/media/55")!;
+    expect(meta.body).toMatchObject({ alt_text: expect.any(String), caption: expect.stringContaining("Bild: KI-generiert") });
+    expect(calls.find((c) => c.path === "/wp-json/wp/v2/posts" && c.method === "POST")?.body).toMatchObject({ featured_media: 55 });
+    expect((await getImage(postId)).inWordPress).toBe(true);
+
+    // Kennzeichnung laesst sich pro Website abschalten; zweiter Versand aktualisiert nur die Medien-Felder
+    await app.inject({ method: "PUT", url: `/api/sites/${site.id}`, headers: { cookie }, payload: { name: "Kanzlei WP", baseUrl: WP_BASE, wpUsername: "daniel", labelAiImages: false } });
+    calls.length = 0;
+    fakeWordPressAppend(calls, { "GET /wp-json/wp/v2/posts/42": { body: { id: 42, status: "draft" } }, "POST /wp-json/wp/v2/posts/42": { body: { id: 42, link: "x", status: "draft" } }, "POST /wp-json/wp/v2/media/55": { body: { id: 55 } } });
+    await setup(new FakeAiService(), new FakeImageProvider());
+    await jsonPost(`/api/posts/${postId}/wordpress/publish`, { categoryIds: [3], tags: [] });
+    expect(calls.some((c) => c.path === "/wp-json/wp/v2/media" && c.method === "POST")).toBe(false);
+    expect(calls.find((c) => c.path === "/wp-json/wp/v2/media/55")?.body?.caption).toBe("Symbolbild");
+  });
+
+  it("legt den Entwurf auch an, wenn das Bild nicht hochgeladen werden darf", async () => {
+    fakeWordPress({ ...standardRoutes(), "POST /wp-json/wp/v2/media": { status: 403, body: { message: "Sorry" } } });
+    await setup(new FakeAiService(), new FakeImageProvider());
+    const site = await createWpSite();
+    const postId = await makePost(site.id);
+    await jsonPost(`/api/posts/${postId}/image/plan`);
+    await jsonPost(`/api/posts/${postId}/image/generate`);
+    await worker.tick();
+    const pub = await jsonPost(`/api/posts/${postId}/wordpress/publish`, { categoryIds: [3], tags: [] });
+    expect(pub.statusCode).toBe(200);
+    expect(pub.json().wpPostId).toBe(42);
+    expect(pub.json().image).toMatchObject({ status: "failed" });
+    expect(pub.json().image.message).toContain("keine Dateien hochladen");
+  });
+
+  it("loescht das Beitragsbild samt Datei", async () => {
+    await setup(new FakeAiService(), new FakeImageProvider());
+    const postId = await makePost(await createSite());
+    await jsonPost(`/api/posts/${postId}/image/plan`);
+    await jsonPost(`/api/posts/${postId}/image/generate`);
+    await worker.tick();
+    expect((await app.inject({ method: "DELETE", url: `/api/posts/${postId}/image`, headers: { cookie } })).statusCode).toBe(204);
+    expect(await getImage(postId)).toBeNull();
+    expect((await app.inject({ method: "GET", url: `/api/posts/${postId}/image/file`, headers: { cookie } })).statusCode).toBe(404);
   });
 });

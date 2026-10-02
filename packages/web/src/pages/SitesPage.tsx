@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api, type Site, type StyleSample, type WpTestResult } from "../api";
 import { useLoad } from "../hooks";
 
-const EMPTY = { name: "", baseUrl: "", language: "de", audience: "", tone: "", styleGuide: "", disclaimer: "", wpUsername: "", wpAppPassword: "", clearWpPassword: false };
+const EMPTY = { name: "", baseUrl: "", language: "de", audience: "", tone: "", styleGuide: "", disclaimer: "", labelAiImages: true, wpUsername: "", wpAppPassword: "", clearWpPassword: false };
 
 function StyleSamples({ site, onApply }: { site: Site; onApply: (tone: string, styleGuide: string) => void }) {
   const { data: samples, reload } = useLoad(() => api.get<StyleSample[]>(`/api/sites/${site.id}/style-samples`));
@@ -175,6 +175,10 @@ function SiteForm({ initial, onSaved, onCancel }: { initial?: Site; onSaved: () 
       <label>Tonalität<textarea rows={2} value={form.tone} onChange={set("tone")} placeholder="z. B. sachlich, präzise, Sie-Ansprache, keine Werbesprache" /></label>
       <label>Stilleitfaden / Beispiele<textarea rows={5} value={form.styleGuide} onChange={set("styleGuide")} placeholder="Gewünschte Länge, Gliederung, Besonderheiten – oder Auszüge aus bestehenden Beiträgen als Stilvorlage" /></label>
       <label>Disclaimer (wird unter jeden Beitrag gesetzt)<textarea rows={3} value={form.disclaimer} onChange={set("disclaimer")} /></label>
+      <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
+        <input type="checkbox" style={{ width: "auto" }} checked={form.labelAiImages} onChange={(e) => setForm({ ...form, labelAiImages: e.target.checked })} />
+        KI-generierte Beitragsbilder in der Bildunterschrift kennzeichnen („Bild: KI-generiert“)
+      </label>
       <WordPressAccess site={initial} form={form} set={set} setForm={setForm} />
       {initial && <StyleSamples site={initial} onApply={(tone, styleGuide) => setForm({ ...form, tone, styleGuide })} />}
       {error && <p className="error">{error}</p>}

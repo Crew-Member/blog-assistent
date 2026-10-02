@@ -2,6 +2,7 @@ import { envOrigin, loadedEnvFile } from "./env.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createAiService } from "./ai/index.js";
+import { createImageProvider } from "./image/index.js";
 import { formatConfigError, loadConfig } from "./config.js";
 import { prisma } from "./db/client.js";
 import { FileStorage } from "./lib/storage.js";
@@ -20,8 +21,9 @@ for (const line of describeAiSetup(config, envOrigin)) console.log(line);
 const storage = new FileStorage(config.STORAGE_DIR);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ai = createAiService(config);
-const app = buildServer({ config, prisma, storage, ai, webDir: path.resolve(here, "../../web/dist") });
-const worker = new Worker({ prisma, ai, storage });
+const images = createImageProvider(config);
+const app = buildServer({ config, prisma, storage, ai, images, webDir: path.resolve(here, "../../web/dist") });
+const worker = new Worker({ prisma, ai, storage, images });
 
 const shutdown = async () => {
   worker.stop();

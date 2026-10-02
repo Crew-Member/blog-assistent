@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 
@@ -11,6 +11,12 @@ export class FileStorage {
     const key = randomUUID();
     await writeFile(path.join(this.dir, key), data);
     return key;
+  }
+
+  /** Loescht eine Datei; fehlende Dateien sind kein Fehler. */
+  async remove(key: string): Promise<void> {
+    if (!/^[0-9a-f-]{36}$/.test(key)) return;
+    await rm(path.join(this.dir, key), { force: true });
   }
 
   async load(key: string): Promise<Buffer> {

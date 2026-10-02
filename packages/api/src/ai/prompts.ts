@@ -95,3 +95,18 @@ Regeln:
 - Allgemeine Auffangkategorien (z. B. "Allgemein", "Uncategorized", "Unkategorisiert") nur waehlen, wenn keine thematische Kategorie passt.
 - newCategories: Nur wenn keine vorhandene Kategorie das Hauptthema des Beitrags gut abdeckt, schlage hoechstens zwei NEUE Kategorienamen vor, die zur Benennung der vorhandenen passen (Stil, Sprache, Schreibweise, Einzahl/Mehrzahl). Im Zweifel gib eine leere Liste zurueck - zusaetzliche Kategorien belasten die Struktur der Website.
 - Passt nichts, sind beide Listen leer.`;
+
+export const IMAGE_PLAN_SYSTEM = `Du entwirfst das Beitragsbild fuer einen Fachbeitrag im Bereich Recht und Datenschutz.
+
+Liefere:
+- style: "illustration" (stilisierte Vektor-/Flat-Illustration) oder "photo" (fotorealistisch). Wurde ein Stil vorgegeben, halte dich daran; sonst waehle den passenderen - fuer abstrakte Rechts-/Datenschutzthemen meist "illustration".
+- prompt: Ein Bild-Prompt fuer ein Bildgenerierungsmodell, auf ENGLISCH, 40 bis 90 Woerter. Beschreibe Motiv, Komposition (Querformat 3:2, mit ruhigem Bereich fuer einen Titel), Stil, Licht und Farbpalette (professionell, ruhig, dezent; Blau-/Grautoene, ein Akzent).
+- altText: Deutsch, hoechstens 125 Zeichen, beschreibt sachlich, was zu sehen ist (kein "Bild von", keine Keyword-Aufzaehlung).
+- caption: Deutsch, eine kurze Bildunterschrift (hoechstens 80 Zeichen) oder leer, wenn keine noetig ist.
+- searchQuery: 2 bis 4 englische Suchbegriffe, mit denen man in einer Stockfoto-Datenbank ein passendes lizenzfreies Bild findet.
+
+Strikte Regeln fuer das Motiv:
+- Symbolische, neutrale Motive (z. B. Waage, Schloss, Dokumente, Schluessel, Netzwerk, Aktenordner, Schreibtisch, Serverraum, Paragrafenzeichen als Form) - keine konkreten Gerichtsgebaeude mit Beschriftung.
+- KEINE erkennbaren Personen oder Gesichter (Haende oder Silhouetten von hinten sind ok), keine Kinder.
+- Kein Text, keine Buchstaben oder Zahlen im Bild, keine Logos, keine Marken, keine Flaggen oder Parteisymbole.
+- Nichts, was den konkreten Fall, Beteiligte oder Unternehmen aus dem Beitrag erkennbar macht.`;

@@ -16,13 +16,18 @@ import { seoChecks } from "./lib/seo.js";
 import { slugify } from "./lib/slug.js";
 import { decryptSecret, encryptSecret } from "./lib/secrets.js";
 import { fetchWordPressPosts } from "./lib/wordpress.js";
-import { WordPressClient, WordPressError } from "./lib/wp-client.js";
+import { WordPressClient, WordPressError, type WpDraftInput } from "./lib/wp-client.js";
+import { embedAiGeneratedXmp } from "./lib/png.js";
+import type { ImageProvider } from "./image/provider.js";
+import { finalCaption } from "./pipeline.js";
 
 export interface ServerDeps {
   config: Config;
   prisma: PrismaClient;
   storage: FileStorage;
   ai: AiService;
+  /** Optional: Bildgenerierung; ohne gibt es nur Prompts, Stockfoto-Suche und Upload. */
+  images?: ImageProvider;
   /** Fuer Tests austauschbar (WordPress-Import). */
   fetcher?: typeof fetch;
   /** Verzeichnis mit dem gebauten Frontend (optional). */
@@ -42,6 +47,7 @@ const siteSchema = z.object({
   tone: z.string().trim().max(2000).default(""),
   styleGuide: z.string().max(20000).default(""),
   disclaimer: z.string().max(4000).default(""),
+  labelAiImages: z.boolean().default(true),
   wpUsername: z.string().trim().max(120).default(""),
   // Leer/fehlend = vorhandenes Passwort behalten
   wpAppPassword: z.string().max(200).optional(),
@@ -86,7 +92,7 @@ class HttpError extends Error {
   }
 }
 
-export function buildServer({ config, prisma, storage, ai, fetcher, webDir }: ServerDeps): FastifyInstance {
+export function buildServer({ config, prisma, storage, ai, images, fetcher, webDir }: ServerDeps): FastifyInstance {
   const app = Fastify({ logger: process.env.NODE_ENV !== "test", trustProxy: true, bodyLimit: 2 * 1024 * 1024 });
 
   /** Gibt nie das (verschluesselte) WordPress-Passwort heraus, nur ob eines gespeichert ist. */
@@ -94,6 +100,31 @@ export function buildServer({ config, prisma, storage, ai, fetcher, webDir }: Se
     const { wpAppPassword, ...rest } = site;
     return { ...rest, hasWpPassword: wpAppPassword !== "" };
   };
+
+  const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+  /** Dateityp anhand der Dateikopfzeichen bestimmen - nicht anhand von Dateiname oder Browserangabe. */
+  const sniffImage = (buf: Buffer): "image/png" | "image/jpeg" | "image/webp" | undefined => {
+    if (buf.length > 12 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
+    if (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image/jpeg";
+    if (buf.length > 12 && buf.toString("ascii", 0, 4) === "RIFF" && buf.toString("ascii", 8, 12) === "WEBP") return "image/webp";
+    return undefined;
+  };
+  const publicImage = (i: { id: string; status: string; origin: string; aiGenerated: boolean; error: string | null; style: string; prompt: string; altText: string; caption: string; searchQuery: string; sourceNote: string; storageKey: string | null; wpMediaId: number | null; updatedAt: Date }) => ({
+    id: i.id,
+    status: i.status,
+    origin: i.origin,
+    aiGenerated: i.aiGenerated,
+    error: i.error,
+    style: i.style,
+    prompt: i.prompt,
+    altText: i.altText,
+    caption: i.caption,
+    searchQuery: i.searchQuery,
+    sourceNote: i.sourceNote,
+    hasFile: i.storageKey !== null,
+    inWordPress: i.wpMediaId !== null,
+    updatedAt: i.updatedAt,
+  });
 
   const wpClientFor = async (siteId: string) => {
     const site = await prisma.site.findUnique({ where: { id: siteId } });
@@ -238,13 +269,13 @@ export function buildServer({ config, prisma, storage, ai, fetcher, webDir }: Se
     const post = await prisma.post.findUnique({ where: { id: request.params.id } });
     if (!post) throw new HttpError(404, "Beitrag nicht gefunden");
     if (post.status !== "DRAFT_READY" || !post.title || !post.contentHtml) throw new HttpError(409, "Nur fertige Entwürfe können an WordPress gesendet werden.");
-    const { client } = await wpClientFor(post.siteId);
+    const { client, site } = await wpClientFor(post.siteId);
 
     const existingCategories = body.data.newCategories.length ? await client.categories() : [];
     const createdCategoryIds = await client.ensureCategories(body.data.newCategories, existingCategories);
     const categoryIds = [...new Set([...body.data.categoryIds, ...createdCategoryIds])];
 
-    const draft = {
+    const draft: WpDraftInput = {
       title: post.title,
       content: post.contentHtml,
       slug: post.slug ?? undefined,
@@ -253,6 +284,30 @@ export function buildServer({ config, prisma, storage, ai, fetcher, webDir }: Se
       tags: await client.ensureTags(body.data.tags),
     };
     const meta = { description: post.metaDescription ?? "", focusKeyword: post.focusKeyword ?? "" };
+
+    // Beitragsbild: Fehler hier verhindern den Entwurf nicht, werden aber gemeldet.
+    let imageResult: { status: "set" | "none" | "failed"; message: string } = { status: "none", message: "Kein Beitragsbild vorhanden." };
+    const image = await prisma.postImage.findUnique({ where: { postId: post.id } });
+    if (image && image.status === "READY" && image.storageKey) {
+      try {
+        const ext = image.mimeType === "image/jpeg" ? "jpg" : image.mimeType === "image/webp" ? "webp" : "png";
+        const mediaId = await client.syncMedia({
+          existingId: image.wpMediaId,
+          data: await storage.load(image.storageKey),
+          mimeType: image.mimeType ?? "image/png",
+          filename: `${post.slug || "beitragsbild"}.${ext}`,
+          alt: image.altText,
+          caption: finalCaption(image.caption, image.aiGenerated, site.labelAiImages),
+          title: post.title,
+          description: image.sourceNote || (image.aiGenerated ? "KI-generiertes Bild" : ""),
+        });
+        draft.featuredMedia = mediaId;
+        await prisma.postImage.update({ where: { postId: post.id }, data: { wpMediaId: mediaId } });
+        imageResult = { status: "set", message: image.altText.trim() ? "Beitragsbild übertragen." : "Beitragsbild übertragen – der Alt-Text fehlt noch (Barrierefreiheit)." };
+      } catch (error) {
+        imageResult = { status: "failed", message: `Das Beitragsbild konnte nicht übertragen werden: ${error instanceof Error ? error.message : String(error)}` };
+      }
+    }
 
     let result;
     let updated = false;
@@ -273,7 +328,7 @@ export function buildServer({ config, prisma, storage, ai, fetcher, webDir }: Se
       where: { id: post.id },
       data: { wpPostId: result.id, wpEditUrl: result.editUrl, wpLink: result.link, wpCategoryIds: categoryIds, wpSeo: seo, wpPushedAt: new Date() },
     });
-    return { wpPostId: result.id, editUrl: result.editUrl, link: result.link, seo, updated };
+    return { wpPostId: result.id, editUrl: result.editUrl, link: result.link, seo, updated, image: imageResult };
   });
 
   // --- Stilvorlagen ---------------------------------------------------------
@@ -455,13 +510,14 @@ export function buildServer({ config, prisma, storage, ai, fetcher, webDir }: Se
   app.get<{ Params: { id: string } }>("/api/posts/:id", async (request, reply) => {
     const post = await prisma.post.findUnique({
       where: { id: request.params.id },
-      include: { site: { select: { id: true, name: true, baseUrl: true } }, topic: { select: { id: true, title: true, submissionId: true } } },
+      include: { site: { select: { id: true, name: true, baseUrl: true, labelAiImages: true } }, topic: { select: { id: true, title: true, submissionId: true } }, image: true },
     });
     if (!post) return reply.code(404).send({ error: "Beitrag nicht gefunden" });
     const seo = post.status === "DRAFT_READY"
       ? seoChecks({ title: post.title ?? "", slug: post.slug ?? "", metaDescription: post.metaDescription ?? "", focusKeyword: post.focusKeyword ?? "", contentHtml: post.contentHtml ?? "" })
       : [];
-    return { ...post, seoChecks: seo };
+    const { image, ...rest } = post;
+    return { ...rest, image: image ? publicImage(image) : null, seoChecks: seo };
   });
 
   app.put<{ Params: { id: string } }>("/api/posts/:id", async (request, reply) => {
@@ -488,6 +544,119 @@ export function buildServer({ config, prisma, storage, ai, fetcher, webDir }: Se
   app.delete<{ Params: { id: string } }>("/api/posts/:id", async (request, reply) => {
     const { count } = await prisma.post.deleteMany({ where: { id: request.params.id } });
     return count ? reply.code(204).send() : reply.code(404).send({ error: "Beitrag nicht gefunden" });
+  });
+
+  // --- Beitragsbild ------------------------------------------------------------
+  app.get("/api/features", async () => ({ imageGeneration: images?.name ?? null }));
+
+  const loadReadyPost = async (id: string) => {
+    const post = await prisma.post.findUnique({ where: { id }, include: { site: true, image: true } });
+    if (!post) throw new HttpError(404, "Beitrag nicht gefunden");
+    if (post.status !== "DRAFT_READY" || !post.title || !post.contentHtml) throw new HttpError(409, "Das Beitragsbild kann erst für einen fertigen Entwurf geplant werden.");
+    return post;
+  };
+
+  // Schlaegt Bild-Prompt, Alt-Text und Bildunterschrift vor (ersetzt ein vorhandenes Bild nach Rueckfrage in der Oberflaeche).
+  app.post<{ Params: { id: string } }>("/api/posts/:id/image/plan", async (request) => {
+    const body = z.object({ style: z.enum(["illustration", "photo"]).optional() }).safeParse(request.body ?? {});
+    if (!body.success) throw new HttpError(400, "Ungültiger Stil");
+    const post = await loadReadyPost(request.params.id);
+    let plan;
+    try {
+      plan = await ai.planImage({
+        site: { name: post.site.name, language: post.site.language, audience: post.site.audience, tone: post.site.tone, styleGuide: post.site.styleGuide },
+        post: { title: post.title ?? "", excerpt: post.excerpt ?? "", focusKeyword: post.focusKeyword ?? "", text: stripHtml(post.contentHtml ?? "") },
+        style: body.data.style,
+      });
+    } catch (error) {
+      throw new HttpError(502, `Bildvorschlag nicht möglich: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (post.image?.storageKey) await storage.remove(post.image.storageKey);
+    const data = { status: "PLANNED" as const, origin: "AI" as const, aiGenerated: true, error: null, style: plan.style, prompt: plan.prompt, altText: plan.altText, caption: plan.caption, searchQuery: plan.searchQuery, sourceNote: "", storageKey: null, mimeType: null, wpMediaId: null };
+    return publicImage(await prisma.postImage.upsert({ where: { postId: post.id }, create: { postId: post.id, ...data }, update: data }));
+  });
+
+  app.put<{ Params: { id: string } }>("/api/posts/:id/image", async (request) => {
+    const body = z
+      .object({
+        prompt: z.string().max(2000).optional(),
+        altText: z.string().max(300).optional(),
+        caption: z.string().max(300).optional(),
+        style: z.enum(["illustration", "photo"]).optional(),
+        sourceNote: z.string().max(500).optional(),
+        aiGenerated: z.boolean().optional(),
+      })
+      .safeParse(request.body ?? {});
+    if (!body.success) throw new HttpError(400, "Ungültige Eingabe");
+    const image = await prisma.postImage.findUnique({ where: { postId: request.params.id } });
+    if (!image) throw new HttpError(404, "Es gibt noch kein Beitragsbild.");
+    // Die KI-Kennzeichnung eines selbst erzeugten Bildes laesst sich nicht abschalten.
+    const { aiGenerated, ...rest } = body.data;
+    return publicImage(await prisma.postImage.update({ where: { postId: request.params.id }, data: { ...rest, ...(image.origin === "UPLOAD" && aiGenerated !== undefined ? { aiGenerated } : {}) } }));
+  });
+
+  app.post<{ Params: { id: string } }>("/api/posts/:id/image/generate", async (request) => {
+    if (!images) throw new HttpError(400, "Die Bildgenerierung ist nicht eingerichtet (IMAGE_PROVIDER in der .env). Der Prompt lässt sich trotzdem in einem anderen Bilddienst verwenden; das Ergebnis kann hochgeladen werden.");
+    const image = await prisma.postImage.findUnique({ where: { postId: request.params.id } });
+    if (!image || !image.prompt.trim()) throw new HttpError(409, "Bitte zuerst einen Bildvorschlag erstellen.");
+    if (image.status === "QUEUED" || image.status === "GENERATING") throw new HttpError(409, "Das Bild wird bereits erzeugt.");
+    return publicImage(await prisma.postImage.update({ where: { postId: request.params.id }, data: { status: "QUEUED", error: null } }));
+  });
+
+  app.post<{ Params: { id: string } }>("/api/posts/:id/image/upload", async (request) => {
+    const post = await loadReadyPost(request.params.id);
+    const fields: Record<string, string> = {};
+    let file: Buffer | undefined;
+    try {
+      for await (const part of request.parts()) {
+        if (part.type === "field") {
+          if (typeof part.value === "string") fields[part.fieldname] = part.value;
+        } else {
+          file = await part.toBuffer();
+        }
+      }
+    } catch (error) {
+      if ((error as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE") throw new HttpError(413, "Das Bild ist zu groß (höchstens 10 MB).");
+      throw error;
+    }
+    if (!file) throw new HttpError(400, "Keine Bilddatei hochgeladen.");
+    if (file.length > IMAGE_MAX_BYTES) throw new HttpError(413, "Das Bild ist zu groß (höchstens 10 MB).");
+    const mime = sniffImage(file);
+    if (!mime) throw new HttpError(400, "Nur PNG-, JPEG- und WebP-Bilder sind erlaubt.");
+    const sourceNote = (fields["sourceNote"] ?? "").trim();
+    if (sourceNote.length < 3) throw new HttpError(400, "Bitte Quelle und Lizenz des Bildes angeben (z. B. „Pexels, Pexels-Lizenz, Foto: Name“ oder „Eigenes Foto“).");
+    const aiGenerated = fields["aiGenerated"] === "true";
+    const data = aiGenerated ? embedAiGeneratedXmp(file, "KI-generiert") : file;
+    const key = await storage.save(data);
+    if (post.image?.storageKey) await storage.remove(post.image.storageKey);
+    const values = {
+      status: "READY" as const,
+      origin: "UPLOAD" as const,
+      aiGenerated,
+      error: null,
+      storageKey: key,
+      mimeType: mime,
+      wpMediaId: null,
+      sourceNote,
+      altText: (fields["altText"] ?? post.image?.altText ?? "").slice(0, 300),
+      caption: (fields["caption"] ?? post.image?.caption ?? "").slice(0, 300),
+    };
+    return publicImage(await prisma.postImage.upsert({ where: { postId: post.id }, create: { postId: post.id, prompt: "", ...values }, update: values }));
+  });
+
+  app.get<{ Params: { id: string } }>("/api/posts/:id/image/file", async (request, reply) => {
+    const image = await prisma.postImage.findUnique({ where: { postId: request.params.id } });
+    if (!image?.storageKey || !image.mimeType) return reply.code(404).send({ error: "Kein Bild vorhanden" });
+    const data = await storage.load(image.storageKey);
+    return reply.header("content-type", image.mimeType).header("cache-control", "private, no-store").header("x-content-type-options", "nosniff").send(data);
+  });
+
+  app.delete<{ Params: { id: string } }>("/api/posts/:id/image", async (request, reply) => {
+    const image = await prisma.postImage.findUnique({ where: { postId: request.params.id } });
+    if (!image) return reply.code(404).send({ error: "Kein Beitragsbild vorhanden" });
+    if (image.storageKey) await storage.remove(image.storageKey);
+    await prisma.postImage.delete({ where: { postId: request.params.id } });
+    return reply.code(204).send();
   });
 
   // --- Frontend -----------------------------------------------------------
