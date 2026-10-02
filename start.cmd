@@ -63,6 +63,11 @@ goto :docker_wait
 docker compose up -d --wait
 if errorlevel 1 goto :db_failed
 
+rem Noch laufende alte Server beenden: Unter Windows sperren sie sonst Dateien (z. B. die Prisma-Engine),
+rem und npm install scheitert mit "EPERM operation not permitted".
+for %%P in (3100 5174) do for /f "tokens=5" %%I in ('netstat -ano ^| findstr /R /C:":%%P .*LISTENING"') do taskkill /PID %%I /T /F >nul 2>nul
+timeout /t 2 /nobreak >nul
+
 rem ---- 4. Abhaengigkeiten ---------------------------------------------------
 echo [4/6] Installiere Abhaengigkeiten ...
 call npm install
