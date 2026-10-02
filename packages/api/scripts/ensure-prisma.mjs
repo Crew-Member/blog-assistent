@@ -8,6 +8,7 @@ import { createRequire } from "node:module";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { cleanupOldEngines, restoreEngine, rotateEngine, stopProjectProcessesCommand } from "./prisma-engine.mjs";
 
 const apiDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const schemaPath = path.join(apiDir, "src", "db", "prisma", "schema.prisma");
@@ -38,20 +39,40 @@ function isUpToDate() {
 }
 
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+const isWindows = process.platform === "win32";
+const projectRoot = path.resolve(apiDir, "..", "..");
+
+function stopProjectProcesses() {
+  if (!isWindows) return;
+  const command = stopProjectProcessesCommand(projectRoot, [process.pid, process.ppid]);
+  spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", command], { stdio: "inherit" });
+  sleep(1500);
+}
 
 function generate() {
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  const client = findClient();
+  const attempts = 5;
+  if (isWindows) stopProjectProcesses();
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    // Windows: alte Engine umbenennen, damit sie auch bei gesperrter Datei ersetzt werden kann.
+    const moved = isWindows && client ? rotateEngine(client.dir) : [];
     const result = spawnSync(`npx prisma generate --schema "${schemaPath}"`, { cwd: apiDir, stdio: "inherit", shell: true });
-    if (result.status === 0) return true;
-    if (attempt < 3) {
-      console.warn(`prisma generate fehlgeschlagen (Versuch ${attempt} von 3) - neuer Versuch in 3 Sekunden ...`);
-      sleep(3000);
+    if (result.status === 0) {
+      if (client) cleanupOldEngines(client.dir);
+      return true;
+    }
+    restoreEngine(moved);
+    if (attempt < attempts) {
+      console.warn(`prisma generate fehlgeschlagen (Versuch ${attempt} von ${attempts}) - neuer Versuch in 4 Sekunden ...`);
+      sleep(4000);
     }
   }
   return false;
 }
 
 if (isUpToDate()) {
+  const client = findClient();
+  if (client) cleanupOldEngines(client.dir);
   console.log("Prisma-Client ist aktuell - wird nicht neu erzeugt.");
 } else if (generate()) {
   console.log("Prisma-Client wurde erzeugt.");
@@ -60,8 +81,8 @@ if (isUpToDate()) {
     [
       "",
       "FEHLER: Der Prisma-Client konnte nicht erzeugt werden.",
-      "Meist haelt ein laufender Prozess die Engine-Datei fest. Bitte alle Blog-Assistent-Fenster beenden",
-      "(stop.cmd), danach erneut versuchen. Hilft das nicht: Virenscanner kurz pruefen oder den Rechner neu starten.",
+      "Meist haelt ein laufender Prozess oder der Virenscanner die Engine-Datei fest. Bitte alle Blog-Assistent-Fenster beenden",
+      "(stop.cmd), danach erneut versuchen. Hilft das nicht: Rechner neu starten und start.cmd sofort danach ausfuehren.",
     ].join("\n"),
   );
   process.exit(1);
