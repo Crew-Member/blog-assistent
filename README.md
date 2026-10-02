@@ -57,6 +57,8 @@ Ebenso ist der WordPress-Import nur gegen simulierte Antworten getestet.
 Bei jedem Problem bleibt das Fenster mit einer verständlichen Meldung offen. Beenden mit `stop.cmd`
 (die Daten bleiben erhalten). Voraussetzungen: Node.js ab Version 20 und Docker Desktop.
 
+`key-test.cmd` (Doppelklick) prüft den Anthropic-Zugang mit den Einstellungen aus der `.env`: gültiger Key? Workspace nötig? Modell und Guthaben in Ordnung? Es kostet praktisch nichts und zeigt den Key nie an. Auf der Kommandozeile: `npm run check:ai -w @blog/api`.
+
 Die Skripte sind bisher nicht auf einem echten Windows-Rechner getestet.
 
 ## Schnellstart (Entwicklung)

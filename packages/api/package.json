@@ -12,7 +12,8 @@
     "prisma:generate": "node scripts/ensure-prisma.mjs",
     "prisma:migrate": "dotenv -e ../../.env -- prisma migrate dev --schema src/db/prisma/schema.prisma",
     "prisma:deploy": "dotenv -e ../../.env -- prisma migrate deploy --schema src/db/prisma/schema.prisma",
-    "prisma:generate:force": "prisma generate --schema src/db/prisma/schema.prisma"
+    "prisma:generate:force": "prisma generate --schema src/db/prisma/schema.prisma",
+    "check:ai": "tsx src/check-ai.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
