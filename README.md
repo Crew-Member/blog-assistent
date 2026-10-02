@@ -49,6 +49,16 @@ Ebenso ist der WordPress-Import nur gegen simulierte Antworten getestet.
 - Prompts liegen gesammelt in `packages/api/src/ai/prompts.ts`
 - Testdaten: `packages/api/src/fixtures/` enthält zwei echte Beiträge (OLG Naumburg, Deutsche Wohnen) für die Belegprüfung
 
+## Windows: Doppelklick-Start
+
+`start.cmd` doppelklicken. Die Datei erledigt der Reihe nach: Update holen (`git pull`), `.env` prüfen
+(beim ersten Mal wird sie angelegt und im Editor geöffnet), Docker Desktop und Datenbank starten,
+`npm install`, Datenbank-Änderungen anwenden, API und Oberfläche in zwei Fenstern starten und den Browser öffnen.
+Bei jedem Problem bleibt das Fenster mit einer verständlichen Meldung offen. Beenden mit `stop.cmd`
+(die Daten bleiben erhalten). Voraussetzungen: Node.js ab Version 20 und Docker Desktop.
+
+Die Skripte sind bisher nicht auf einem echten Windows-Rechner getestet.
+
 ## Schnellstart (Entwicklung)
 
 ```bash
