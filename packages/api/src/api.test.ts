@@ -312,4 +312,173 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect(seen.find((d) => d.filename === "Newsletter.msg")?.text).toContain("Betreff: BGH: Intransparenz von AGB");
     expect(seen.find((d) => d.filename.endsWith("Urteil.pdf"))).toMatchObject({ kind: "pdf", hasBase64: true });
   });
+
+  // --- WordPress-Anbindung ---------------------------------------------------
+  type WpReply = { status?: number; body?: unknown };
+  interface WpCall {
+    method: string;
+    path: string;
+    headers: Record<string, string>;
+    body?: Record<string, unknown>;
+  }
+  /** Simuliert WordPress; Antworten je "METHODE /pfad", Listen werden der Reihe nach verbraucht. */
+  function fakeWordPress(routes: Record<string, WpReply | WpReply[]>) {
+    const calls: WpCall[] = [];
+    wpFetcher = (async (url: string, init?: RequestInit) => {
+      const u = new URL(url);
+      const method = init?.method ?? "GET";
+      calls.push({ method, path: u.pathname, headers: Object.fromEntries(new Headers(init?.headers).entries()), body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      const entry = routes[`${method} ${u.pathname}`];
+      const reply = Array.isArray(entry) ? entry.shift() : entry;
+      if (!reply) return new Response(JSON.stringify({ message: "kein Stub" }), { status: 404 });
+      return new Response(reply.body === undefined ? "" : JSON.stringify(reply.body), { status: reply.status ?? 200 });
+    }) as typeof fetch;
+    return calls;
+  }
+  const WP_BASE = "https://93.184.216.34";
+  const standardRoutes = (): Record<string, WpReply | WpReply[]> => ({
+    "GET /wp-json/wp/v2/users/me": { body: { name: "Dr. Kirmse", capabilities: { edit_posts: true } } },
+    "GET /wp-json/": { body: { namespaces: ["wp/v2", "rankmath/v1"] } },
+    "GET /wp-json/wp/v2/categories": { body: [{ id: 1, name: "Allgemein", slug: "allgemein", parent: 0, count: 2 }, { id: 3, name: "Datenschutzrecht", slug: "datenschutzrecht", parent: 0, count: 40 }] },
+    "POST /wp-json/wp/v2/categories": { body: { id: 11 } },
+    "GET /wp-json/wp/v2/tags": { body: [] },
+    "POST /wp-json/wp/v2/tags": { body: { id: 21 } },
+    "POST /wp-json/wp/v2/posts": { body: { id: 42, link: `${WP_BASE}/?p=42`, status: "draft" } },
+    "POST /wp-json/rankmath/v1/updateMeta": { body: { success: true } },
+  });
+
+  /** Ersetzt den WordPress-Stub durch neue Routen, schreibt aber weiter in dasselbe calls-Array. */
+  function fakeWordPressAppend(calls: { method: string; path: string; headers: Record<string, string>; body?: Record<string, unknown> }[], routes: Record<string, { status?: number; body?: unknown } | { status?: number; body?: unknown }[]>) {
+    const merged = { ...standardRoutes(), ...routes };
+    wpFetcher = (async (url: string, init?: RequestInit) => {
+      const u = new URL(url);
+      const method = init?.method ?? "GET";
+      calls.push({ method, path: u.pathname, headers: Object.fromEntries(new Headers(init?.headers).entries()), body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      const entry = merged[`${method} ${u.pathname}`];
+      const reply = Array.isArray(entry) ? entry.shift() : entry;
+      if (!reply) return new Response(JSON.stringify({ message: "kein Stub" }), { status: 404 });
+      return new Response(reply.body === undefined ? "" : JSON.stringify(reply.body), { status: reply.status ?? 200 });
+    }) as typeof fetch;
+  }
+  async function createWpSite(extra: Record<string, unknown> = {}) {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/sites",
+      headers: { cookie },
+      payload: { name: "Kanzlei WP", baseUrl: WP_BASE, wpUsername: "daniel", wpAppPassword: "abcd efgh ijkl mnop", disclaimer: "Kein Rat.", ...extra },
+    });
+    expect(res.statusCode).toBe(201);
+    return res.json();
+  }
+
+  it("speichert das WordPress-Passwort verschluesselt und gibt es nie heraus", async () => {
+    const site = await createWpSite();
+    expect(site.hasWpPassword).toBe(true);
+    expect(JSON.stringify(site)).not.toContain("abcd");
+    expect(site).not.toHaveProperty("wpAppPassword");
+
+    const stored = await prisma.site.findUniqueOrThrow({ where: { id: site.id } });
+    expect(stored.wpAppPassword.startsWith("v1:")).toBe(true);
+    expect(stored.wpAppPassword).not.toContain("abcd");
+
+    const list = (await app.inject({ method: "GET", url: "/api/sites", headers: { cookie } })).json();
+    expect(JSON.stringify(list)).not.toContain(stored.wpAppPassword);
+
+    // ohne neues Passwort bleibt das alte erhalten, mit clearWpPassword wird es entfernt
+    const keep = await app.inject({ method: "PUT", url: `/api/sites/${site.id}`, headers: { cookie }, payload: { name: "Neu", baseUrl: WP_BASE, wpUsername: "daniel" } });
+    expect(keep.json().hasWpPassword).toBe(true);
+    const cleared = await app.inject({ method: "PUT", url: `/api/sites/${site.id}`, headers: { cookie }, payload: { name: "Neu", clearWpPassword: true } });
+    expect(cleared.json().hasWpPassword).toBe(false);
+  });
+
+  it("testet den WordPress-Zugang und erkennt Rank Math", async () => {
+    const calls = fakeWordPress(standardRoutes());
+    await setup(new FakeAiService());
+    const site = await createWpSite();
+    const res = await app.inject({ method: "POST", url: `/api/sites/${site.id}/wordpress/test`, headers: { cookie } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true, user: "Dr. Kirmse", canPublish: true, rankMath: true, categories: 2 });
+    expect(calls[0]?.headers["authorization"]).toBe(`Basic ${Buffer.from("daniel:abcd efgh ijkl mnop").toString("base64")}`);
+  });
+
+  it("verlangt einen eingerichteten WordPress-Zugang", async () => {
+    const siteId = await createSite();
+    const postId = await makePost(siteId);
+    const res = await app.inject({ method: "POST", url: `/api/posts/${postId}/wordpress/prepare`, headers: { cookie } });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toContain("nicht eingerichtet");
+  });
+
+  it("schlaegt Kategorien vor, legt nach Bestaetigung als Entwurf an und aktualisiert spaeter denselben Entwurf", async () => {
+    const calls = fakeWordPress(standardRoutes());
+    await setup(fakeWith({ suggestCategories: async () => ({ categoryIds: [3], newCategories: ["Compliance"] }) }));
+    const site = await createWpSite();
+    const postId = await makePost(site.id);
+
+    const prep = (await app.inject({ method: "POST", url: `/api/posts/${postId}/wordpress/prepare`, headers: { cookie } })).json();
+    expect(prep.categories.map((c: { id: number }) => c.id)).toEqual([1, 3]);
+    expect(prep.suggested).toEqual([3]);
+    expect(prep.newSuggestions).toEqual(["Compliance"]);
+    expect(prep.existing).toBeNull();
+    expect(calls.some((c) => c.method === "POST")).toBe(false); // Vorbereiten aendert nichts in WordPress
+
+    const pub = await app.inject({ method: "POST", url: `/api/posts/${postId}/wordpress/publish`, headers: { cookie }, payload: { categoryIds: [3], newCategories: ["Compliance"], tags: ["DSGVO"] } });
+    expect(pub.statusCode).toBe(200);
+    expect(pub.json()).toMatchObject({ wpPostId: 42, editUrl: `${WP_BASE}/wp-admin/post.php?post=42&action=edit`, updated: false, seo: { status: "set" } });
+
+    const created = calls.find((c) => c.method === "POST" && c.path === "/wp-json/wp/v2/posts")!;
+    expect(created.body).toMatchObject({ status: "draft", slug: "beispielthema", categories: [3, 11], tags: [21] });
+    expect(String(created.body?.content)).toContain("Kein Rat.");
+    expect(calls.find((c) => c.path === "/wp-json/wp/v2/categories" && c.method === "POST")?.body).toEqual({ name: "Compliance" });
+    expect(calls.find((c) => c.path === "/wp-json/rankmath/v1/updateMeta")?.body).toMatchObject({ objectID: 42, meta: { rank_math_focus_keyword: "beispiel" } });
+
+    const saved = await getPost(postId);
+    expect(saved).toMatchObject({ wpPostId: 42, wpCategoryIds: [3, 11] });
+    expect(saved.wpPushedAt).toBeTruthy();
+
+    // zweiter Versand: derselbe Entwurf wird aktualisiert (vorher Status geprueft), kein neuer Beitrag
+    calls.length = 0;
+    fakeWordPressAppend(calls, { "GET /wp-json/wp/v2/posts/42": { body: { id: 42, status: "draft" } }, "POST /wp-json/wp/v2/posts/42": { body: { id: 42, link: `${WP_BASE}/?p=42`, status: "draft" } } });
+    await setup(new FakeAiService()); // Server mit dem neuen WordPress-Stub neu aufbauen
+    const again = await app.inject({ method: "POST", url: `/api/posts/${postId}/wordpress/publish`, headers: { cookie }, payload: { categoryIds: [3], tags: [] } });
+    expect(again.json()).toMatchObject({ wpPostId: 42, updated: true });
+    expect(calls.some((c) => c.method === "POST" && c.path === "/wp-json/wp/v2/posts")).toBe(false);
+  });
+
+  it("legt einen neuen Entwurf an, wenn der fruehere in WordPress geloescht wurde", async () => {
+    fakeWordPress(standardRoutes());
+    await setup(new FakeAiService());
+    const site = await createWpSite();
+    const postId = await makePost(site.id);
+    await app.inject({ method: "POST", url: `/api/posts/${postId}/wordpress/publish`, headers: { cookie }, payload: { categoryIds: [3], tags: [] } });
+
+    fakeWordPress({ ...standardRoutes(), "GET /wp-json/wp/v2/posts/42": { status: 404, body: { message: "nicht gefunden" } }, "POST /wp-json/wp/v2/posts": { body: { id: 77, link: `${WP_BASE}/?p=77`, status: "draft" } } });
+    await setup(new FakeAiService());
+    const res = await app.inject({ method: "POST", url: `/api/posts/${postId}/wordpress/publish`, headers: { cookie }, payload: { categoryIds: [3], tags: [] } });
+    expect(res.json()).toMatchObject({ wpPostId: 77, updated: false });
+    expect((await getPost(postId)).wpPostId).toBe(77);
+  });
+
+  it("ueberschreibt keinen in WordPress bereits veroeffentlichten Beitrag", async () => {
+    fakeWordPress(standardRoutes());
+    await setup(new FakeAiService());
+    const site = await createWpSite();
+    const postId = await makePost(site.id);
+    await app.inject({ method: "POST", url: `/api/posts/${postId}/wordpress/publish`, headers: { cookie }, payload: { categoryIds: [3], tags: [] } });
+
+    fakeWordPress({ ...standardRoutes(), "GET /wp-json/wp/v2/posts/42": { body: { id: 42, status: "publish" } } });
+    await setup(new FakeAiService());
+    const res = await app.inject({ method: "POST", url: `/api/posts/${postId}/wordpress/publish`, headers: { cookie }, payload: { categoryIds: [3], tags: [] } });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toContain("publish");
+  });
+
+  it("zeigt WordPress-Fehler verstaendlich an", async () => {
+    fakeWordPress({ ...standardRoutes(), "GET /wp-json/wp/v2/users/me": { status: 401, body: { message: "Ungueltiges Passwort" } } });
+    await setup(new FakeAiService());
+    const site = await createWpSite();
+    const res = await app.inject({ method: "POST", url: `/api/sites/${site.id}/wordpress/test`, headers: { cookie } });
+    expect(res.statusCode).toBe(502);
+    expect(res.json().error).toContain("Anmeldung abgelehnt");
+  });
 });

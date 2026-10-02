@@ -75,6 +75,19 @@ export type FactCheckResult = z.infer<typeof factCheckResultSchema>;
 export const styleDerivationSchema = z.object({ tone: z.string(), styleGuide: z.string() });
 export type StyleDerivation = z.infer<typeof styleDerivationSchema>;
 
+export interface CategoryOption {
+  id: number;
+  name: string;
+}
+
+export const categorySuggestionSchema = z.object({ categoryIds: z.array(z.number().int()), newCategories: z.array(z.string()) });
+export interface CategorySuggestion {
+  /** IDs vorhandener Kategorien (hoechstens drei). */
+  categoryIds: number[];
+  /** Namen neuer Kategorien, die nur vorgeschlagen werden (hoechstens zwei) - angelegt wird erst nach Bestaetigung. */
+  newCategories: string[];
+}
+
 /** Abstraktion ueber die KI-Schritte, damit Pipeline und Tests ohne echte API laufen koennen. */
 export interface AiService {
   analyze(input: { site: SiteProfile; note: string; documents: AiDocument[] }): Promise<TopicProposal[]>;
@@ -82,6 +95,8 @@ export interface AiService {
   draft(input: { site: SiteProfile; topic: TopicProposal; research: ResearchResult; styleSamples: StyleSampleInput[] }): Promise<DraftResult>;
   /** Unabhaengige Pruefung des Entwurfs gegen Recherche und Originalunterlagen; liefert korrigiertes HTML. */
   factCheck(input: { site: SiteProfile; topic: TopicProposal; research: ResearchResult; draft: DraftResult; documents: AiDocument[] }): Promise<FactCheckResult>;
+  /** Waehlt aus den vorhandenen WordPress-Kategorien die passenden (hoechstens drei) fuer einen fertigen Beitrag. */
+  suggestCategories(input: { site: SiteProfile; post: { title: string; excerpt: string; focusKeyword: string; text: string }; categories: CategoryOption[] }): Promise<CategorySuggestion>;
   /** Leitet aus Beispielbeitraegen Tonalitaet und Stilleitfaden ab. */
   deriveStyle(input: { site: SiteProfile; samples: StyleSampleInput[] }): Promise<StyleDerivation>;
 }

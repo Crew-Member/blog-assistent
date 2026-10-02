@@ -1,12 +1,15 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { ANALYZE_SYSTEM, DRAFT_SYSTEM, FACTCHECK_SYSTEM, RESEARCH_SYSTEM, STYLE_SYSTEM, siteBlock, styleSamplesBlock, topicBlock } from "./prompts.js";
+import { ANALYZE_SYSTEM, CATEGORY_SYSTEM, DRAFT_SYSTEM, FACTCHECK_SYSTEM, RESEARCH_SYSTEM, STYLE_SYSTEM, siteBlock, styleSamplesBlock, topicBlock } from "./prompts.js";
 import {
   analyzeResultSchema,
+  categorySuggestionSchema,
   draftResultSchema,
   factCheckResultSchema,
   styleDerivationSchema,
   type AiDocument,
   type AiService,
+  type CategoryOption,
+  type CategorySuggestion,
   type DraftResult,
   type FactCheckResult,
   type StyleDerivation,
@@ -105,6 +108,13 @@ const FACTCHECK_SCHEMA = {
     revisedHtml: { type: "string" },
   },
   required: ["summary", "issues", "revisedHtml"],
+  additionalProperties: false,
+} as const;
+
+const CATEGORY_SCHEMA = {
+  type: "object",
+  properties: { categoryIds: { type: "array", items: { type: "integer" } }, newCategories: { type: "array", items: { type: "string" } } },
+  required: ["categoryIds", "newCategories"],
   additionalProperties: false,
 } as const;
 
@@ -290,5 +300,27 @@ export class ClaudeAiService implements AiService {
       { type: "text", text: `${siteBlock(input.site)}\n\n${styleSamplesBlock(input.samples)}\n\nBeschreibe den Stil dieser Website.` },
     ];
     return this.structured(STYLE_SYSTEM, content, STYLE_SCHEMA, (v) => styleDerivationSchema.parse(v));
+  }
+
+  async suggestCategories(input: { site: SiteProfile; post: { title: string; excerpt: string; focusKeyword: string; text: string }; categories: CategoryOption[] }): Promise<CategorySuggestion> {
+    const list = input.categories.map((c) => `- ${c.id}: ${c.name}`).join("\n") || "(noch keine vorhanden)";
+    const content: Anthropic.ContentBlockParam[] = [
+      {
+        type: "text",
+        text: [
+          `Website: ${input.site.name}`,
+          `Vorhandene Kategorien (ID: Name):\n${list}`,
+          `Beitrag:\nTitel: ${input.post.title}\nFokus-Keyword: ${input.post.focusKeyword}\nAuszug: ${input.post.excerpt}\nAnfang des Textes: ${input.post.text.slice(0, 1500)}`,
+          "Waehle die passenden Kategorien.",
+        ].join("\n\n"),
+      },
+    ];
+    const result = await this.structured(CATEGORY_SYSTEM, content, CATEGORY_SCHEMA, (v) => categorySuggestionSchema.parse(v));
+    const valid = new Set(input.categories.map((c) => c.id));
+    const existingNames = new Set(input.categories.map((c) => c.name.trim().toLowerCase()));
+    return {
+      categoryIds: [...new Set(result.categoryIds)].filter((id) => valid.has(id)).slice(0, 3),
+      newCategories: [...new Set(result.newCategories.map((n) => n.trim()).filter((n) => n && n.length <= 60 && !existingNames.has(n.toLowerCase())))].slice(0, 2),
+    };
   }
 }

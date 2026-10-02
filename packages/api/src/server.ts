@@ -10,11 +10,13 @@ import { z } from "zod";
 import type { AiService } from "./ai/types.js";
 import type { Config } from "./config.js";
 import type { FileStorage } from "./lib/storage.js";
-import { extractDocument, detectKind } from "./lib/extract.js";
+import { detectKind, extractDocument, stripHtml } from "./lib/extract.js";
 import { sanitizePostHtml } from "./lib/html.js";
 import { seoChecks } from "./lib/seo.js";
 import { slugify } from "./lib/slug.js";
+import { decryptSecret, encryptSecret } from "./lib/secrets.js";
 import { fetchWordPressPosts } from "./lib/wordpress.js";
+import { WordPressClient, WordPressError } from "./lib/wp-client.js";
 
 export interface ServerDeps {
   config: Config;
@@ -40,6 +42,17 @@ const siteSchema = z.object({
   tone: z.string().trim().max(2000).default(""),
   styleGuide: z.string().max(20000).default(""),
   disclaimer: z.string().max(4000).default(""),
+  wpUsername: z.string().trim().max(120).default(""),
+  // Leer/fehlend = vorhandenes Passwort behalten
+  wpAppPassword: z.string().max(200).optional(),
+  clearWpPassword: z.boolean().optional(),
+});
+
+const wpPublishSchema = z.object({
+  categoryIds: z.array(z.number().int().positive()).max(10).default([]),
+  tags: z.array(z.string().trim().min(1).max(60)).max(10).default([]),
+  // Vom Nutzer bestaetigte NEUE Kategorien (Namen) - werden in WordPress angelegt
+  newCategories: z.array(z.string().trim().min(1).max(60)).max(3).default([]),
 });
 
 const styleSampleSchema = z.object({
@@ -64,11 +77,47 @@ function safeEqual(a: string, b: string): boolean {
   return ba.length === bb.length && timingSafeEqual(ba, bb);
 }
 
+class HttpError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 export function buildServer({ config, prisma, storage, ai, fetcher, webDir }: ServerDeps): FastifyInstance {
   const app = Fastify({ logger: process.env.NODE_ENV !== "test", trustProxy: true, bodyLimit: 2 * 1024 * 1024 });
 
+  /** Gibt nie das (verschluesselte) WordPress-Passwort heraus, nur ob eines gespeichert ist. */
+  const publicSite = <T extends { wpAppPassword: string }>(site: T) => {
+    const { wpAppPassword, ...rest } = site;
+    return { ...rest, hasWpPassword: wpAppPassword !== "" };
+  };
+
+  const wpClientFor = async (siteId: string) => {
+    const site = await prisma.site.findUnique({ where: { id: siteId } });
+    if (!site) throw new HttpError(404, "Website nicht gefunden");
+    if (!site.baseUrl || !site.wpUsername || !site.wpAppPassword) {
+      throw new HttpError(400, "Der WordPress-Zugang ist für diese Website nicht eingerichtet (Websites → Bearbeiten: Adresse, Benutzername und Anwendungspasswort).");
+    }
+    const password = decryptSecret(site.wpAppPassword, config.SESSION_SECRET);
+    if (!password) throw new HttpError(400, "Das gespeicherte Anwendungspasswort ist nicht lesbar (SESSION_SECRET geändert?). Bitte unter Websites → Bearbeiten neu eingeben.");
+    try {
+      return { site, client: new WordPressClient(site.baseUrl, site.wpUsername, password, fetcher) };
+    } catch (error) {
+      throw new HttpError(400, error instanceof Error ? error.message : String(error));
+    }
+  };
+
   app.register(fastifyCookie, { secret: config.SESSION_SECRET });
   app.register(fastifyMultipart, { limits: { fileSize: MAX_FILE_BYTES, files: 15, fields: 10 } });
+
+  app.setErrorHandler((error, _request, reply) => {
+    if (error instanceof HttpError) return reply.code(error.status).send({ error: error.message });
+    if (error instanceof WordPressError) return reply.code(error.status === 409 ? 409 : 502).send({ error: error.message });
+    reply.send(error);
+  });
 
   // --- Auth ---------------------------------------------------------------
   const attempts = new Map<string, { count: number; resetAt: number }>();
@@ -112,25 +161,119 @@ export function buildServer({ config, prisma, storage, ai, fetcher, webDir }: Se
   app.get("/api/auth/me", async () => ({ ok: true }));
 
   // --- Websites -----------------------------------------------------------
-  app.get("/api/sites", async () => prisma.site.findMany({ orderBy: { name: "asc" } }));
+  app.get("/api/sites", async () => (await prisma.site.findMany({ orderBy: { name: "asc" } })).map(publicSite));
 
   app.post("/api/sites", async (request, reply) => {
     const body = siteSchema.safeParse(request.body);
-    if (!body.success) return reply.code(400).send({ error: "Ungueltige Eingabe", details: body.error.flatten() });
-    return reply.code(201).send(await prisma.site.create({ data: body.data }));
+    if (!body.success) return reply.code(400).send({ error: "Ungültige Eingabe", details: body.error.flatten() });
+    const { wpAppPassword, clearWpPassword: _clear, ...data } = body.data;
+    const created = await prisma.site.create({ data: { ...data, wpAppPassword: encryptSecret(wpAppPassword?.trim() ?? "", config.SESSION_SECRET) } });
+    return reply.code(201).send(publicSite(created));
   });
 
   app.put<{ Params: { id: string } }>("/api/sites/:id", async (request, reply) => {
     const body = siteSchema.safeParse(request.body);
-    if (!body.success) return reply.code(400).send({ error: "Ungueltige Eingabe", details: body.error.flatten() });
+    if (!body.success) return reply.code(400).send({ error: "Ungültige Eingabe", details: body.error.flatten() });
     const exists = await prisma.site.findUnique({ where: { id: request.params.id }, select: { id: true } });
     if (!exists) return reply.code(404).send({ error: "Website nicht gefunden" });
-    return prisma.site.update({ where: { id: request.params.id }, data: body.data });
+    const { wpAppPassword, clearWpPassword, ...data } = body.data;
+    const newPassword = wpAppPassword?.trim();
+    return publicSite(
+      await prisma.site.update({
+        where: { id: request.params.id },
+        data: { ...data, ...(clearWpPassword ? { wpAppPassword: "" } : newPassword ? { wpAppPassword: encryptSecret(newPassword, config.SESSION_SECRET) } : {}) },
+      }),
+    );
   });
 
   app.delete<{ Params: { id: string } }>("/api/sites/:id", async (request, reply) => {
     const { count } = await prisma.site.deleteMany({ where: { id: request.params.id } });
     return count ? reply.code(204).send() : reply.code(404).send({ error: "Website nicht gefunden" });
+  });
+
+  // --- WordPress-Anbindung ---------------------------------------------------
+  app.post<{ Params: { id: string } }>("/api/sites/:id/wordpress/test", async (request) => {
+    const { client } = await wpClientFor(request.params.id);
+    const me = await client.me();
+    const [namespaces, categories] = await Promise.all([client.namespaces().catch(() => [] as string[]), client.categories()]);
+    return { ok: true, user: me.name, canPublish: me.canPublish, rankMath: namespaces.includes("rankmath/v1"), categories: categories.length };
+  });
+
+  app.post<{ Params: { id: string } }>("/api/posts/:id/wordpress/prepare", async (request) => {
+    const post = await prisma.post.findUnique({ where: { id: request.params.id }, include: { site: true } });
+    if (!post) throw new HttpError(404, "Beitrag nicht gefunden");
+    if (post.status !== "DRAFT_READY") throw new HttpError(409, "Nur fertige Entwürfe können an WordPress gesendet werden.");
+    const { client } = await wpClientFor(post.siteId);
+    const categories = await client.categories();
+
+    let suggested: number[] = [];
+    let newSuggestions: string[] = [];
+    let suggestionError: string | undefined;
+    try {
+      const suggestion = await ai.suggestCategories({
+        site: { name: post.site.name, language: post.site.language, audience: post.site.audience, tone: post.site.tone, styleGuide: post.site.styleGuide },
+        post: { title: post.title ?? "", excerpt: post.excerpt ?? "", focusKeyword: post.focusKeyword ?? "", text: stripHtml(post.contentHtml ?? "") },
+        categories: categories.map((c) => ({ id: c.id, name: c.name })),
+      });
+      suggested = suggestion.categoryIds;
+      newSuggestions = suggestion.newCategories;
+    } catch (error) {
+      suggestionError = `Kategorie-Vorschlag nicht möglich: ${error instanceof Error ? error.message : String(error)}`;
+    }
+    const previous = Array.isArray(post.wpCategoryIds) ? (post.wpCategoryIds as number[]) : [];
+    const secondary = Array.isArray(post.secondaryKeywords) ? (post.secondaryKeywords as string[]) : [];
+    return {
+      categories: categories.map((c) => ({ id: c.id, name: c.name, parent: c.parent, count: c.count })),
+      suggested: post.wpPostId && previous.length ? previous : suggested,
+      newSuggestions,
+      suggestionError,
+      tags: secondary.slice(0, 5),
+      existing: post.wpPostId ? { wpPostId: post.wpPostId, editUrl: post.wpEditUrl, link: post.wpLink } : null,
+    };
+  });
+
+  app.post<{ Params: { id: string } }>("/api/posts/:id/wordpress/publish", async (request) => {
+    const body = wpPublishSchema.safeParse(request.body ?? {});
+    if (!body.success) throw new HttpError(400, "Ungültige Auswahl von Kategorien oder Schlagwörtern");
+    const post = await prisma.post.findUnique({ where: { id: request.params.id } });
+    if (!post) throw new HttpError(404, "Beitrag nicht gefunden");
+    if (post.status !== "DRAFT_READY" || !post.title || !post.contentHtml) throw new HttpError(409, "Nur fertige Entwürfe können an WordPress gesendet werden.");
+    const { client } = await wpClientFor(post.siteId);
+
+    const existingCategories = body.data.newCategories.length ? await client.categories() : [];
+    const createdCategoryIds = await client.ensureCategories(body.data.newCategories, existingCategories);
+    const categoryIds = [...new Set([...body.data.categoryIds, ...createdCategoryIds])];
+
+    const draft = {
+      title: post.title,
+      content: post.contentHtml,
+      slug: post.slug ?? undefined,
+      excerpt: post.excerpt ?? undefined,
+      categories: categoryIds,
+      tags: await client.ensureTags(body.data.tags),
+    };
+    const meta = { description: post.metaDescription ?? "", focusKeyword: post.focusKeyword ?? "" };
+
+    let result;
+    let updated = false;
+    if (post.wpPostId) {
+      try {
+        result = await client.updateDraft(post.wpPostId, draft, meta);
+        updated = true;
+      } catch (error) {
+        // Wurde der Entwurf in WordPress geloescht, einen neuen anlegen; sonst (z. B. schon veroeffentlicht) abbrechen.
+        if (!(error instanceof WordPressError && error.status === 404)) throw error;
+      }
+    }
+    result ??= await client.createDraft(draft, meta);
+
+    const namespaces = await client.namespaces().catch(() => [] as string[]);
+    const seo = await client.setRankMath(result.id, meta, namespaces);
+    await prisma.post.update({
+      where: { id: post.id },
+      data: { wpPostId: result.id, wpEditUrl: result.editUrl, wpLink: result.link, wpCategoryIds: categoryIds, wpSeo: seo, wpPushedAt: new Date() },
+    });
+    return { wpPostId: result.id, editUrl: result.editUrl, link: result.link, seo, updated };
   });
 
   // --- Stilvorlagen ---------------------------------------------------------

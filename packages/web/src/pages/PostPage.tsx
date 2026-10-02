@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { POST_LABEL, api, isBusy, type FactCheck, type PostDetail } from "../api";
+import { POST_LABEL, api, isBusy, type FactCheck, type PostDetail, type WpPrepare, type WpPublishResult } from "../api";
 import { useLoad } from "../hooks";
 
 const FACT_LABEL: Record<FactCheck["status"], string> = {
@@ -45,10 +45,119 @@ function FactCheckPanel({ check, claims }: { check: FactCheck; claims: string[] 
   );
 }
 
+
+function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: boolean; onDone: () => void }) {
+  const [prep, setPrep] = useState<WpPrepare>();
+  const [selected, setSelected] = useState<number[]>([]);
+  const [newSelected, setNewSelected] = useState<string[]>([]);
+  const [tags, setTags] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const [result, setResult] = useState<WpPublishResult>();
+
+  async function load() {
+    setBusy(true);
+    setError(undefined);
+    setResult(undefined);
+    try {
+      const p = await api.post<WpPrepare>(`/api/posts/${post.id}/wordpress/prepare`);
+      setPrep(p);
+      setSelected(p.suggested);
+      setNewSelected([]);
+      setTags(p.tags.join(", "));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function publish() {
+    setBusy(true);
+    setError(undefined);
+    try {
+      const r = await api.post<WpPublishResult>(`/api/posts/${post.id}/wordpress/publish`, {
+        categoryIds: selected,
+        newCategories: newSelected,
+        tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
+      });
+      setResult(r);
+      setPrep(undefined);
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+  const editUrl = result?.editUrl ?? post.wpEditUrl;
+  const seo = result?.seo ?? post.wpSeo;
+
+  return (
+    <div className="card stack">
+      <strong>WordPress</strong>
+      {editUrl && (
+        <div>
+          Entwurf in WordPress: <a href={editUrl} target="_blank" rel="noreferrer noopener">im Editor öffnen</a>
+          {post.wpPushedAt && <span className="muted"> · zuletzt gesendet {new Date(post.wpPushedAt).toLocaleString("de-DE")}</span>}
+        </div>
+      )}
+      {seo && <div className={seo.status === "set" ? "ok" : "error"}>{seo.message}</div>}
+      {dirty && <div className="error">Es gibt ungespeicherte Änderungen. Gesendet wird der gespeicherte Stand – bitte erst speichern.</div>}
+
+      {!prep && (
+        <div className="row">
+          <button disabled={busy || dirty} onClick={load}>{busy ? "Bitte warten …" : editUrl ? "Entwurf in WordPress aktualisieren" : "An WordPress senden (als Entwurf)"}</button>
+          {editUrl && <span className="muted">Änderungen, die du in WordPress am Entwurf gemacht hast, werden dabei überschrieben. Bereits veröffentlichte Beiträge werden nie angefasst.</span>}
+        </div>
+      )}
+
+      {prep && (
+        <>
+          {prep.suggestionError && <div className="error">{prep.suggestionError}</div>}
+          <div>
+            <strong>Kategorien</strong> <span className="muted">– Vorschlag der KI vorausgewählt, bitte prüfen</span>
+            <div className="stack" style={{ gap: 4, marginTop: 6, maxHeight: 220, overflow: "auto" }}>
+              {prep.categories.map((c) => (
+                <label key={c.id} className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
+                  <input type="checkbox" style={{ width: "auto" }} checked={selected.includes(c.id)} onChange={() => setSelected(toggle(selected, c.id))} />
+                  {c.parent ? "– " : ""}{c.name} <span className="muted">({c.count})</span>
+                  {prep.suggested.includes(c.id) && <span className="tag">KI-Vorschlag</span>}
+                </label>
+              ))}
+            </div>
+          </div>
+          {prep.newSuggestions.length > 0 && (
+            <div>
+              <strong>Neue Kategorie vorgeschlagen</strong> <span className="muted">– wird nur angelegt, wenn du sie ankreuzt</span>
+              {prep.newSuggestions.map((name) => (
+                <label key={name} className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
+                  <input type="checkbox" style={{ width: "auto" }} checked={newSelected.includes(name)} onChange={() => setNewSelected(toggle(newSelected, name))} />
+                  {name} <span className="tag">neu</span>
+                </label>
+              ))}
+            </div>
+          )}
+          <label>Schlagwörter (durch Komma getrennt)<input value={tags} onChange={(e) => setTags(e.target.value)} /></label>
+          <div className="row">
+            <button disabled={busy} onClick={publish}>{busy ? "Sende …" : prep.existing ? "Entwurf aktualisieren" : "Als Entwurf in WordPress anlegen"}</button>
+            <button className="secondary" disabled={busy} onClick={() => setPrep(undefined)}>Abbrechen</button>
+          </div>
+        </>
+      )}
+      {result && <div className="ok">{result.updated ? "Entwurf in WordPress aktualisiert." : "Entwurf in WordPress angelegt."} Er ist noch nicht veröffentlicht.</div>}
+      {error && <div className="error">{error}</div>}
+    </div>
+  );
+}
+
 export function PostPage({ id }: { id: string }) {
   const { data, error, reload } = useLoad(() => api.get<PostDetail>(`/api/posts/${id}`), (p) => isBusy(p.status));
   const [form, setForm] = useState({ title: "", slug: "", metaDescription: "", focusKeyword: "", excerpt: "", contentHtml: "" });
   const [saved, setSaved] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [saveError, setSaveError] = useState<string>();
 
   useEffect(() => {
@@ -66,7 +175,7 @@ export function PostPage({ id }: { id: string }) {
 
   if (error) return <p className="error">{error}</p>;
   if (!data) return <p className="muted">Lade …</p>;
-  const set = (key: keyof typeof form) => (e: { target: { value: string } }) => { setForm({ ...form, [key]: e.target.value }); setSaved(false); };
+  const set = (key: keyof typeof form) => (e: { target: { value: string } }) => { setForm({ ...form, [key]: e.target.value }); setSaved(false); setDirty(true); };
 
   return (
     <>
@@ -87,6 +196,7 @@ export function PostPage({ id }: { id: string }) {
 
       {data.status === "DRAFT_READY" && (
         <>
+          <WordPressPanel post={data} dirty={dirty} onDone={() => void reload()} />
           {data.factCheck ? (
             <FactCheckPanel check={data.factCheck} claims={data.unverifiedClaims} />
           ) : (
@@ -112,6 +222,7 @@ export function PostPage({ id }: { id: string }) {
                     try {
                       await api.put(`/api/posts/${id}`, form);
                       setSaved(true);
+                      setDirty(false);
                       setSaveError(undefined);
                       void reload();
                     } catch (e) {

@@ -37,6 +37,8 @@ export interface Site {
   tone: string;
   styleGuide: string;
   disclaimer: string;
+  wpUsername: string;
+  hasWpPassword: boolean;
 }
 
 export type SubmissionStatus = "UPLOADED" | "ANALYZING" | "ANALYZED" | "FAILED";
@@ -111,6 +113,11 @@ export interface PostDetail {
   factCheck: FactCheck | null;
   seoChecks: SeoCheck[];
   researchNotes: string | null;
+  wpPostId: number | null;
+  wpEditUrl: string | null;
+  wpLink: string | null;
+  wpSeo: { status: "set" | "manual" | "no_plugin"; message: string } | null;
+  wpPushedAt: string | null;
   site: { id: string; name: string; baseUrl: string };
   topic: { id: string; title: string; submissionId: string };
 }
@@ -142,3 +149,28 @@ export const POST_LABEL: Record<PostStatus, string> = {
 };
 
 export const isBusy = (status: string) => ["UPLOADED", "ANALYZING", "QUEUED", "RESEARCHING", "DRAFTING", "FACTCHECKING"].includes(status);
+
+export interface WpPrepare {
+  categories: { id: number; name: string; parent: number; count: number }[];
+  suggested: number[];
+  newSuggestions: string[];
+  suggestionError?: string;
+  tags: string[];
+  existing: { wpPostId: number; editUrl: string | null; link: string | null } | null;
+}
+
+export interface WpPublishResult {
+  wpPostId: number;
+  editUrl: string;
+  link: string;
+  updated: boolean;
+  seo: { status: "set" | "manual" | "no_plugin"; message: string };
+}
+
+export interface WpTestResult {
+  ok: boolean;
+  user: string;
+  canPublish: boolean;
+  rankMath: boolean;
+  categories: number;
+}

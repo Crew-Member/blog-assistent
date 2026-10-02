@@ -19,6 +19,9 @@ model Site {
   styleGuide String   @default("")
   // Wird (nicht durch die KI, sondern im Code) unter jeden Beitrag gesetzt.
   disclaimer String   @default("")
+  // WordPress-Zugang (REST-API mit Anwendungspasswort). Das Passwort liegt nur verschluesselt in der DB.
+  wpUsername    String @default("")
+  wpAppPassword String @default("")
   createdAt  DateTime @default(now())
 
   submissions Submission[]
@@ -117,6 +120,13 @@ model Post {
   // Ergebnis des Faktencheck-Durchlaufs: { status, summary, issues[], references[], ranAt } oder { status: "skipped", error }
   factCheck         Json?
   researchNotes     String?
+  // Verknuepfung mit dem Entwurf in WordPress (nach "An WordPress senden")
+  wpPostId          Int?
+  wpEditUrl         String?
+  wpLink            String?
+  wpCategoryIds     Json       @default("[]")
+  wpSeo             Json?
+  wpPushedAt        DateTime?
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 }

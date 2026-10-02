@@ -1,4 +1,4 @@
-import type { AiDocument, AiService, DraftResult, FactCheckResult, ResearchResult, SiteProfile, StyleDerivation, StyleSampleInput, TopicProposal } from "./types.js";
+import type { AiDocument, CategoryOption, CategorySuggestion, AiService, DraftResult, FactCheckResult, ResearchResult, SiteProfile, StyleDerivation, StyleSampleInput, TopicProposal } from "./types.js";
 
 /** Platzhalter-Implementierung ohne API-Aufrufe - fuer Tests und zum Ausprobieren der Oberflaeche. */
 export class FakeAiService implements AiService {
@@ -42,5 +42,9 @@ export class FakeAiService implements AiService {
 
   async deriveStyle(input: { samples: StyleSampleInput[] }): Promise<StyleDerivation> {
     return { tone: "Platzhalter-Tonalität (AI_PROVIDER=fake)", styleGuide: `- Platzhalter-Leitfaden aus ${input.samples.length} Beispiel(en)` };
+  }
+
+  async suggestCategories(input: { categories: CategoryOption[] }): Promise<CategorySuggestion> {
+    return { categoryIds: input.categories.slice(0, 1).map((c) => c.id), newCategories: [] };
   }
 }

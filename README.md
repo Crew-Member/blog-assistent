@@ -4,7 +4,7 @@ KI-gestützte Erstellung von Blogbeiträgen für mehrere WordPress-Websites (Kan
 Mails, PDFs und Urteile per Drag & Drop hochladen → die KI schlägt Themen vor, recherchiert zu den
 ausgewählten Themen im Web und schreibt einen Entwurf mit Quellen, Keywords und Meta-Daten.
 
-## Stand: Meilenstein 2 (Qualität)
+## Stand: Meilenstein 4 (WordPress-Entwürfe)
 
 | Funktion | Stand |
 |---|---|
@@ -20,8 +20,20 @@ ausgewählten Themen im Web und schreibt einen Entwurf mit Quellen, Keywords und
 | Vorschau und manuelle Bearbeitung im Browser | ✅ |
 | Disclaimer + „Stand“-Datum werden vom System angehängt, nicht von der KI | ✅ |
 | Bild-Prompts, Bildgenerierung, KI-Kennzeichnung | Meilenstein 3 |
-| WordPress-Anbindung (Entwurf ins CMS, Kategorien), Freigabe-Workflow | Meilenstein 4 |
+| **WordPress-Anbindung**: Beitrag per Knopfdruck als **Entwurf** anlegen (Titel, Inhalt, Slug, Auszug, Kategorien, Schlagwörter, Rank-Math-Felder); erneutes Senden aktualisiert denselben Entwurf, veröffentlichte Beiträge werden nie angefasst | ✅ |
+| **Kategorien**: Die KI schlägt aus den vorhandenen Kategorien der Website passende vor (vorausgewählt) und kann bis zu zwei neue vorschlagen, die nur nach ausdrücklicher Bestätigung angelegt werden | ✅ |
+| Veröffentlichen/Planen aus dem Tool heraus | bewusst nicht vorgesehen – das erfolgt in WordPress |
 | Bestehende Beiträge überarbeiten (aktualisieren) | geplant |
+
+### WordPress einrichten
+
+1. In WordPress: Benutzer → Profil → **Anwendungspasswörter** → neues Passwort erzeugen (wird nur einmal angezeigt).
+2. Im Tool: Websites → Bearbeiten → Adresse (**https://…**), WordPress-Benutzername und Anwendungspasswort eintragen, speichern, **„Verbindung testen“**.
+3. Am fertigen Beitrag: **„An WordPress senden (als Entwurf)“**, Kategorien prüfen, bestätigen. Danach führt ein Link in den WordPress-Editor.
+
+Das Passwort wird mit einem aus `SESSION_SECRET` abgeleiteten Schlüssel verschlüsselt gespeichert (AES-256-GCM) und nie in API-Antworten ausgegeben; wird das `SESSION_SECRET` geändert, muss es neu eingegeben werden. Zugangsdaten gehen nur an die eingetragene https-Adresse, Weiterleitungen werden bewusst nicht befolgt. Für neue Kategorien braucht der WordPress-Benutzer das Recht „Kategorien verwalten“ (Rolle Redakteur oder höher).
+
+**Rank Math:** Meta-Description und Fokus-Keyword werden über die Rank-Math-Schnittstelle (`/wp-json/rankmath/v1/updateMeta`) gesetzt. Das ist bisher **nur gegen simulierte Antworten getestet, nicht gegen eine echte Rank-Math-Installation**. Schlägt es fehl oder wird Rank Math nicht erkannt, meldet das Tool das offen und die Felder werden im WordPress-Editor von Hand eingetragen.
 
 Aus Mails werden Betreff, Absender, Datum und Text gelesen; PDF-, Word- und Textanhänge (höchstens fünf, je 25 MB) kommen als eigene Unterlagen dazu. Logos, Bilder und HTML-Anhänge werden bewusst nicht übernommen. Die `.msg`-Unterstützung ist bisher nur mit selbst erzeugten Testdateien geprüft, nicht mit echten Outlook-Mails.
 

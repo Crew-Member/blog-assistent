@@ -87,3 +87,11 @@ Liefere:
 - tone: ein bis zwei Saetze zur Tonalitaet (Ansprache Sie/du/wir, Foermlichkeit, Haltung).
 - styleGuide: ein knapper, konkret anwendbarer Leitfaden (8 bis 15 Stichpunkte als Text mit Zeilenumbruechen): typische Beitragslaenge, Gliederung, Einstieg und Schluss, Satzlaenge, Umgang mit Fachbegriffen und Paragrafen, Zitierweise von Urteilen, Formulierungen oder Wendungen, die vermieden werden sollen.
 Beschreibe nur, was in den Beispielen erkennbar ist; erfinde keine Vorgaben. Keine Inhalte der Beispiele wiedergeben.`;
+
+export const CATEGORY_SYSTEM = `Du ordnest Blogbeitraege den Kategorien einer WordPress-Website zu.
+
+Regeln:
+- categoryIds: Waehle ausschliesslich IDs aus der Liste der vorhandenen Kategorien, eine bis hoechstens drei, die das Thema am genauesten treffen. Lieber weniger und passend als viele. Erfinde keine IDs.
+- Allgemeine Auffangkategorien (z. B. "Allgemein", "Uncategorized", "Unkategorisiert") nur waehlen, wenn keine thematische Kategorie passt.
+- newCategories: Nur wenn keine vorhandene Kategorie das Hauptthema des Beitrags gut abdeckt, schlage hoechstens zwei NEUE Kategorienamen vor, die zur Benennung der vorhandenen passen (Stil, Sprache, Schreibweise, Einzahl/Mehrzahl). Im Zweifel gib eine leere Liste zurueck - zusaetzliche Kategorien belasten die Struktur der Website.
+- Passt nichts, sind beide Listen leer.`;

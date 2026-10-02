@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { api, type Site, type StyleSample } from "../api";
+import { api, type Site, type StyleSample, type WpTestResult } from "../api";
 import { useLoad } from "../hooks";
 
-const EMPTY = { name: "", baseUrl: "", language: "de", audience: "", tone: "", styleGuide: "", disclaimer: "" };
+const EMPTY = { name: "", baseUrl: "", language: "de", audience: "", tone: "", styleGuide: "", disclaimer: "", wpUsername: "", wpAppPassword: "", clearWpPassword: false };
 
 function StyleSamples({ site, onApply }: { site: Site; onApply: (tone: string, styleGuide: string) => void }) {
   const { data: samples, reload } = useLoad(() => api.get<StyleSample[]>(`/api/sites/${site.id}/style-samples`));
@@ -68,8 +68,85 @@ function StyleSamples({ site, onApply }: { site: Site; onApply: (tone: string, s
   );
 }
 
+function WordPressAccess({
+  site,
+  form,
+  set,
+  setForm,
+}: {
+  site?: Site;
+  form: typeof EMPTY;
+  set: (key: keyof typeof EMPTY) => (e: { target: { value: string } }) => void;
+  setForm: (f: typeof EMPTY) => void;
+}) {
+  const [result, setResult] = useState<WpTestResult>();
+  const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <div className="stack">
+      <strong>WordPress-Anbindung (Entwürfe direkt anlegen)</strong>
+      <span className="muted">
+        Benutzername und ein <em>Anwendungspasswort</em> aus WordPress (Benutzer → Profil → Anwendungspasswörter). Beiträge werden nur als Entwurf angelegt, nie veröffentlicht. Die Adresse muss mit https:// beginnen.
+        Das Passwort wird verschlüsselt gespeichert und nie wieder angezeigt.
+      </span>
+      <div className="row">
+        <label>WordPress-Benutzername<input value={form.wpUsername} onChange={set("wpUsername")} autoComplete="off" /></label>
+        <label>
+          Anwendungspasswort
+          <input
+            type="password"
+            value={form.wpAppPassword}
+            onChange={set("wpAppPassword")}
+            autoComplete="new-password"
+            placeholder={site?.hasWpPassword && !form.clearWpPassword ? "gespeichert – leer lassen, um es zu behalten" : "xxxx xxxx xxxx xxxx xxxx xxxx"}
+          />
+        </label>
+      </div>
+      <div className="row">
+        {site && (
+          <button
+            type="button"
+            className="secondary"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              setError(undefined);
+              setResult(undefined);
+              try {
+                setResult(await api.post<WpTestResult>(`/api/sites/${site.id}/wordpress/test`));
+              } catch (e) {
+                setError(e instanceof Error ? e.message : String(e));
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Verbindung testen (mit gespeicherten Daten)
+          </button>
+        )}
+        {site?.hasWpPassword && (
+          <label className="row" style={{ flexDirection: "row", gap: 6, flex: "0 0 auto" }}>
+            <input type="checkbox" style={{ width: "auto" }} checked={form.clearWpPassword} onChange={(e) => setForm({ ...form, clearWpPassword: e.target.checked })} />
+            Passwort beim Speichern entfernen
+          </label>
+        )}
+      </div>
+      {!site && <span className="muted">Speichere die Website zuerst, danach kannst du die Verbindung testen.</span>}
+      {site && <span className="muted">Geänderte Zugangsdaten zuerst speichern, dann testen.</span>}
+      {result && (
+        <span className={result.canPublish ? "ok" : "error"}>
+          ✓ Angemeldet als {result.user}. {result.canPublish ? "Beiträge anlegen: erlaubt." : "Dieser Benutzer darf keine Beiträge anlegen."}{" "}
+          {result.rankMath ? "Rank Math erkannt." : "Rank Math nicht erkannt."} {result.categories} Kategorien gefunden.
+        </span>
+      )}
+      {error && <span className="error">{error}</span>}
+    </div>
+  );
+}
+
 function SiteForm({ initial, onSaved, onCancel }: { initial?: Site; onSaved: () => void; onCancel?: () => void }) {
-  const [form, setForm] = useState(initial ?? EMPTY);
+  const [form, setForm] = useState({ ...EMPTY, ...initial, wpAppPassword: "", clearWpPassword: false });
   const [error, setError] = useState<string>();
   const set = (key: keyof typeof EMPTY) => (e: { target: { value: string } }) => setForm({ ...form, [key]: e.target.value });
 
@@ -98,6 +175,7 @@ function SiteForm({ initial, onSaved, onCancel }: { initial?: Site; onSaved: () 
       <label>Tonalität<textarea rows={2} value={form.tone} onChange={set("tone")} placeholder="z. B. sachlich, präzise, Sie-Ansprache, keine Werbesprache" /></label>
       <label>Stilleitfaden / Beispiele<textarea rows={5} value={form.styleGuide} onChange={set("styleGuide")} placeholder="Gewünschte Länge, Gliederung, Besonderheiten – oder Auszüge aus bestehenden Beiträgen als Stilvorlage" /></label>
       <label>Disclaimer (wird unter jeden Beitrag gesetzt)<textarea rows={3} value={form.disclaimer} onChange={set("disclaimer")} /></label>
+      <WordPressAccess site={initial} form={form} set={set} setForm={setForm} />
       {initial && <StyleSamples site={initial} onApply={(tone, styleGuide) => setForm({ ...form, tone, styleGuide })} />}
       {error && <p className="error">{error}</p>}
       <div className="row">
