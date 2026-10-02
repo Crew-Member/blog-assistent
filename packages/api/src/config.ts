@@ -20,11 +20,14 @@ const schema = z.object({
   AI_EFFORT: z.enum(["low", "medium", "high", "xhigh", "max"]).default("medium"),
   RESEARCH_MAX_SEARCHES: z.coerce.number().int().min(1).max(30).default(8),
   // Bildgenerierung (optional). "none": nur Prompts, Stockfoto-Links und Upload.
-  IMAGE_PROVIDER: z.enum(["none", "openai", "fake"]).default("none"),
+  IMAGE_PROVIDER: z.enum(["none", "openai", "supermachine", "fake"]).default("none"),
   IMAGE_API_KEY: cleaned,
-  IMAGE_MODEL: z.string().default("gpt-image-1"),
+  // Ohne Angabe gilt der Standard des jeweiligen Anbieters (openai: gpt-image-1, supermachine: Supermachine NextGen)
+  IMAGE_MODEL: cleaned,
+  IMAGE_BASE_URL: cleaned,
   IMAGE_QUALITY: z.enum(["low", "medium", "high"]).default("medium"),
-  IMAGE_BASE_URL: z.string().url().default("https://api.openai.com"),
+  IMAGE_WIDTH: z.coerce.number().int().min(256).max(2048).optional(),
+  IMAGE_HEIGHT: z.coerce.number().int().min(256).max(2048).optional(),
   STORAGE_DIR: z.string().default("./data/uploads"),
   PORT: z.coerce.number().int().default(3100),
   HOST: z.string().default("0.0.0.0"),
@@ -37,9 +40,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (config.AI_PROVIDER === "claude" && !config.ANTHROPIC_API_KEY) {
     throw new Error("ANTHROPIC_API_KEY fehlt (oder AI_PROVIDER=fake setzen)");
   }
-  if (config.IMAGE_PROVIDER === "openai" && !config.IMAGE_API_KEY) {
-    throw new Error("IMAGE_API_KEY fehlt (OpenAI-Schlüssel für die Bildgenerierung) - oder IMAGE_PROVIDER=none setzen");
+  if ((config.IMAGE_PROVIDER === "openai" || config.IMAGE_PROVIDER === "supermachine") && !config.IMAGE_API_KEY) {
+    throw new Error(`IMAGE_API_KEY fehlt (Schlüssel von ${config.IMAGE_PROVIDER} für die Bildgenerierung) - oder IMAGE_PROVIDER=none setzen`);
   }
+  if (config.IMAGE_BASE_URL) new URL(config.IMAGE_BASE_URL); // wirft bei ungueltiger Adresse
   return config;
 }
 

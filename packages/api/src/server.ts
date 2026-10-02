@@ -17,7 +17,7 @@ import { slugify } from "./lib/slug.js";
 import { decryptSecret, encryptSecret } from "./lib/secrets.js";
 import { fetchWordPressPosts } from "./lib/wordpress.js";
 import { WordPressClient, WordPressError, type WpDraftInput } from "./lib/wp-client.js";
-import { embedAiGeneratedXmp } from "./lib/png.js";
+import { markAsAiGenerated, sniffImageType } from "./lib/png.js";
 import type { ImageProvider } from "./image/provider.js";
 import { finalCaption } from "./pipeline.js";
 
@@ -102,13 +102,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
   };
 
   const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
-  /** Dateityp anhand der Dateikopfzeichen bestimmen - nicht anhand von Dateiname oder Browserangabe. */
-  const sniffImage = (buf: Buffer): "image/png" | "image/jpeg" | "image/webp" | undefined => {
-    if (buf.length > 12 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
-    if (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image/jpeg";
-    if (buf.length > 12 && buf.toString("ascii", 0, 4) === "RIFF" && buf.toString("ascii", 8, 12) === "WEBP") return "image/webp";
-    return undefined;
-  };
+  const sniffImage = sniffImageType;
   const publicImage = (i: { id: string; status: string; origin: string; aiGenerated: boolean; error: string | null; style: string; prompt: string; altText: string; caption: string; searchQuery: string; sourceNote: string; storageKey: string | null; wpMediaId: number | null; updatedAt: Date }) => ({
     id: i.id,
     status: i.status,
@@ -626,7 +620,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     const sourceNote = (fields["sourceNote"] ?? "").trim();
     if (sourceNote.length < 3) throw new HttpError(400, "Bitte Quelle und Lizenz des Bildes angeben (z. B. „Pexels, Pexels-Lizenz, Foto: Name“ oder „Eigenes Foto“).");
     const aiGenerated = fields["aiGenerated"] === "true";
-    const data = aiGenerated ? embedAiGeneratedXmp(file, "KI-generiert") : file;
+    const data = aiGenerated ? markAsAiGenerated(file, "KI-generiert") : file;
     const key = await storage.save(data);
     if (post.image?.storageKey) await storage.remove(post.image.storageKey);
     const values = {

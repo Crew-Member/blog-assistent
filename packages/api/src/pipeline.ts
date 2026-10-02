@@ -5,7 +5,7 @@ import { escapeHtml, sanitizePostHtml } from "./lib/html.js";
 import { checkReferences, type ReferenceCheck } from "./lib/references.js";
 import { slugify } from "./lib/slug.js";
 import type { ImageProvider } from "./image/provider.js";
-import { embedAiGeneratedXmp } from "./lib/png.js";
+import { markAsAiGenerated } from "./lib/png.js";
 import type { FileStorage } from "./lib/storage.js";
 
 export interface PipelineDeps {
@@ -207,7 +207,7 @@ export async function generateImage({ prisma, storage, images }: PipelineDeps, p
     const image = await prisma.postImage.findUniqueOrThrow({ where: { postId } });
     if (!image.prompt.trim()) throw new Error("Es gibt keinen Bild-Prompt.");
     const generated = await images.generate({ prompt: image.prompt });
-    const data = embedAiGeneratedXmp(generated.data, `KI-generiert (${images.name})`);
+    const data = markAsAiGenerated(generated.data, `KI-generiert (${images.name})`);
     const key = await storage.save(data);
     if (image.storageKey) await storage.remove(image.storageKey);
     await prisma.postImage.update({

@@ -76,6 +76,37 @@ export function embedAiGeneratedXmp(png: Buffer, creditLine = "KI-generiert"): B
   return Buffer.concat([png.subarray(0, ihdrEnd), chunk("iTXt", data), png.subarray(ihdrEnd)]);
 }
 
+export function sniffImageType(buf: Buffer): "image/png" | "image/jpeg" | "image/webp" | undefined {
+  if (isPng(buf) && buf.length > 12) return "image/png";
+  if (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image/jpeg";
+  if (buf.length > 12 && buf.toString("ascii", 0, 4) === "RIFF" && buf.toString("ascii", 8, 12) === "WEBP") return "image/webp";
+  return undefined;
+}
+
+function xmpPacket(creditLine: string): string {
+  const esc = creditLine.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  return (
+    '<?xpacket begin="\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?>' +
+    '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">' +
+    '<rdf:Description rdf:about="" xmlns:Iptc4xmpExt="http://iptc.org/std/Iptc4xmpExt/2008-02-29/" xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/" ' +
+    `Iptc4xmpExt:DigitalSourceType="${AI_SOURCE_TYPE}" photoshop:Credit="${esc}"/>` +
+    '</rdf:RDF></x:xmpmeta><?xpacket end="w"?>'
+  );
+}
+
+/** Wie embedAiGeneratedXmp, auch fuer JPEG (APP1-Segment hinter SOI). Andere Formate bleiben unveraendert. */
+export function markAsAiGenerated(image: Buffer, creditLine = "KI-generiert"): Buffer {
+  const type = sniffImageType(image);
+  if (type === "image/png") return embedAiGeneratedXmp(image, creditLine);
+  if (type === "image/jpeg") {
+    const payload = Buffer.concat([Buffer.from("http://ns.adobe.com/xap/1.0/\0", "latin1"), Buffer.from(xmpPacket(creditLine), "utf8")]);
+    if (payload.length + 2 > 0xffff) return image;
+    const header = Buffer.from([0xff, 0xe1, (payload.length + 2) >> 8, (payload.length + 2) & 0xff]);
+    return Buffer.concat([image.subarray(0, 2), header, payload, image.subarray(2)]);
+  }
+  return image;
+}
+
 /** Erzeugt ein einfaches Farbverlauf-PNG (Platzhalter fuer Tests und den Fake-Bildanbieter). */
 export function makePlaceholderPng(width = 600, height = 400): Buffer {
   const ihdr = Buffer.alloc(13);

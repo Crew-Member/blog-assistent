@@ -1,5 +1,6 @@
 import type { Config } from "./config.js";
 import type { EnvOrigin } from "./env.js";
+import { resolveImageSettings } from "./image/index.js";
 
 /** Kurzform eines Keys, die zum Abgleich mit der Anthropic Console reicht, ohne ihn offenzulegen. */
 export function fingerprint(key: string): string {
@@ -10,7 +11,9 @@ export function fingerprint(key: string): string {
 function describeImages(config: Config): string {
   if (config.IMAGE_PROVIDER === "none") return "Bilder: keine Bildgenerierung eingerichtet (nur Prompts, Stockfoto-Suche und Upload).";
   if (config.IMAGE_PROVIDER === "fake") return "Bilder: Platzhalter-Modus (IMAGE_PROVIDER=fake).";
-  return `Bilder: ${config.IMAGE_PROVIDER}, Modell ${config.IMAGE_MODEL}, Qualitaet ${config.IMAGE_QUALITY}, Schluessel ${fingerprint(config.IMAGE_API_KEY ?? "")}`;
+  const settings = resolveImageSettings(config);
+  const extra = config.IMAGE_PROVIDER === "supermachine" ? `${settings.width}x${settings.height}` : `Qualitaet ${config.IMAGE_QUALITY}`;
+  return `Bilder: ${config.IMAGE_PROVIDER}, Modell ${settings.model}, ${extra}, Schluessel ${fingerprint(config.IMAGE_API_KEY ?? "")}`;
 }
 
 export function describeAiSetup(config: Config, origin: EnvOrigin): string[] {

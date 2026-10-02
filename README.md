@@ -20,7 +20,7 @@ ausgewählten Themen im Web und schreibt einen Entwurf mit Quellen, Keywords und
 | Vorschau und manuelle Bearbeitung im Browser | ✅ |
 | Disclaimer + „Stand“-Datum werden vom System angehängt, nicht von der KI | ✅ |
 | **Beitragsbild**: Die KI schreibt Bild-Prompt (Illustration oder Foto), Alt-Text und Bildunterschrift – ohne erkennbare Personen, Text oder Logos | ✅ |
-| Bild automatisch erzeugen (derzeit OpenAI-Bildmodell; weitere Anbieter über die Schnittstelle `ImageProvider` anschließbar) | ✅ (nur mit eigenem Key) |
+| Bild automatisch erzeugen über **Supermachine** (`IMAGE_PROVIDER=supermachine`) oder **OpenAI**; weitere Anbieter über die Schnittstelle `ImageProvider` anschließbar | ✅ (nur mit eigenem Key) |
 | Alternativ: lizenzfreie Fotos suchen (Links zu Pexels/Unsplash/Pixabay) oder eigenes Bild hochladen – Quelle und Lizenz sind Pflichtangabe | ✅ |
 | **KI-Kennzeichnung**: Bildunterschrift „Bild: KI-generiert“ (pro Website abschaltbar) und IPTC-Vermerk im PNG | ✅ |
 | Beitragsbild wird mit Alt-Text und Unterschrift in die WordPress-Mediathek geladen und als Beitragsbild gesetzt | ✅ |
@@ -32,11 +32,12 @@ ausgewählten Themen im Web und schreibt einen Entwurf mit Quellen, Keywords und
 ### Bilder
 
 - Claude erzeugt keine Bilder, sondern schreibt den **Prompt**. Erzeugt wird das Bild von einem Bildanbieter (`IMAGE_PROVIDER`, `IMAGE_API_KEY`, `IMAGE_MODEL`, `IMAGE_QUALITY` in der `.env`). Ohne Anbieter lässt sich der Prompt in jedem anderen Bilddienst verwenden; das Ergebnis lädt man am Beitrag hoch.
+- **Supermachine** (`IMAGE_PROVIDER=supermachine`, `IMAGE_API_KEY` = Key aus dem Supermachine-Profil): Das Tool startet den Auftrag (`POST /v1/generate`), fragt alle 2,5 Sekunden nach (`GET /v1/images?batchId=…`, höchstens 4 Minuten) und lädt das fertige Bild; die Bildadresse wird nur abgerufen, wenn sie öffentlich und https ist. Standardmodell „Supermachine NextGen“, Standardgröße 1024×768 (`IMAGE_MODEL`, `IMAGE_WIDTH`, `IMAGE_HEIGHT`). Jedes Bild verbraucht Credits. Ein Negativ-Prompt wird nicht mitgesendet (nicht dokumentiert), die Motivregeln stecken im Prompt – Bilder bitte vor der Veröffentlichung ansehen. Ob Bilder kommerziell genutzt werden dürfen, hängt vom Tarif ab und steht in den Supermachine-Nutzungsbedingungen.
 - Das OpenAI-Bildmodell `gpt-image-1` verlangt bei OpenAI eine **verifizierte Organisation**; Kosten fallen pro Bild an (je nach Qualität). Die Anzeige beim Start nennt Anbieter und Modell.
 - **Lizenz:** Bei Uploads ist die Angabe von Quelle und Lizenz Pflicht und wird gespeichert (auch in der WordPress-Mediathek). Ob ein Bild kommerziell nutzbar ist, richtet sich nach den Bedingungen des jeweiligen Anbieters bzw. der Stockfoto-Seite und muss selbst geprüft werden.
 - **Kennzeichnung:** KI-generierte Bilder erhalten in der Bildunterschrift „Bild: KI-generiert“ (pro Website abschaltbar) und – bei PNG – einen IPTC-Vermerk (`DigitalSourceType = trainedAlgorithmicMedia`) in der Datei. Das ist ein einfacher Metadaten-Vermerk, **keine** kryptografisch signierte Herkunftsangabe (C2PA). Ob und wie die Kennzeichnung rechtlich nötig ist (u. a. KI-Verordnung), ist im Einzelfall zu klären.
 - Prompts enthalten fest die Vorgabe „kein Text, keine Logos, keine erkennbaren Personen“; der Bildupload wird an den Dateikopfzeichen geprüft (nur PNG/JPEG/WebP, höchstens 10 MB).
-- Die Bildgenerierung ist bisher **nur mit simulierten Antworten getestet**, nicht mit einem echten Bildanbieter.
+- Die Bildgenerierung (Supermachine und OpenAI) ist bisher **nur mit simulierten Antworten getestet**, nicht mit einem echten Bildanbieter; die Supermachine-Anbindung folgt der veröffentlichten API-Dokumentation. Den IPTC-Vermerk schreibt das Tool in PNG- und JPEG-Dateien.
 
 ### WordPress einrichten
 
