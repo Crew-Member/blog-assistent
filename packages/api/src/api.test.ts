@@ -7,6 +7,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { FakeAiService } from "./ai/fake.js";
 import type { AiService } from "./ai/types.js";
 import { loadConfig } from "./config.js";
+import { buildMsg } from "./lib/msgfixture.testutil.js";
 import { FileStorage } from "./lib/storage.js";
 import { buildServer } from "./server.js";
 import { Worker } from "./worker.js";
@@ -135,10 +136,10 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
 
   it("lehnt nicht unterstuetzte Dateitypen ab", async () => {
     const siteId = await createSite();
-    const up = multipart([{ name: "mail.msg", type: "application/octet-stream", content: "x" }]);
+    const up = multipart([{ name: "programm.exe", type: "application/octet-stream", content: "x" }]);
     const res = await app.inject({ method: "POST", url: `/api/sites/${siteId}/submissions`, payload: up.payload, headers: up.headers });
     expect(res.statusCode).toBe(400);
-    expect(res.json().error).toContain("mail.msg");
+    expect(res.json().error).toContain("programm.exe");
   });
 
   it("markiert Fehler der KI am Beitrag und erlaubt einen neuen Versuch", async () => {
@@ -289,5 +290,26 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect(urls[0]).toContain("per_page=8");
     const invalid = await app.inject({ method: "POST", url: `/api/sites/${siteId}/style-samples/import-wordpress`, headers: { cookie }, payload: { count: 99 } });
     expect(invalid.statusCode).toBe(400);
+  });
+
+  it("nimmt eine Outlook-.msg samt PDF-Anhang als zwei Unterlagen an und reicht das PDF nativ an die KI", async () => {
+    const seen: { filename: string; kind: string; hasBase64: boolean; text?: string }[] = [];
+    await setup(
+      fakeWith({
+        analyze: async (input) => {
+          for (const d of input.documents) seen.push({ filename: d.filename, kind: d.kind, hasBase64: Boolean(d.base64), text: d.text });
+          return new FakeAiService().analyze(input);
+        },
+      }),
+    );
+    const siteId = await createSite();
+    const msg = buildMsg({ subject: "BGH: Intransparenz von AGB", body: "Newsletter-Text", attachments: [{ name: "Urteil.pdf", data: Buffer.from("%PDF-1.4 urteil") }] });
+    const up = multipart([{ name: "Newsletter.msg", type: "application/octet-stream", content: msg }]);
+    const res = await app.inject({ method: "POST", url: `/api/sites/${siteId}/submissions`, payload: up.payload, headers: up.headers });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().documents.map((d: { filename: string }) => d.filename)).toEqual(["Newsletter.msg", "Newsletter.msg › Urteil.pdf"]);
+    await worker.tick();
+    expect(seen.find((d) => d.filename === "Newsletter.msg")?.text).toContain("Betreff: BGH: Intransparenz von AGB");
+    expect(seen.find((d) => d.filename.endsWith("Urteil.pdf"))).toMatchObject({ kind: "pdf", hasBase64: true });
   });
 });

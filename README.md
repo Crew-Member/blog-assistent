@@ -10,7 +10,7 @@ ausgewählten Themen im Web und schreibt einen Entwurf mit Quellen, Keywords und
 |---|---|
 | Websites mit Stilprofil (Zielgruppe, Ton, Leitfaden, Disclaimer) | ✅ |
 | Beispielbeiträge als Stilvorlage: aus WordPress importieren (REST-API) oder einfügen; „Stil ableiten“ schlägt Tonalität und Leitfaden vor | ✅ |
-| Upload per Drag & Drop: PDF, E-Mail (`.eml`), Word (`.docx`), Text/Markdown/HTML, Bilder | ✅ |
+| Upload per Drag & Drop: PDF, E-Mail (`.eml` und Outlook-`.msg`), Word (`.docx`), Text/Markdown/HTML, Bilder; PDF-/Word-Anhänge von Mails werden automatisch als eigene Unterlagen übernommen | ✅ |
 | Analyse der Unterlagen → Themenvorschläge (Claude liest PDFs nativ) | ✅ |
 | Web-Recherche mit Quellen (Claude-Websuche) | ✅ |
 | Entwurf inkl. Fokus-Keyword, Nebenbegriffen, Slug, Meta-Description, Auszug, Quellenliste | ✅ |
@@ -23,7 +23,7 @@ ausgewählten Themen im Web und schreibt einen Entwurf mit Quellen, Keywords und
 | WordPress-Anbindung (Entwurf ins CMS, Kategorien), Freigabe-Workflow | Meilenstein 4 |
 | Bestehende Beiträge überarbeiten (aktualisieren) | geplant |
 
-Outlook-`.msg`-Dateien werden nicht unterstützt – bitte als `.eml` oder PDF speichern.
+Aus Mails werden Betreff, Absender, Datum und Text gelesen; PDF-, Word- und Textanhänge (höchstens fünf, je 25 MB) kommen als eigene Unterlagen dazu. Logos, Bilder und HTML-Anhänge werden bewusst nicht übernommen. Die `.msg`-Unterstützung ist bisher nur mit selbst erzeugten Testdateien geprüft, nicht mit echten Outlook-Mails.
 
 ### Wie der Faktencheck arbeitet
 

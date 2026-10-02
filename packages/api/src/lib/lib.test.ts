@@ -30,7 +30,8 @@ describe("detectKind", () => {
     expect(detectKind("urteil.PDF", "application/octet-stream").kind).toBe("pdf");
     expect(detectKind("mail.eml", "application/octet-stream").kind).toBe("email");
     expect(detectKind("foto.jpg", "application/octet-stream")).toEqual({ kind: "image", mimeType: "image/jpeg" });
-    expect(detectKind("mail.msg", "application/octet-stream").kind).toBe("unsupported");
+    expect(detectKind("mail.msg", "application/octet-stream").kind).toBe("msg");
+    expect(detectKind("programm.exe", "application/octet-stream").kind).toBe("unsupported");
   });
 });
 

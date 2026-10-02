@@ -218,12 +218,16 @@ export function buildServer({ config, prisma, storage, ai, fetcher, webDir }: Se
     const unsupported = files.filter((f) => detectKind(f.filename, f.mimeType).kind === "unsupported").map((f) => f.filename);
     if (unsupported.length) {
       return reply.code(400).send({
-        error: `Dateityp nicht unterstuetzt: ${unsupported.join(", ")}. Erlaubt: PDF, E-Mail (.eml), Word (.docx), Text/Markdown/HTML, Bilder (PNG/JPG/GIF/WebP). Outlook-.msg-Dateien bitte als .eml oder PDF speichern.`,
+        error: `Dateityp nicht unterstuetzt: ${unsupported.join(", ")}. Erlaubt: PDF, E-Mail (.eml, .msg), Word (.docx), Text/Markdown/HTML, Bilder (PNG/JPG/GIF/WebP).`,
       });
     }
 
-    const extracted = [];
+    const extracted: { file: { filename: string; data: Buffer }; doc: Awaited<ReturnType<typeof extractDocument>> }[] = [];
     let binaryBytes = 0;
+    const add = (file: { filename: string; data: Buffer }, doc: Awaited<ReturnType<typeof extractDocument>>) => {
+      if (doc.kind !== "text") binaryBytes += file.data.length;
+      extracted.push({ file, doc });
+    };
     for (const file of files) {
       let doc;
       try {
@@ -231,9 +235,17 @@ export function buildServer({ config, prisma, storage, ai, fetcher, webDir }: Se
       } catch (error) {
         return reply.code(400).send({ error: `${file.filename} konnte nicht gelesen werden: ${error instanceof Error ? error.message : String(error)}` });
       }
-      if (doc.kind !== "text") binaryBytes += file.data.length;
-      extracted.push({ file, doc });
+      add(file, doc);
+      // PDF-/Word-Anhaenge von Mails (z. B. das Urteil im Newsletter) als eigene Unterlagen aufnehmen.
+      for (const att of doc.attachments ?? []) {
+        try {
+          add({ filename: `${file.filename} › ${att.filename}`, data: att.data }, await extractDocument(att.filename, att.mimeType, att.data));
+        } catch {
+          // nicht lesbarer Anhang: ignorieren, die Mail selbst bleibt erhalten
+        }
+      }
     }
+    if (extracted.length > 25) return reply.code(400).send({ error: "Zu viele Dateien (inklusive Mail-Anhängen höchstens 25)" });
     if (binaryBytes > MAX_BINARY_TOTAL_BYTES) {
       return reply.code(413).send({ error: "PDFs und Bilder zusammen duerfen 20 MB nicht uebersteigen" });
     }

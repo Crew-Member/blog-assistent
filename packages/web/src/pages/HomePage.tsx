@@ -47,7 +47,7 @@ function Upload({ sites, onDone }: { sites: Site[]; onDone: () => void }) {
         onDrop={(e) => { e.preventDefault(); setOver(false); add(e.dataTransfer.files); }}
         onClick={() => input.current?.click()}
       >
-        PDFs, Mails (.eml), Word, Text oder Bilder hierher ziehen – oder klicken
+        PDFs, Mails (.eml, .msg), Word, Text oder Bilder hierher ziehen – oder klicken
         <input ref={input} type="file" multiple hidden onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
       </div>
       {files.length > 0 && (
