@@ -61,6 +61,26 @@ describe("ClaudeAiService: Aufbau der Anfrage", () => {
   });
 });
 
+describe("ClaudeAiService: unempfindlich gegen fremde Umgebungsvariablen", () => {
+  it("nutzt den eingestellten Endpunkt und ignoriert ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN", async () => {
+    const before = { base: process.env.ANTHROPIC_BASE_URL, token: process.env.ANTHROPIC_AUTH_TOKEN };
+    process.env.ANTHROPIC_BASE_URL = "https://fremder-proxy.example";
+    process.env.ANTHROPIC_AUTH_TOKEN = "fremdes-token";
+    try {
+      const { ai, captured } = service();
+      await ai.analyze({ site, note: "", documents: [{ filename: "a.txt", kind: "text", mimeType: "text/plain", text: "x" }] }).catch(() => undefined);
+      expect(captured[0]?.url.startsWith("https://api.anthropic.com/")).toBe(true);
+      expect(captured[0]?.headers["authorization"]).toBeUndefined();
+      expect(captured[0]?.headers["x-api-key"]).toBe("sk-ant-test");
+    } finally {
+      if (before.base === undefined) delete process.env.ANTHROPIC_BASE_URL;
+      else process.env.ANTHROPIC_BASE_URL = before.base;
+      if (before.token === undefined) delete process.env.ANTHROPIC_AUTH_TOKEN;
+      else process.env.ANTHROPIC_AUTH_TOKEN = before.token;
+    }
+  });
+});
+
 describe("explainAiError", () => {
   it("erklaert den Workspace-Fehler und nennt die Loesung", () => {
     const msg = explainAiError(new Error('400 {"error":{"message":"This API key is not scoped to a workspace, so this request must include the anthropic-workspace-id header"}}'));

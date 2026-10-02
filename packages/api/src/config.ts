@@ -1,13 +1,21 @@
 import { z } from "zod";
 
+/** Entfernt Leerraum und versehentliche Anfuehrungszeichen; leer wird zu undefined. */
+const cleaned = z
+  .string()
+  .optional()
+  .transform((v) => (v ?? "").trim().replace(/^["']+|["']+$/g, "").trim() || undefined);
+
 const schema = z.object({
   DATABASE_URL: z.string().min(1),
   ADMIN_PASSWORD: z.string().min(8, "ADMIN_PASSWORD muss mindestens 8 Zeichen haben"),
   SESSION_SECRET: z.string().min(32, "SESSION_SECRET muss mindestens 32 Zeichen haben"),
   AI_PROVIDER: z.enum(["claude", "fake"]).default("claude"),
-  ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_API_KEY: cleaned,
   // Nur noetig, wenn der Key keinem Workspace zugeordnet ist (Header anthropic-workspace-id)
-  ANTHROPIC_WORKSPACE_ID: z.string().trim().optional(),
+  ANTHROPIC_WORKSPACE_ID: cleaned,
+  // Bewusst eigener Name: Eine zufaellig gesetzte Windows-Variable ANTHROPIC_BASE_URL wuerde sonst alle Anfragen umleiten.
+  AI_BASE_URL: z.string().url().default("https://api.anthropic.com"),
   AI_MODEL: z.string().default("claude-opus-5-5"),
   AI_EFFORT: z.enum(["low", "medium", "high", "xhigh", "max"]).default("medium"),
   RESEARCH_MAX_SEARCHES: z.coerce.number().int().min(1).max(30).default(8),

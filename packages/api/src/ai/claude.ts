@@ -23,6 +23,8 @@ export interface ClaudeOptions {
   apiKey: string;
   /** Optional: ID des Workspaces, wenn der Key keinem Workspace zugeordnet ist. */
   workspaceId?: string;
+  /** Standard: https://api.anthropic.com */
+  baseUrl?: string;
   /** Nur fuer Tests: eigene fetch-Implementierung. */
   fetch?: typeof fetch;
   model: string;
@@ -149,6 +151,9 @@ export class ClaudeAiService implements AiService {
   constructor(private readonly options: ClaudeOptions) {
     this.client = new Anthropic({
       apiKey: options.apiKey,
+      // Explizit setzen: Das SDK wuerde sonst ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN aus der Umgebung uebernehmen.
+      baseURL: options.baseUrl ?? "https://api.anthropic.com",
+      authToken: null,
       defaultHeaders: options.workspaceId ? { "anthropic-workspace-id": options.workspaceId } : undefined,
       fetch: options.fetch,
       maxRetries: options.fetch ? 0 : undefined,

@@ -78,6 +78,7 @@ Die `.env` wird automatisch geladen – von der API (`dev:api`, `start`) und von
 - Fehlen Pflichtwerte, nennt die API beim Start genau, welche, und ob/wo sie eine `.env` gefunden hat.
 - Docker (`docker compose --profile app ...`) liest die `.env` selbst; dafür ist nichts weiter nötig.
 - Meldet die API „This API key is not scoped to a workspace“, in der `.env` zusätzlich `ANTHROPIC_WORKSPACE_ID=wrkspc_…` setzen (ID des Workspaces aus der Anthropic Console) oder in der Console einen Key innerhalb eines Workspaces erstellen. Häufige API-Fehler (Key, Guthaben, Limit, Workspace) werden in der Oberfläche als verständlicher Hinweis angezeigt.
+- Beim Start zeigt die API, welcher Key (nur Anfang/Ende und Länge) und welcher Endpunkt tatsächlich verwendet werden und woher der Key stammt. Eine gesetzte Systemvariable `ANTHROPIC_API_KEY` überstimmt die `.env` – dann erscheint eine Warnung. `ANTHROPIC_BASE_URL` und `ANTHROPIC_AUTH_TOKEN` aus der Umgebung werden bewusst ignoriert (Endpunkt: `AI_BASE_URL`).
 
 Ohne API-Key ausprobieren: `AI_PROVIDER=fake` setzen – dann liefert die KI Platzhalter-Texte, der gesamte Ablauf ist trotzdem nutzbar.
 

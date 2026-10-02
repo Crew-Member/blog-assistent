@@ -1,4 +1,4 @@
-import { loadedEnvFile } from "./env.js";
+import { envOrigin, loadedEnvFile } from "./env.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createAiService } from "./ai/index.js";
@@ -6,6 +6,7 @@ import { formatConfigError, loadConfig } from "./config.js";
 import { prisma } from "./db/client.js";
 import { FileStorage } from "./lib/storage.js";
 import { buildServer } from "./server.js";
+import { describeAiSetup } from "./startup-info.js";
 import { Worker } from "./worker.js";
 
 let config: ReturnType<typeof loadConfig>;
@@ -15,6 +16,7 @@ try {
   console.error(formatConfigError(error, loadedEnvFile));
   process.exit(1);
 }
+for (const line of describeAiSetup(config, envOrigin)) console.log(line);
 const storage = new FileStorage(config.STORAGE_DIR);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ai = createAiService(config);

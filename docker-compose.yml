@@ -32,6 +32,7 @@ services:
       AI_PROVIDER: ${AI_PROVIDER:-claude}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_WORKSPACE_ID: ${ANTHROPIC_WORKSPACE_ID:-}
+      AI_BASE_URL: ${AI_BASE_URL:-https://api.anthropic.com}
       AI_MODEL: ${AI_MODEL:-claude-opus-5-5}
       AI_EFFORT: ${AI_EFFORT:-medium}
       RESEARCH_MAX_SEARCHES: ${RESEARCH_MAX_SEARCHES:-8}
