@@ -1,0 +1,107 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Eine Ziel-Website (WordPress) mit ihrem Stilprofil.
+model Site {
+  id         String   @id @default(cuid())
+  name       String
+  baseUrl    String   @default("")
+  language   String   @default("de")
+  // Zielgruppe, Tonalitaet und freier Stilleitfaden gehen 1:1 in die Prompts ein.
+  audience   String   @default("")
+  tone       String   @default("")
+  styleGuide String   @default("")
+  // Wird (nicht durch die KI, sondern im Code) unter jeden Beitrag gesetzt.
+  disclaimer String   @default("")
+  createdAt  DateTime @default(now())
+
+  submissions Submission[]
+  posts       Post[]
+}
+
+enum SubmissionStatus {
+  UPLOADED
+  ANALYZING
+  ANALYZED
+  FAILED
+}
+
+// Ein Upload-Vorgang: eine oder mehrere Dateien zu einem Thema fuer eine Website.
+model Submission {
+  id        String           @id @default(cuid())
+  siteId    String
+  site      Site             @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  note      String           @default("")
+  status    SubmissionStatus @default(UPLOADED)
+  error     String?
+  createdAt DateTime         @default(now())
+
+  documents Document[]
+  topics    Topic[]
+}
+
+model Document {
+  id            String     @id @default(cuid())
+  submissionId  String
+  submission    Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  filename      String
+  mimeType      String
+  sizeBytes     Int
+  storageKey    String
+  // Ausgelesener Text (Mails, Word, Text). Bei PDFs/Bildern leer - die gehen direkt an Claude.
+  extractedText String?
+  createdAt     DateTime   @default(now())
+}
+
+// Von der KI vorgeschlagenes Beitragsthema.
+model Topic {
+  id           String     @id @default(cuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  title        String
+  angle        String
+  summary      String
+  keyFacts     Json       @default("[]")
+  keywords     Json       @default("[]")
+  createdAt    DateTime   @default(now())
+
+  posts Post[]
+}
+
+enum PostStatus {
+  QUEUED
+  RESEARCHING
+  DRAFTING
+  DRAFT_READY
+  FAILED
+}
+
+model Post {
+  id                String     @id @default(cuid())
+  siteId            String
+  site              Site       @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  topicId           String
+  topic             Topic      @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  status            PostStatus @default(QUEUED)
+  error             String?
+  title             String?
+  slug              String?
+  metaDescription   String?
+  focusKeyword      String?
+  secondaryKeywords Json       @default("[]")
+  excerpt           String?
+  contentHtml       String?
+  // [{ title, url, note }] - nur Quellen, die Claude tatsaechlich gefunden/verwendet hat.
+  sources           Json       @default("[]")
+  // Aussagen im Text, fuer die keine Quelle gefunden wurde -> manuell pruefen.
+  unverifiedClaims  Json       @default("[]")
+  researchNotes     String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+}
