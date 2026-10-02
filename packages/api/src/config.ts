@@ -6,6 +6,8 @@ const schema = z.object({
   SESSION_SECRET: z.string().min(32, "SESSION_SECRET muss mindestens 32 Zeichen haben"),
   AI_PROVIDER: z.enum(["claude", "fake"]).default("claude"),
   ANTHROPIC_API_KEY: z.string().optional(),
+  // Nur noetig, wenn der Key keinem Workspace zugeordnet ist (Header anthropic-workspace-id)
+  ANTHROPIC_WORKSPACE_ID: z.string().trim().optional(),
   AI_MODEL: z.string().default("claude-opus-5-5"),
   AI_EFFORT: z.enum(["low", "medium", "high", "xhigh", "max"]).default("medium"),
   RESEARCH_MAX_SEARCHES: z.coerce.number().int().min(1).max(30).default(8),

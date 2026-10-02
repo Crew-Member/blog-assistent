@@ -21,6 +21,10 @@ type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
 export interface ClaudeOptions {
   apiKey: string;
+  /** Optional: ID des Workspaces, wenn der Key keinem Workspace zugeordnet ist. */
+  workspaceId?: string;
+  /** Nur fuer Tests: eigene fetch-Implementierung. */
+  fetch?: typeof fetch;
   model: string;
   effort: Effort;
   maxSearches: number;
@@ -143,7 +147,12 @@ export class ClaudeAiService implements AiService {
   private readonly client: Anthropic;
 
   constructor(private readonly options: ClaudeOptions) {
-    this.client = new Anthropic({ apiKey: options.apiKey });
+    this.client = new Anthropic({
+      apiKey: options.apiKey,
+      defaultHeaders: options.workspaceId ? { "anthropic-workspace-id": options.workspaceId } : undefined,
+      fetch: options.fetch,
+      maxRetries: options.fetch ? 0 : undefined,
+    });
   }
 
   private async structured<T>(

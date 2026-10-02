@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
+import { explainAiError } from "./ai/errors.js";
 import type { AiDocument, AiService, DraftResult, FactCheckResult, ResearchResult, SiteProfile, TopicProposal } from "./ai/types.js";
 import { escapeHtml, sanitizePostHtml } from "./lib/html.js";
 import { checkReferences, type ReferenceCheck } from "./lib/references.js";
@@ -16,7 +17,7 @@ function profileOf(site: { name: string; language: string; audience: string; ton
 }
 
 function errorMessage(error: unknown): string {
-  return (error instanceof Error ? error.message : String(error)).slice(0, 1000);
+  return explainAiError(error).slice(0, 1200);
 }
 
 function asStringArray(value: unknown): string[] {
