@@ -149,6 +149,7 @@ export interface PostListItem {
   title: string | null;
   error: string | null;
   createdAt: string;
+  wpPostId: number | null;
   site: { id: string; name: string };
   topic: { submissionId: string };
 }

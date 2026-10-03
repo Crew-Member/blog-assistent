@@ -497,7 +497,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     prisma.post.findMany({
       orderBy: { createdAt: "desc" },
       take: 200,
-      select: { id: true, status: true, title: true, error: true, createdAt: true, site: { select: { id: true, name: true } }, topic: { select: { submissionId: true } } },
+      select: { id: true, status: true, title: true, error: true, createdAt: true, wpPostId: true, site: { select: { id: true, name: true } }, topic: { select: { submissionId: true } } },
     }),
   );
 

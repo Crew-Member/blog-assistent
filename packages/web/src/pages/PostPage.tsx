@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { POST_LABEL, api, isBusy, type FactCheck, type PostDetail, type PostImage, type WpPrepare, type WpPublishResult } from "../api";
 import { useLoad } from "../hooks";
+import { Chip, Icon, PageHeader, POST_TONE, SkeletonPage, Spinner, Stepper, StatusChip, type Tone } from "../ui";
 
 const FACT_LABEL: Record<FactCheck["status"], string> = {
   passed: "Faktencheck bestanden – keine Beanstandungen",
@@ -16,7 +17,7 @@ function FactCheckPanel({ check, claims }: { check: FactCheck; claims: string[] 
   const missing = check.references.filter((r) => !r.found);
   return (
     <div className={`card ${check.status === "passed" || check.status === "revised" ? "" : "warn"}`}>
-      <strong>{FACT_LABEL[check.status]}</strong>
+      <div className="card-title"><Icon name={check.status === "passed" || check.status === "revised" ? "shield" : "alert"} /> {FACT_LABEL[check.status]}</div>
       <p>{check.summary}</p>
       {check.error && <p className="error">{check.error}</p>}
       {check.issues.length > 0 && (
@@ -90,7 +91,7 @@ function ImagePanel({ post, onChanged }: { post: PostDetail; onChanged: () => vo
 
   return (
     <div className="card stack">
-      <strong>Beitragsbild</strong>
+      <div className="card-title"><Icon name="image" /> Beitragsbild</div>
       {!image && (
         <div className="row">
           <button disabled={busy} onClick={() => run(() => api.post(`/api/posts/${post.id}/image/plan`, { style: "illustration" }))}>{busy ? "Bitte warten …" : "Bildvorschlag: Illustration"}</button>
@@ -253,7 +254,7 @@ function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: bool
 
   return (
     <div className="card stack">
-      <strong>WordPress</strong>
+      <div className="card-title"><Icon name="send" /> WordPress</div>
       {editUrl && (
         <div>
           Entwurf in WordPress: <a href={editUrl} target="_blank" rel="noreferrer noopener">im Editor öffnen</a>
@@ -331,87 +332,113 @@ export function PostPage({ id }: { id: string }) {
   }, [data?.status, data?.title]);
 
   if (error) return <p className="error">{error}</p>;
-  if (!data) return <p className="muted">Lade …</p>;
+  if (!data) return <SkeletonPage />;
   const set = (key: keyof typeof form) => (e: { target: { value: string } }) => { setForm({ ...form, [key]: e.target.value }); setSaved(false); setDirty(true); };
+  const jump = (sectionId: string) => document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const steps = ["Warteschlange", "Recherche", "Entwurf", "Faktencheck", "Fertig"];
+  const stepIndex = { QUEUED: 0, RESEARCHING: 1, DRAFTING: 2, FACTCHECKING: 3, DRAFT_READY: 4, FAILED: 1 }[data.status];
+  const seoOk = data.seoChecks.filter((c) => c.ok).length;
+  const factTone: Tone = !data.factCheck ? "neutral" : data.factCheck.status === "passed" || data.factCheck.status === "revised" ? "success" : "warn";
+  const factText = !data.factCheck ? "Faktencheck offen" : { passed: "Faktencheck bestanden", revised: "Faktencheck: korrigiert", needs_review: "Faktencheck: prüfen", skipped: "Faktencheck fehlt" }[data.factCheck.status];
 
   return (
     <>
-      <p><a href={`#/submissions/${data.topic.submissionId}`}>← Zum Upload</a></p>
-      <div className="row spread">
-        <h1>{data.title ?? data.topic.title}</h1>
-        <span className={`badge ${data.status.toLowerCase()}`}>{POST_LABEL[data.status]}</span>
-      </div>
-      <p className="muted">{data.site.name}</p>
+      <a className="back" href={`#/submissions/${data.topic.submissionId}`}><Icon name="arrowLeft" size={16} /> Zum Upload</a>
+      <PageHeader title={data.title ?? data.topic.title} subtitle={data.site.name}>
+        <StatusChip status={data.status} label={POST_LABEL[data.status]} tones={POST_TONE} />
+      </PageHeader>
 
-      {isBusy(data.status) && <p className="muted">Die KI recherchiert und schreibt – das kann einige Minuten dauern. Die Seite aktualisiert sich selbst.</p>}
+      {data.status !== "DRAFT_READY" && (
+        <div className="card stack">
+          <Stepper steps={steps} current={stepIndex} failed={data.status === "FAILED"} />
+          {isBusy(data.status) && <span className="muted">Die KI recherchiert und schreibt – das kann einige Minuten dauern. Die Seite aktualisiert sich selbst.</span>}
+        </div>
+      )}
       {data.status === "FAILED" && (
-        <div className="card">
-          <p className="error">{data.error}</p>
-          <button onClick={async () => { await api.post(`/api/posts/${id}/regenerate`); void reload(); }}>Erneut versuchen</button>
+        <div className="card stack" style={{ marginTop: 16 }}>
+          <p className="error"><Icon name="alert" /> {data.error}</p>
+          <div><button onClick={async () => { await api.post(`/api/posts/${id}/regenerate`); void reload(); }}><Icon name="refresh" size={16} /> Erneut versuchen</button></div>
         </div>
       )}
 
       {data.status === "DRAFT_READY" && (
-        <>
-          <ImagePanel post={data} onChanged={() => void reload()} />
-          <WordPressPanel post={data} dirty={dirty} onDone={() => void reload()} />
-          {data.factCheck ? (
-            <FactCheckPanel check={data.factCheck} claims={data.unverifiedClaims} />
-          ) : (
-            data.unverifiedClaims.length > 0 && (
-              <div className="card warn">
-                <strong>Bitte vor Veröffentlichung prüfen – nicht belegt:</strong>
-                <ul>{data.unverifiedClaims.map((c, i) => <li key={i}>{c}</li>)}</ul>
-              </div>
-            )
-          )}
+        <div className="summary" style={{ marginBottom: 16 }} aria-label="Kurzübersicht">
+          <button className={`chip chip-${factTone}`} onClick={() => jump("sec-check")}><Icon name={factTone === "success" ? "shield" : "alert"} size={13} /> {factText}</button>
+          {data.unverifiedClaims.length > 0 && <button className="chip chip-warn" onClick={() => jump("sec-check")}><Icon name="alert" size={13} /> {data.unverifiedClaims.length} Punkt(e) prüfen</button>}
+          {data.seoChecks.length > 0 && <button className={`chip chip-${seoOk === data.seoChecks.length ? "success" : "warn"}`} onClick={() => jump("sec-seo")}><Icon name="search" size={13} /> SEO {seoOk}/{data.seoChecks.length}</button>}
+          <button className={`chip chip-${data.image?.hasFile ? "success" : "neutral"}`} onClick={() => jump("sec-image")}><Icon name="image" size={13} /> {data.image?.hasFile ? "Beitragsbild" : "Kein Bild"}</button>
+          <button className={`chip chip-${data.wpPostId ? "success" : "neutral"}`} onClick={() => jump("sec-wp")}><Icon name="send" size={13} /> {data.wpPostId ? "Entwurf in WordPress" : "Nicht in WordPress"}</button>
+        </div>
+      )}
+
+      {data.status === "DRAFT_READY" && (
+        <div className="stack-lg">
+          <div id="sec-check" className="card-section">
+            {data.factCheck ? (
+              <FactCheckPanel check={data.factCheck} claims={data.unverifiedClaims} />
+            ) : (
+              data.unverifiedClaims.length > 0 && (
+                <div className="card warn">
+                  <div className="card-title"><Icon name="alert" /> Bitte vor Veröffentlichung prüfen – nicht belegt</div>
+                  <ul>{data.unverifiedClaims.map((c, i) => <li key={i}>{c}</li>)}</ul>
+                </div>
+              )
+            )}
+          </div>
+
           <div className="grid">
             <div className="stack">
-              <label>Titel<input value={form.title} onChange={set("title")} /></label>
-              <label>Slug<input value={form.slug} onChange={set("slug")} /></label>
-              <label>Fokus-Keyword<input value={form.focusKeyword} onChange={set("focusKeyword")} /></label>
-              <label>Meta-Description <span className="muted">({form.metaDescription.length}/155)</span><textarea rows={2} value={form.metaDescription} onChange={set("metaDescription")} /></label>
-              <label>Auszug<textarea rows={3} value={form.excerpt} onChange={set("excerpt")} /></label>
-              <label>Inhalt (HTML)<textarea rows={18} value={form.contentHtml} onChange={set("contentHtml")} className="mono" /></label>
-              {saveError && <p className="error">{saveError}</p>}
-              <div className="row">
-                <button
-                  onClick={async () => {
-                    try {
-                      await api.put(`/api/posts/${id}`, form);
-                      setSaved(true);
-                      setDirty(false);
-                      setSaveError(undefined);
-                      void reload();
-                    } catch (e) {
-                      setSaveError(e instanceof Error ? e.message : String(e));
-                    }
-                  }}
-                >
-                  Änderungen speichern
-                </button>
-                {saved && <span className="muted">Gespeichert</span>}
-                <button className="secondary" onClick={async () => { if (confirm("Neu recherchieren und schreiben? Manuelle Änderungen gehen verloren.")) { await api.post(`/api/posts/${id}/regenerate`); void reload(); } }}>Neu erstellen</button>
+              <div className="card stack">
+                <div className="card-title"><Icon name="pen" /> Text bearbeiten</div>
+                <label>Titel<input value={form.title} onChange={set("title")} /></label>
+                <div className="row">
+                  <label>Slug<input value={form.slug} onChange={set("slug")} /></label>
+                  <label>Fokus-Keyword<input value={form.focusKeyword} onChange={set("focusKeyword")} /></label>
+                </div>
+                <label>Meta-Description <span className="muted">({form.metaDescription.length}/155)</span><textarea rows={2} value={form.metaDescription} onChange={set("metaDescription")} /></label>
+                <label>Auszug<textarea rows={3} value={form.excerpt} onChange={set("excerpt")} /></label>
+                <label>Inhalt (HTML)<textarea rows={18} value={form.contentHtml} onChange={set("contentHtml")} className="mono" /></label>
+                {saveError && <p className="error">{saveError}</p>}
+                <div className="row">
+                  <button
+                    onClick={async () => {
+                      try {
+                        await api.put(`/api/posts/${id}`, form);
+                        setSaved(true);
+                        setDirty(false);
+                        setSaveError(undefined);
+                        void reload();
+                      } catch (e) {
+                        setSaveError(e instanceof Error ? e.message : String(e));
+                      }
+                    }}
+                  >
+                    <Icon name="check" size={16} /> Änderungen speichern
+                  </button>
+                  {saved && <Chip tone="success" icon="check">Gespeichert</Chip>}
+                  {dirty && !saved && <Chip tone="warn">Ungespeicherte Änderungen</Chip>}
+                  <button className="secondary" onClick={async () => { if (confirm("Neu recherchieren und schreiben? Manuelle Änderungen gehen verloren.")) { await api.post(`/api/posts/${id}/regenerate`); void reload(); } }}><Icon name="refresh" size={16} /> Neu erstellen</button>
+                </div>
               </div>
             </div>
-            <div>
+            <div className="stack">
               <div className="card preview">
                 <h1>{form.title}</h1>
                 <div dangerouslySetInnerHTML={{ __html: form.contentHtml }} />
               </div>
               {data.sources.length > 0 && (
                 <div className="card">
-                  <strong>Quellen</strong>
+                  <div className="card-title"><Icon name="external" /> Quellen</div>
                   <ul>{data.sources.map((s, i) => <li key={i}><a href={s.url} target="_blank" rel="noreferrer noopener">{s.title || s.url}</a><div className="muted">{s.note}</div></li>)}</ul>
                 </div>
               )}
               {data.seoChecks.length > 0 && (
-                <div className="card">
-                  <strong>SEO-Prüfung</strong>
-                  <ul className="files">
+                <div id="sec-seo" className="card card-section">
+                  <div className="card-title"><Icon name="search" /> SEO-Prüfung <span className="muted" style={{ fontWeight: 500 }}>({seoOk}/{data.seoChecks.length})</span></div>
+                  <ul className="seo-list">
                     {data.seoChecks.map((c) => (
                       <li key={c.id}>
-                        <span className={c.ok ? "ok" : "error"}>{c.ok ? "✓" : "✗"}</span> {c.label} <span className="muted">– {c.detail}</span>
+                        <span className={c.ok ? "ok" : "error"}>{c.ok ? "✓" : "✗"}</span> <span>{c.label} <span className="muted">– {c.detail}</span></span>
                       </li>
                     ))}
                   </ul>
@@ -420,11 +447,14 @@ export function PostPage({ id }: { id: string }) {
               {data.secondaryKeywords.length > 0 && <div>{data.secondaryKeywords.map((k) => <span key={k} className="tag">{k}</span>)}</div>}
             </div>
           </div>
+
+          <div id="sec-image" className="card-section"><ImagePanel post={data} onChanged={() => void reload()} /></div>
+          <div id="sec-wp" className="card-section"><WordPressPanel post={data} dirty={dirty} onDone={() => void reload()} /></div>
           {data.researchNotes && <details className="card"><summary>Recherchenotizen der KI</summary><pre>{data.researchNotes}</pre></details>}
-        </>
+        </div>
       )}
       <hr />
-      <button className="secondary danger" onClick={async () => { if (confirm("Beitrag löschen?")) { await api.del(`/api/posts/${id}`); window.location.hash = `#/submissions/${data.topic.submissionId}`; } }}>Beitrag löschen</button>
+      <button className="secondary danger" onClick={async () => { if (confirm("Beitrag löschen?")) { await api.del(`/api/posts/${id}`); window.location.hash = `#/submissions/${data.topic.submissionId}`; } }}><Icon name="trash" size={16} /> Beitrag löschen</button>
     </>
   );
 }

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, type Site, type StyleSample, type WpTestResult } from "../api";
 import { useLoad } from "../hooks";
+import { Chip, EmptyState, Icon, PageHeader } from "../ui";
 
 const EMPTY = { name: "", baseUrl: "", language: "de", audience: "", tone: "", styleGuide: "", disclaimer: "", labelAiImages: true, wpUsername: "", wpAppPassword: "", clearWpPassword: false };
 
@@ -196,36 +197,45 @@ export function SitesPage() {
 
   return (
     <>
-      <h1>Websites</h1>
+      <PageHeader title="Websites" subtitle="Für jede Website hinterlegst du Zielgruppe, Ton, Stilvorlagen und den WordPress-Zugang." />
       {error && <p className="error">{error}</p>}
-      {sites?.map((site) =>
-        editing === site.id ? (
-          <SiteForm key={site.id} initial={site} onCancel={() => setEditing(undefined)} onSaved={() => { setEditing(undefined); void reload(); }} />
-        ) : (
-          <div key={site.id} className="card">
-            <div className="row spread">
-              <div>
-                <strong>{site.name}</strong> <span className="muted">{site.baseUrl}</span>
-                <div className="muted">{site.audience || "Keine Zielgruppe hinterlegt"}</div>
-              </div>
-              <div className="row">
-                <button className="secondary" onClick={() => setEditing(site.id)}>Bearbeiten</button>
-                <button
-                  className="secondary danger"
-                  onClick={async () => {
-                    if (confirm(`„${site.name}“ samt allen Uploads und Beiträgen löschen?`)) {
-                      await api.del(`/api/sites/${site.id}`);
-                      void reload();
-                    }
-                  }}
-                >
-                  Löschen
-                </button>
+      {sites?.length === 0 && <EmptyState icon="globe" title="Noch keine Website">Lege unten deine erste Website an.</EmptyState>}
+      <div className="stack-lg">
+        {sites?.map((site) =>
+          editing === site.id ? (
+            <SiteForm key={site.id} initial={site} onCancel={() => setEditing(undefined)} onSaved={() => { setEditing(undefined); void reload(); }} />
+          ) : (
+            <div key={site.id} className="card">
+              <div className="row spread" style={{ alignItems: "flex-start" }}>
+                <div className="stack" style={{ gap: 6 }}>
+                  <div className="card-title"><Icon name="globe" /> {site.name}</div>
+                  {site.baseUrl && <a className="muted" href={site.baseUrl} target="_blank" rel="noreferrer noopener">{site.baseUrl}</a>}
+                  <div className="muted">{site.audience || "Keine Zielgruppe hinterlegt"}</div>
+                  <div className="chips">
+                    {site.hasWpPassword && site.wpUsername ? <Chip tone="success" icon="check">WordPress verbunden ({site.wpUsername})</Chip> : <Chip tone="neutral" icon="alert">WordPress nicht eingerichtet</Chip>}
+                    <Chip tone={site.disclaimer ? "success" : "warn"} icon={site.disclaimer ? "check" : "alert"}>{site.disclaimer ? "Disclaimer hinterlegt" : "Kein Disclaimer"}</Chip>
+                    {site.labelAiImages && <Chip tone="info" icon="image">KI-Bilder werden gekennzeichnet</Chip>}
+                  </div>
+                </div>
+                <div className="row">
+                  <button className="secondary" onClick={() => setEditing(site.id)}><Icon name="pen" size={16} /> Bearbeiten</button>
+                  <button
+                    className="secondary danger"
+                    onClick={async () => {
+                      if (confirm(`„${site.name}“ samt allen Uploads und Beiträgen löschen?`)) {
+                        await api.del(`/api/sites/${site.id}`);
+                        void reload();
+                      }
+                    }}
+                  >
+                    <Icon name="trash" size={16} /> Löschen
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ),
-      )}
+          ),
+        )}
+      </div>
       <h2>Neue Website</h2>
       <SiteForm onSaved={() => void reload()} />
     </>
