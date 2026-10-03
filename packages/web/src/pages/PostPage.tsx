@@ -62,7 +62,7 @@ function ImagePanel({ post, onChanged }: { post: PostDetail; onChanged: () => vo
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [copied, setCopied] = useState(false);
-  const [upload, setUpload] = useState<{ file?: File; source: string; ai: boolean }>({ source: "", ai: false });
+  const [upload, setUpload] = useState<{ file?: File; source: string; ai: boolean; alt: string; caption: string }>({ source: "", ai: false, alt: "", caption: "" });
 
   useEffect(() => {
     if (image) setForm({ prompt: image.prompt, altText: image.altText, caption: image.caption, style: image.style });
@@ -88,6 +88,9 @@ function ImagePanel({ post, onChanged }: { post: PostDetail; onChanged: () => vo
   };
   const working = image?.status === "QUEUED" || image?.status === "GENERATING";
   const label = post.site.labelAiImages && image?.aiGenerated;
+  const uploadOnly = Boolean(image && image.origin === "UPLOAD" && !image.prompt);
+  const altValue = image ? form.altText : upload.alt;
+  const captionValue = image ? form.caption : upload.caption;
 
   return (
     <div className="card stack">
@@ -103,15 +106,15 @@ function ImagePanel({ post, onChanged }: { post: PostDetail; onChanged: () => vo
       {image && (
         <div className="grid">
           <div className="stack">
-            <label>Stil
+            {!uploadOnly && <label>Stil
               <select value={form.style} onChange={edit("style")} disabled>
                 <option value="illustration">Illustration</option>
                 <option value="photo">Foto</option>
               </select>
-            </label>
-            <label>Bild-Prompt (Englisch) <span className="muted">– auch für andere Bilddienste nutzbar</span>
+            </label>}
+            {!uploadOnly && <label>Bild-Prompt (Englisch) <span className="muted">– auch für andere Bilddienste nutzbar</span>
               <textarea rows={5} value={form.prompt} onChange={edit("prompt")} />
-            </label>
+            </label>}
             <label>Alt-Text (Barrierefreiheit, höchstens 125 Zeichen) <span className="muted">({form.altText.length})</span>
               <input value={form.altText} onChange={edit("altText")} />
             </label>
@@ -119,7 +122,7 @@ function ImagePanel({ post, onChanged }: { post: PostDetail; onChanged: () => vo
             {label && <span className="muted">Beim Senden an WordPress wird „Bild: KI-generiert“ an die Unterschrift angehängt und im Bild vermerkt.</span>}
             <div className="row">
               <button disabled={busy || !dirty} onClick={() => run(() => api.put(`/api/posts/${post.id}/image`, { prompt: form.prompt, altText: form.altText, caption: form.caption }))}>Änderungen speichern</button>
-              <button
+              {!uploadOnly && <button
                 className="secondary"
                 disabled={busy || dirty}
                 onClick={async () => {
@@ -129,16 +132,16 @@ function ImagePanel({ post, onChanged }: { post: PostDetail; onChanged: () => vo
                 }}
               >
                 {copied ? "Kopiert" : "Prompt kopieren"}
-              </button>
+              </button>}
             </div>
             <div className="row">
-              <button disabled={busy || dirty || working || !canGenerate} title={canGenerate ? "" : "Keine Bildgenerierung eingerichtet (IMAGE_PROVIDER)"} onClick={() => run(() => api.post(`/api/posts/${post.id}/image/generate`))}>
+              {!uploadOnly && <button disabled={busy || dirty || working || !canGenerate} title={canGenerate ? "" : "Keine Bildgenerierung eingerichtet (IMAGE_PROVIDER)"} onClick={() => run(() => api.post(`/api/posts/${post.id}/image/generate`))}>
                 {working ? "Bild wird erzeugt …" : image.hasFile && image.origin === "AI" ? "Neu generieren" : "Bild generieren"}
-              </button>
+              </button>}
               <button className="secondary" disabled={busy || working} onClick={() => { if (!image.hasFile || confirm("Neuen Vorschlag erstellen? Das vorhandene Bild wird ersetzt.")) void run(() => api.post(`/api/posts/${post.id}/image/plan`, { style: form.style })); }}>Neuer Vorschlag</button>
               <button className="secondary danger" disabled={busy || working} onClick={() => run(() => api.del(`/api/posts/${post.id}/image`))}>Bild entfernen</button>
             </div>
-            {!canGenerate && <span className="muted">Die automatische Bildgenerierung ist nicht eingerichtet. Du kannst den Prompt in einem anderen Bilddienst verwenden und das Ergebnis unten hochladen.</span>}
+            {!canGenerate && !uploadOnly && <span className="muted">Die automatische Bildgenerierung ist nicht eingerichtet. Du kannst den Prompt in einem anderen Bilddienst verwenden und das Ergebnis unten hochladen.</span>}
             {image.status === "FAILED" && image.error && <span className="error">{image.error}</span>}
           </div>
 
@@ -159,19 +162,25 @@ function ImagePanel({ post, onChanged }: { post: PostDetail; onChanged: () => vo
         </div>
       )}
 
-      {image && (
-        <details>
-          <summary>Eigenes oder lizenzfreies Bild hochladen</summary>
+      {(
+        <details open={!image}>
+          <summary>Eigenes oder lizenzfreies Bild hochladen{image ? "" : " (ohne KI-Vorschlag)"}</summary>
           <div className="stack" style={{ marginTop: 8 }}>
             <span className="muted">
-              Lizenzfreie Fotos suchen („{image.searchQuery || form.prompt.slice(0, 30)}“):{" "}
-              {stockLinks(image.searchQuery || "legal documents").map((l, i) => (
+              Lizenzfreie Fotos suchen („{image?.searchQuery || post.focusKeyword || post.title || "legal documents"}“):{" "}
+              {stockLinks(image?.searchQuery || post.focusKeyword || post.title || "legal documents").map((l, i) => (
                 <span key={l.name}>{i > 0 && " · "}<a href={l.url} target="_blank" rel="noreferrer noopener">{l.name}</a></span>
               ))}
               . Lizenzbedingungen bitte selbst prüfen; Quelle und Lizenz werden mit dem Bild gespeichert.
             </span>
             <label>Bilddatei (PNG, JPEG oder WebP, höchstens 10 MB)<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => setUpload({ ...upload, file: e.target.files?.[0] })} /></label>
             <label>Quelle und Lizenz (Pflicht)<input value={upload.source} onChange={(e) => setUpload({ ...upload, source: e.target.value })} placeholder="z. B. Pexels, Pexels-Lizenz, Foto: Name – oder: Eigenes Foto" /></label>
+            {!image && (
+              <>
+                <label>Alt-Text (Barrierefreiheit, höchstens 125 Zeichen) <span className="muted">({upload.alt.length})</span><input value={upload.alt} onChange={(e) => setUpload({ ...upload, alt: e.target.value })} /></label>
+                <label>Bildunterschrift (optional)<input value={upload.caption} onChange={(e) => setUpload({ ...upload, caption: e.target.value })} /></label>
+              </>
+            )}
             <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
               <input type="checkbox" style={{ width: "auto" }} checked={upload.ai} onChange={(e) => setUpload({ ...upload, ai: e.target.checked })} />
               Das Bild ist KI-generiert (z. B. aus einem anderen KI-Dienst) – wird entsprechend gekennzeichnet
@@ -184,11 +193,11 @@ function ImagePanel({ post, onChanged }: { post: PostDetail; onChanged: () => vo
                     const body = new FormData();
                     body.append("sourceNote", upload.source);
                     body.append("aiGenerated", String(upload.ai));
-                    body.append("altText", form.altText);
-                    body.append("caption", form.caption);
+                    body.append("altText", altValue);
+                    body.append("caption", captionValue);
                     body.append("file", upload.file!, upload.file!.name);
                     await api.post(`/api/posts/${post.id}/image/upload`, body);
-                    setUpload({ source: "", ai: false });
+                    setUpload({ source: "", ai: false, alt: "", caption: "" });
                   })
                 }
               >
