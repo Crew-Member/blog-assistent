@@ -92,3 +92,13 @@ describe("fetchSitePost", () => {
     await expect(fetchSitePost("https://93.184.216.34", 7, fetcher)).rejects.toThrow(/Captcha/);
   });
 });
+
+describe("parseJsonLoosely", () => {
+  it("liest JSON hinter vorangestellten Style-Bloecken und vor Nachlauf", async () => {
+    const { parseJsonLoosely } = await import("./wordpress.js");
+    const css = '<style id="elementor-post-28899">.elementor-widget-text-editor{font-family:var(--x)}</style>';
+    expect(parseJsonLoosely(`${css}\n{"id":7,"content":{"rendered":"<p>a {b}</p>"}}`)).toEqual({ id: 7, content: { rendered: "<p>a {b}</p>" } });
+    expect(parseJsonLoosely(`\uFEFF[{"id":1}]<!-- cache -->`)).toEqual([{ id: 1 }]);
+    expect(() => parseJsonLoosely("<html>nix</html>")).toThrow();
+  });
+});

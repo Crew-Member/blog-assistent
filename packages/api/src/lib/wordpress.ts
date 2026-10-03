@@ -11,6 +11,20 @@ type Fetcher = (url: string, init: { redirect: "manual"; signal: AbortSignal; he
 
 const MAX_BYTES = 2 * 1024 * 1024;
 
+/** JSON auch dann lesen, wenn davor oder danach Fremdtext (CSS, Skripte, Hinweise) steht. */
+export function parseJsonLoosely(body: string): unknown {
+  try {
+    return JSON.parse(body);
+  } catch {
+    const cleaned = body.replace(/<(style|script)[\s\S]*?<\/\1>/gi, "").replace(/^\uFEFF/, "");
+    const start = cleaned.search(/\{\s*"|\[\s*[{\]"\d]/);
+    if (start < 0) throw new SyntaxError("kein JSON");
+    const open = cleaned[start]!;
+    const end = cleaned.lastIndexOf(open === "{" ? "}" : "]");
+    return JSON.parse(cleaned.slice(start, end + 1));
+  }
+}
+
 async function getJson(start: URL, fetcher: Fetcher): Promise<unknown> {
   let url = start;
   for (let hop = 0; hop < 4; hop++) {
@@ -27,10 +41,9 @@ async function getJson(start: URL, fetcher: Fetcher): Promise<unknown> {
     if (!res.ok) throw new Error(`Die Website antwortet mit Status ${res.status}`);
     const body = await res.text();
     if (body.length > MAX_BYTES) throw new Error("Antwort der Website ist zu groß");
-    // Manche Installationen liefern BOM, Leerzeilen oder PHP-Hinweise vor dem JSON.
-    const start = body.search(/[[{]/);
+    // Manche Installationen (z. B. Elementor) schreiben <style>/<script>-Bloecke, BOM oder PHP-Hinweise vor das JSON.
     try {
-      return JSON.parse(start > 0 ? body.slice(start) : body);
+      return parseJsonLoosely(body);
     } catch {
       const type = res.headers.get("content-type") ?? "unbekannt";
       const head = body.replace(/\s+/g, " ").trim().slice(0, 80);
