@@ -127,6 +127,8 @@ export interface SitePostSummary {
 
 export interface PostDetail {
   /** Gesetzt, wenn der Beitrag eine Überarbeitung eines bestehenden WordPress-Beitrags ist. */
+  /** True, wenn die letzte KI-Nachschärfung rückgängig gemacht werden kann. */
+  canUndoRefine: boolean;
   revisionOf: { wpPostId: number; title: string; url: string; instructions: string } | null;
   id: string;
   status: PostStatus;

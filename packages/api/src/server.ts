@@ -1,3 +1,4 @@
+import { explainAiError } from "./ai/errors.js";
 import { timingSafeEqual } from "node:crypto";
 import path from "node:path";
 import { existsSync } from "node:fs";
@@ -11,7 +12,7 @@ import type { AiService } from "./ai/types.js";
 import type { Config } from "./config.js";
 import type { FileStorage } from "./lib/storage.js";
 import { detectKind, extractDocument, stripHtml } from "./lib/extract.js";
-import { sanitizePostHtml } from "./lib/html.js";
+import { applyLinkPolicy, sanitizePostHtml, unwrapLinksNotIn } from "./lib/html.js";
 import { seoChecks } from "./lib/seo.js";
 import { slugify } from "./lib/slug.js";
 import { decryptSecret, encryptSecret } from "./lib/secrets.js";
@@ -544,6 +545,45 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     return reply.code(201).send(post);
   });
 
+  // --- Text nachschaerfen (KI nach Anweisung) ---------------------------------
+  const FOOTER_RE = /\n?<p><em>Stand:[\s\S]*?<\/em><\/p>\s*$/;
+
+  app.post<{ Params: { id: string } }>("/api/posts/:id/refine", async (request, reply) => {
+    const body = z.object({ instruction: z.string().trim().min(3).max(1500) }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "Bitte kurz beschreiben, was geändert werden soll (mindestens 3 Zeichen)." });
+    const post = await prisma.post.findUnique({ where: { id: request.params.id }, include: { site: true } });
+    if (!post) return reply.code(404).send({ error: "Beitrag nicht gefunden" });
+    if (post.status !== "DRAFT_READY" || !post.contentHtml) return reply.code(409).send({ error: "Der Entwurf ist noch nicht fertig." });
+    const footer = post.contentHtml.match(FOOTER_RE)?.[0] ?? "";
+    const current = post.contentHtml.replace(FOOTER_RE, "");
+    let result;
+    try {
+      result = await ai.refine({
+        site: { name: post.site.name, language: post.site.language, audience: post.site.audience, tone: post.site.tone, styleGuide: post.site.styleGuide },
+        title: post.title ?? "",
+        focusKeyword: post.focusKeyword ?? "",
+        contentHtml: current,
+        instruction: body.data.instruction,
+      });
+    } catch (error) {
+      return reply.code(502).send({ error: `Überarbeitung nicht möglich: ${explainAiError(error)}` });
+    }
+    // Es duerfen nur Links bleiben, die schon im Text standen (und die Linkregeln erfuellen).
+    const existing = [...current.matchAll(/href="([^"]+)"/g)].map((m) => (m[1] ?? "").replace(/&amp;/g, "&"));
+    const html = applyLinkPolicy(unwrapLinksNotIn(sanitizePostHtml(result.contentHtml), existing), post.site.baseUrl, existing);
+    if (html.length < current.length * 0.3) return reply.code(422).send({ error: "Die KI hat den Text stark gekürzt – die Änderung wurde nicht übernommen. Bitte die Anweisung genauer fassen." });
+    await prisma.post.update({ where: { id: post.id }, data: { previousContentHtml: post.contentHtml, contentHtml: `${html}${footer}` } });
+    return { note: result.note };
+  });
+
+  app.post<{ Params: { id: string } }>("/api/posts/:id/refine/undo", async (request, reply) => {
+    const post = await prisma.post.findUnique({ where: { id: request.params.id }, select: { id: true, previousContentHtml: true } });
+    if (!post) return reply.code(404).send({ error: "Beitrag nicht gefunden" });
+    if (!post.previousContentHtml) return reply.code(409).send({ error: "Es gibt nichts rückgängig zu machen." });
+    await prisma.post.update({ where: { id: post.id }, data: { contentHtml: post.previousContentHtml, previousContentHtml: null } });
+    return { ok: true };
+  });
+
   app.get("/api/posts", async () =>
     prisma.post.findMany({
       orderBy: { createdAt: "desc" },
@@ -561,10 +601,10 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     const seo = post.status === "DRAFT_READY"
       ? seoChecks({ title: post.title ?? "", slug: post.slug ?? "", metaDescription: post.metaDescription ?? "", focusKeyword: post.focusKeyword ?? "", contentHtml: post.contentHtml ?? "" })
       : [];
-    const { image, revisionSource, ...rest } = post;
+    const { image, revisionSource, previousContentHtml, ...rest } = post;
     const rev = revisionSource as { wpPostId?: number; title?: string; url?: string; instructions?: string } | null;
     const revisionOf = rev ? { wpPostId: rev.wpPostId ?? 0, title: rev.title ?? "", url: rev.url ?? "", instructions: rev.instructions ?? "" } : null;
-    return { ...rest, revisionOf, image: image ? publicImage(image) : null, seoChecks: seo };
+    return { ...rest, revisionOf, canUndoRefine: Boolean(previousContentHtml), image: image ? publicImage(image) : null, seoChecks: seo };
   });
 
   app.put<{ Params: { id: string } }>("/api/posts/:id", async (request, reply) => {

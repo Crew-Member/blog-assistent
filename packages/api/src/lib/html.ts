@@ -87,3 +87,9 @@ export function applyLinkPolicy(html: string, siteOrigin: string, internalAllowe
     return whole;
   });
 }
+
+/** Entfernt alle Links, deren Adresse nicht in der Liste steht (Linktext bleibt). */
+export function unwrapLinksNotIn(html: string, allowed: Iterable<string>): string {
+  const known = new Set([...allowed].map(normUrl));
+  return html.replace(/<a\s[^>]*?href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (whole, href: string, inner: string) => (known.has(normUrl(href.replace(/&amp;/g, "&"))) ? whole : inner));
+}

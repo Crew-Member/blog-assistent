@@ -335,6 +335,41 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect(post.researchNotes).toContain("Fakt aktualisiert");
   });
 
+  it("schaerft den Text nach Anweisung nach, haelt Footer und Linkregeln ein und macht es rueckgaengig", async () => {
+    const seen: { instruction: string; html: string }[] = [];
+    await setup(fakeWith({
+      refine: async (input) => {
+        seen.push({ instruction: input.instruction, html: input.contentHtml });
+        return { contentHtml: `<p>Kurz. ${"Text ".repeat(40)}<a href="https://www.haufe.de/x">Wettbewerber</a> <a href="https://www.gesetze-im-internet.de/dsgvo/">DSGVO</a> <a href="https://www.gesetze-im-internet.de/">GII</a></p>`, note: "Gekürzt." };
+      },
+    }));
+    const postId = await makePost(await createSite());
+    const before = (await app.inject({ method: "GET", url: `/api/posts/${postId}`, headers: { cookie } })).json();
+    expect(before.canUndoRefine).toBe(false);
+
+    const short = await app.inject({ method: "POST", url: `/api/posts/${postId}/refine`, headers: { cookie }, payload: { instruction: "x" } });
+    expect(short.statusCode).toBe(400);
+
+    const res = await app.inject({ method: "POST", url: `/api/posts/${postId}/refine`, headers: { cookie }, payload: { instruction: "Kürzer fassen" } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().note).toBe("Gekürzt.");
+    expect(seen[0]?.html).not.toContain("Stand:"); // Footer geht nicht an die KI
+
+    const after = (await app.inject({ method: "GET", url: `/api/posts/${postId}`, headers: { cookie } })).json();
+    expect(after.contentHtml).toContain("Kurz.");
+    expect(after.contentHtml).toContain("Kein Ersatz fuer Rechtsberatung."); // Disclaimer-Footer bleibt
+    expect(after.contentHtml).not.toContain("haufe.de"); // neuer Fremdlink wird entfernt
+    expect(after.contentHtml).not.toContain("gesetze-im-internet.de"); // nur bereits vorhandene Links bleiben
+    expect(after.canUndoRefine).toBe(true);
+    expect(after.previousContentHtml).toBeUndefined();
+
+    const undo = await app.inject({ method: "POST", url: `/api/posts/${postId}/refine/undo`, headers: { cookie } });
+    expect(undo.statusCode).toBe(200);
+    const restored = (await app.inject({ method: "GET", url: `/api/posts/${postId}`, headers: { cookie } })).json();
+    expect(restored.contentHtml).toBe(before.contentHtml);
+    expect((await app.inject({ method: "POST", url: `/api/posts/${postId}/refine/undo`, headers: { cookie } })).statusCode).toBe(409);
+  });
+
   it("gibt die gewuenschte Anzahl an den WordPress-Import weiter", async () => {
     const urls: string[] = [];
     wpFetcher = (async (url: string) => {

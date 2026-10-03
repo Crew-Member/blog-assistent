@@ -153,6 +153,8 @@ model Post {
   secondaryKeywords Json       @default("[]")
   excerpt           String?
   contentHtml       String?
+  // Stand vor der letzten KI-Nachschaerfung (fuer "Rueckgaengig")
+  previousContentHtml String?
   // [{ title, url, note }] - nur Quellen, die Claude tatsaechlich gefunden/verwendet hat.
   sources           Json       @default("[]")
   // Aussagen im Text, fuer die keine Quelle gefunden wurde -> manuell pruefen.

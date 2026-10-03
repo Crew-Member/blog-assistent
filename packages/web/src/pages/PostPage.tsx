@@ -212,6 +212,52 @@ function ImagePanel({ post, onChanged }: { post: PostDetail; onChanged: () => vo
   );
 }
 
+const REFINE_IDEAS = ["Kürzer fassen", "Einstieg griffiger formulieren", "Einfachere Sprache, weniger Juristendeutsch", "Handlungsempfehlungen als Checkliste", "Fazit klarer formulieren"];
+
+function RefinePanel({ post, dirty, onDone }: { post: PostDetail; dirty: boolean; onDone: () => void }) {
+  const [instruction, setInstruction] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const [note, setNote] = useState<string>();
+
+  async function run(action: () => Promise<{ note?: string } | undefined>) {
+    setBusy(true);
+    setError(undefined);
+    setNote(undefined);
+    try {
+      const result = await action();
+      setNote(result?.note);
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card stack">
+      <div className="card-title"><Icon name="sparkles" /> Mit KI nachschärfen</div>
+      <span className="muted">Die KI ändert den Text nach deiner Anweisung – ohne neue Fakten, ohne neue Links. Das Ergebnis lässt sich rückgängig machen. Der Faktencheck oben bezieht sich auf die Fassung davor.</span>
+      <div className="row">
+        {REFINE_IDEAS.map((idea) => <button key={idea} type="button" className="secondary" disabled={busy} onClick={() => setInstruction(idea)}>{idea}</button>)}
+      </div>
+      <label>Anweisung
+        <textarea rows={3} value={instruction} onChange={(e) => setInstruction(e.target.value)} placeholder="z. B. Den zweiten Abschnitt kürzer und verständlicher fassen, den Einstieg mit der Kernaussage beginnen." />
+      </label>
+      {dirty && <span className="error">Es gibt ungespeicherte Änderungen im Textfeld – bitte erst speichern, sonst gehen sie verloren.</span>}
+      <div className="row">
+        <button disabled={busy || dirty || instruction.trim().length < 3} onClick={() => run(async () => { const r = await api.post<{ note: string }>(`/api/posts/${post.id}/refine`, { instruction }); setInstruction(""); return r; })}>
+          {busy ? <><Spinner /> Die KI überarbeitet …</> : "Text nachschärfen"}
+        </button>
+        {post.canUndoRefine && <button className="secondary" disabled={busy} onClick={() => run(async () => { await api.post(`/api/posts/${post.id}/refine/undo`); return undefined; })}>Letzte Änderung rückgängig</button>}
+      </div>
+      {note && <div className="notice"><Icon name="check" size={16} /> {note}</div>}
+      {error && <span className="error">{error}</span>}
+    </div>
+  );
+}
+
 function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: boolean; onDone: () => void }) {
   const [prep, setPrep] = useState<WpPrepare>();
   const [selected, setSelected] = useState<number[]>([]);
@@ -338,7 +384,7 @@ export function PostPage({ id }: { id: string }) {
         contentHtml: data.contentHtml ?? "",
       });
     }
-  }, [data?.status, data?.title]);
+  }, [data?.status, data?.title, data?.contentHtml]);
 
   if (error) return <p className="error">{error}</p>;
   if (!data) return <SkeletonPage />;
@@ -403,6 +449,7 @@ export function PostPage({ id }: { id: string }) {
 
           <div className="grid">
             <div className="stack">
+              <RefinePanel post={data} dirty={dirty} onDone={() => void reload()} />
               <div className="card stack">
                 <div className="card-title"><Icon name="pen" /> Text bearbeiten</div>
                 <label>Titel<input value={form.title} onChange={set("title")} /></label>

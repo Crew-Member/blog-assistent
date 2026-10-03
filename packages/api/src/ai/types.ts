@@ -80,6 +80,9 @@ export interface DraftInput {
   revision?: RevisionInput;
 }
 
+export const refineResultSchema = z.object({ contentHtml: z.string().min(1), note: z.string() });
+export type RefineResult = z.infer<typeof refineResultSchema>;
+
 export interface StyleSampleInput {
   title: string;
   text: string;
@@ -130,6 +133,8 @@ export interface AiService {
   analyze(input: { site: SiteProfile; note: string; documents: AiDocument[] }): Promise<TopicProposal[]>;
   research(input: { site: SiteProfile; topic: TopicProposal }): Promise<ResearchResult>;
   draft(input: DraftInput): Promise<DraftResult>;
+  /** Ueberarbeitet den Text eines fertigen Entwurfs nach Anweisung des Nutzers, ohne neue Fakten einzufuehren. */
+  refine(input: { site: SiteProfile; title: string; focusKeyword: string; contentHtml: string; instruction: string }): Promise<RefineResult>;
   /** Unabhaengige Pruefung des Entwurfs gegen Recherche und Originalunterlagen; liefert korrigiertes HTML. */
   factCheck(input: { site: SiteProfile; topic: TopicProposal; research: ResearchResult; draft: DraftResult; documents: AiDocument[]; internalLinks?: { title: string; url: string }[] }): Promise<FactCheckResult>;
   /** Waehlt aus den vorhandenen WordPress-Kategorien die passenden (hoechstens drei) fuer einen fertigen Beitrag. */

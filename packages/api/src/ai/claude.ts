@@ -1,11 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { internalLinksBlock, REVISE_SYSTEM, relatedPostsBlock, revisionBlock, ANALYZE_SYSTEM, CATEGORY_SYSTEM, DRAFT_SYSTEM, IMAGE_PLAN_SYSTEM, FACTCHECK_SYSTEM, RESEARCH_SYSTEM, STYLE_SYSTEM, siteBlock, styleSamplesBlock, topicBlock } from "./prompts.js";
+import { REFINE_SYSTEM, internalLinksBlock, REVISE_SYSTEM, relatedPostsBlock, revisionBlock, ANALYZE_SYSTEM, CATEGORY_SYSTEM, DRAFT_SYSTEM, IMAGE_PLAN_SYSTEM, FACTCHECK_SYSTEM, RESEARCH_SYSTEM, STYLE_SYSTEM, siteBlock, styleSamplesBlock, topicBlock } from "./prompts.js";
 import {
   analyzeResultSchema,
   categorySuggestionSchema,
   draftResultSchema,
   factCheckResultSchema,
   imagePlanSchema,
+  refineResultSchema,
   styleDerivationSchema,
   type AiDocument,
   type AiService,
@@ -15,6 +16,7 @@ import {
   type DraftResult,
   type FactCheckResult,
   type ImagePlan,
+  type RefineResult,
   type StyleDerivation,
   type StyleSampleInput,
   type ResearchResult,
@@ -88,6 +90,13 @@ const DRAFT_SCHEMA = {
     changeSummary: { type: "string" },
   },
   required: ["title", "slug", "metaDescription", "focusKeyword", "secondaryKeywords", "excerpt", "contentHtml", "sources", "unverifiedClaims", "changeSummary"],
+  additionalProperties: false,
+} as const;
+
+const REFINE_SCHEMA = {
+  type: "object",
+  properties: { contentHtml: { type: "string" }, note: { type: "string" } },
+  required: ["contentHtml", "note"],
   additionalProperties: false,
 } as const;
 
@@ -313,6 +322,21 @@ export class ClaudeAiService implements AiService {
       },
     ];
     return this.structured(FACTCHECK_SYSTEM, content, FACTCHECK_SCHEMA, (v) => factCheckResultSchema.parse(v));
+  }
+
+  async refine(input: { site: SiteProfile; title: string; focusKeyword: string; contentHtml: string; instruction: string }): Promise<RefineResult> {
+    const content: Anthropic.ContentBlockParam[] = [
+      {
+        type: "text",
+        text: [
+          siteBlock(input.site),
+          `Titel: ${input.title}\nFokus-Keyword: ${input.focusKeyword}`,
+          `Aktueller Text (HTML):\n${input.contentHtml}`,
+          `Anweisung des Redakteurs:\n${input.instruction}`,
+        ].join("\n\n"),
+      },
+    ];
+    return this.structured(REFINE_SYSTEM, content, REFINE_SCHEMA, (v) => refineResultSchema.parse(v));
   }
 
   async deriveStyle(input: { site: SiteProfile; samples: StyleSampleInput[] }): Promise<StyleDerivation> {

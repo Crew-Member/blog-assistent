@@ -116,6 +116,13 @@ Tests (brauchen eine erreichbare Postgres-DB):
 DATABASE_URL=postgresql://blog:blog@localhost:5433/blog_assistent npm test
 ```
 
+## Sicherung und Wiederherstellung (Windows)
+
+- `start.cmd` sichert automatisch **einmal pro Tag** die Datenbank (Beiträge, Websites, Einstellungen) und die Bilder/Uploads, bevor Datenbank-Änderungen eingespielt werden. Es bleiben die letzten 14 Datenbank-Sicherungen.
+- `backup.cmd` (Doppelklick) sichert sofort.
+- Ziel ist standardmäßig der Ordner `backups` im Projektordner. Besser ein Ordner, der ohnehin gesichert wird: in der `.env` z. B. `BACKUP_DIR=C:\Users\NAME\OneDrive\Blog-Assistent-Backup`. Der Schlüssel `SESSION_SECRET` und die API-Schlüssel stehen in der `.env`, nicht in der Sicherung – die `.env` bitte getrennt aufbewahren (ohne `SESSION_SECRET` ist das gespeicherte WordPress-Passwort nicht mehr lesbar).
+- Wiederherstellen: `restore.cmd backups\db-JJJJMMTT-HHMM.dump` (überschreibt die aktuelle Datenbank nach Rückfrage; Bilder neben der Sicherung werden zurückkopiert).
+
 ## Betrieb
 
 ```bash

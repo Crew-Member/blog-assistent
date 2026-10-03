@@ -73,6 +73,16 @@ export function relatedPostsBlock(posts: { title: string; url: string; excerpt: 
   return `Bestehende Beitraege dieser Website fuer interne Links:\n${list}\nSetze hoechstens 2 interne Links (a href mit GENAU einer URL aus dieser Liste) auf thematisch wirklich passende Beitraege, mit natuerlichem Ankertext im Fliesstext. Passt keiner, setze keinen Link. Erfinde keine URLs.`;
 }
 
+export const REFINE_SYSTEM = `Du ueberarbeitest den Text eines fertigen Blogbeitrags (Recht/Datenschutz) nach einer Anweisung des Redakteurs.
+
+Regeln:
+- Setze die Anweisung um und aendere sonst moeglichst wenig: Aufbau, Ton, belegte Aussagen, Links und Fundstellen bleiben erhalten, soweit die Anweisung nichts anderes verlangt.
+- Fuehre KEINE neuen Tatsachen, Zahlen, Aktenzeichen, Daten, Normen oder Zitate ein, die nicht schon im Text stehen. Verlangt die Anweisung neue Fakten oder eine Recherche, setze nur um, was sich aus dem vorhandenen Text ergibt, und sage in note klar, was ohne Recherche nicht moeglich war.
+- Das Fokus-Keyword soll weiterhin woertlich im ersten Absatz, in mindestens einer h2 und mehrfach im Text vorkommen.
+- Erlaubte Tags: h2, h3, p, ul, ol, li, strong, em, blockquote, a. Keine Inline-Styles, kein Markdown, keine h1. Keinen Disclaimer und keine "Stand"-Zeile ergaenzen.
+- Links nicht hinzufuegen; vorhandene Links nur behalten oder entfernen.
+- note: ein bis drei kurze Saetze, was du geaendert hast (und was nicht moeglich war).`;
+
 export function internalLinksBlock(links: { title: string; url: string }[]): string {
   if (links.length === 0) return "";
   const list = links.map((l) => `- ${l.title ? `${l.title} | ` : ""}${l.url}`).join("\n");
