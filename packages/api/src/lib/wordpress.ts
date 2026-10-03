@@ -27,7 +27,15 @@ async function getJson(start: URL, fetcher: Fetcher): Promise<unknown> {
     if (!res.ok) throw new Error(`Die Website antwortet mit Status ${res.status}`);
     const body = await res.text();
     if (body.length > MAX_BYTES) throw new Error("Antwort der Website ist zu groß");
-    return JSON.parse(body);
+    // Manche Installationen liefern BOM, Leerzeilen oder PHP-Hinweise vor dem JSON.
+    const start = body.search(/[[{]/);
+    try {
+      return JSON.parse(start > 0 ? body.slice(start) : body);
+    } catch {
+      const type = res.headers.get("content-type") ?? "unbekannt";
+      const head = body.replace(/\s+/g, " ").trim().slice(0, 80);
+      throw new Error(`Die Website liefert keine WordPress-REST-Antwort (Typ ${type}, Anfang: „${head}“)`);
+    }
   }
   throw new Error("Zu viele Weiterleitungen");
 }
@@ -97,20 +105,30 @@ export async function fetchSitePosts(baseUrl: string, opts: { search?: string; c
   return data.map(toSummary).filter((p): p is SitePostSummary => Boolean(p));
 }
 
-/** Ein veroeffentlichter Beitrag samt HTML-Inhalt. */
+/** Ein veroeffentlichter Beitrag samt HTML-Inhalt. Probiert mehrere Wege, falls Permalinks/Firewall den ersten blockieren. */
 export async function fetchSitePost(baseUrl: string, id: number, fetcher: Fetcher = fetch): Promise<SitePostFull> {
-  const api = await restUrl(baseUrl, `/wp-json/wp/v2/posts/${Math.trunc(id)}`);
-  api.searchParams.set("_fields", "id,title,link,date,excerpt,content");
-  let data: unknown;
-  try {
-    data = await getJson(api, fetcher);
-  } catch (error) {
-    if (error instanceof SyntaxError) throw new Error("Die Website liefert keine WordPress-REST-Antwort");
-    throw error;
+  const n = Math.trunc(id);
+  const fields = "id,title,link,date,excerpt,content";
+  const attempts: { path: string; params: Record<string, string>; list: boolean }[] = [
+    { path: `/wp-json/wp/v2/posts/${n}`, params: { _fields: fields }, list: false },
+    { path: `/wp-json/wp/v2/posts/${n}`, params: {}, list: false },
+    { path: "/wp-json/wp/v2/posts", params: { include: String(n), _fields: fields }, list: true },
+    { path: "/", params: { rest_route: `/wp/v2/posts/${n}`, _fields: fields }, list: false },
+  ];
+  let firstError: Error | undefined;
+  for (const attempt of attempts) {
+    try {
+      const api = await restUrl(baseUrl, attempt.path);
+      for (const [k, v] of Object.entries(attempt.params)) api.searchParams.set(k, v);
+      const data = await getJson(api, fetcher);
+      const post = (attempt.list ? (Array.isArray(data) ? data[0] : undefined) : data) as RestPost | undefined;
+      const summary = post ? toSummary(post) : undefined;
+      const html = post?.content?.rendered ?? "";
+      if (summary && html.trim()) return { ...summary, html };
+      firstError ??= new Error("Der Beitrag wurde nicht gefunden oder ist nicht veröffentlicht.");
+    } catch (error) {
+      firstError ??= error instanceof Error ? error : new Error(String(error));
+    }
   }
-  const post = data as RestPost;
-  const summary = toSummary(post);
-  const html = post.content?.rendered ?? "";
-  if (!summary || !html.trim()) throw new Error("Der Beitrag wurde nicht gefunden oder ist nicht veröffentlicht.");
-  return { ...summary, html };
+  throw firstError ?? new Error("Der Beitrag konnte nicht geladen werden.");
 }

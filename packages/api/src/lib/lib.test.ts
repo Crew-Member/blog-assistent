@@ -68,3 +68,27 @@ describe("slugWithKeyword", () => {
     expect(slugWithKeyword("datenschutz-wettbewerber-urteil", "Datenschutz Wettbewerber")).toBe("datenschutz-wettbewerber-urteil");
   });
 });
+
+describe("fetchSitePost", () => {
+  it("weicht auf andere REST-Wege aus und toleriert Zeichen vor dem JSON", async () => {
+    const { fetchSitePost } = await import("./wordpress.js");
+    const post = { id: 7, title: { rendered: "Titel" }, link: "https://93.184.216.34/a/", date: "", excerpt: { rendered: "" }, content: { rendered: "<p>Text</p>" } };
+    const seen: string[] = [];
+    const fetcher = (async (url: string) => {
+      const u = new URL(url);
+      seen.push(u.pathname + u.search);
+      if (u.pathname === "/wp-json/wp/v2/posts/7") return new Response("<html>Firewall</html>", { headers: { "content-type": "text/html" } });
+      if (u.searchParams.get("include")) return new Response("﻿\n" + JSON.stringify([post]));
+      return new Response("{}");
+    }) as never;
+    const result = await fetchSitePost("https://93.184.216.34", 7, fetcher);
+    expect(result.html).toBe("<p>Text</p>");
+    expect(seen.length).toBe(3);
+  });
+
+  it("nennt bei Nicht-JSON den Anfang der Antwort", async () => {
+    const { fetchSitePost } = await import("./wordpress.js");
+    const fetcher = (async () => new Response("<html>Bitte Captcha loesen</html>", { headers: { "content-type": "text/html" } })) as never;
+    await expect(fetchSitePost("https://93.184.216.34", 7, fetcher)).rejects.toThrow(/Captcha/);
+  });
+});
