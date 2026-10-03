@@ -60,3 +60,11 @@ describe("extractDocument", () => {
     expect(doc).toEqual({ kind: "pdf", mimeType: "application/pdf" });
   });
 });
+
+describe("slugWithKeyword", () => {
+  it("stellt das Keyword zusammenhaengend voran und haelt die Laenge", async () => {
+    const { slugWithKeyword } = await import("./slug.js");
+    expect(slugWithKeyword("olg-naumburg-abmahnung", "Datenschutzverstöße Konkurrenten")).toBe("datenschutzverstoesse-konkurrenten-olg-naumburg-abm".slice(0, 50).replace(/-+$/, ""));
+    expect(slugWithKeyword("datenschutz-wettbewerber-urteil", "Datenschutz Wettbewerber")).toBe("datenschutz-wettbewerber-urteil");
+  });
+});

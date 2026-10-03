@@ -44,9 +44,9 @@ Regeln:
 - Der Fliesstext soll gut lesbar sein, ohne Floskeln und ohne Werbesprache. Laenge etwa 600 bis 1000 Woerter, es sei denn der Stilleitfaden sagt etwas anderes.
 - title: max. 65 Zeichen, enthaelt das Fokus-Keyword woertlich, moeglichst weit vorn. Enthaelt der Inhalt eine konkrete Zahl (Betrag, Frist, Anzahl), darf der Titel sie nennen - nur wenn sie belegt ist. metaDescription: max. 155 Zeichen, enthaelt das Fokus-Keyword woertlich und nennt den Nutzen fuer den Leser. excerpt: 2 bis 3 Saetze.
 - focusKeyword: ein konkreter Suchbegriff aus 2 bis 4 Woertern, wie ihn die Zielgruppe eintippen wuerde, in der Form, in der er im Text vorkommt. secondaryKeywords: 3 bis 6 verwandte Begriffe, die im Text natuerlich vorkommen.
-- Das Fokus-Keyword muss WOERTLICH (gleiche Schreibweise und Beugung, nicht nur Wortbestandteile) vorkommen: im ersten Satz des Textes, in mindestens einer h2-Zwischenueberschrift und insgesamt mindestens 4-mal im Fliesstext, ohne den Lesefluss zu stoeren. Waehle das Keyword deshalb so, dass es sich grammatisch natuerlich einbauen laesst.
+- Das Fokus-Keyword muss WOERTLICH (gleiche Schreibweise und Beugung, nicht nur Wortbestandteile) vorkommen: im ersten Satz des Textes, in mindestens einer h2-Zwischenueberschrift und insgesamt etwa einmal pro 100 Woerter im Fliesstext (bei 900 Woertern also rund 8- bis 9-mal; Varianten und Pronomen dazwischen sind normal), ohne den Lesefluss zu stoeren. Waehle das Keyword deshalb so, dass es sich grammatisch natuerlich einbauen laesst.
 - sources: nur Quellen, auf die der Text sich tatsaechlich stuetzt, mit kurzer Notiz, wofuer sie herangezogen wurden.
-- slug: kurz (hoechstens 4 bis 5 Woerter bzw. 50 Zeichen), kleingeschrieben, ohne Umlaute, enthaelt die Kernwoerter des Fokus-Keywords.`;
+- slug: kurz (hoechstens 4 bis 5 Woerter bzw. 50 Zeichen), kleingeschrieben, ohne Umlaute, beginnt mit dem Fokus-Keyword in Schlagwort-Schreibweise (z. B. Keyword "Datenschutz Wettbewerber" -> "datenschutz-wettbewerber-...").`;
 
 export function topicBlock(topic: TopicProposal): string {
   return [

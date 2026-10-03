@@ -45,12 +45,12 @@ export function seoChecks(post: SeoInput): SeoCheck[] {
     add("kw-title", "Fokus-Keyword im Titel", contains(post.title, kw), kw);
     add("kw-meta", "Fokus-Keyword in der Meta-Description", contains(post.metaDescription, kw), kw);
     add("kw-intro", "Fokus-Keyword im Einstieg (erste 150 Wörter)", contains(firstWords, kw), kw);
-    const tokens = norm(kw).split(" ").filter((t) => t.length > 2);
     const h2s = [...post.contentHtml.matchAll(/<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/g)].map((m) => stripHtml(m[1] ?? ""));
     add("kw-h2", "Fokus-Keyword in einer Zwischenüberschrift", h2s.some((h) => contains(h, kw)), kw);
     const count = countOccurrences(text, kw);
     add("kw-count", "Fokus-Keyword im Text (mindestens 3×)", count >= 3, `${count}× wörtlich im Text`);
-    add("kw-slug", "Fokus-Keyword im Slug", tokens.length > 0 && tokens.every((t) => post.slug.split("-").includes(t)), post.slug || "(leer)");
+    const kwSlug = slugify(kw, 200);
+    add("kw-slug", "Fokus-Keyword im Slug", kwSlug.length > 0 && post.slug.includes(kwSlug), post.slug || "(leer)");
   } else {
     add("kw", "Fokus-Keyword gesetzt", false, "kein Keyword hinterlegt");
   }

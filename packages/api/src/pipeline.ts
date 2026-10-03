@@ -3,7 +3,7 @@ import { explainAiError } from "./ai/errors.js";
 import type { AiDocument, AiService, DraftResult, FactCheckResult, ResearchResult, SiteProfile, TopicProposal } from "./ai/types.js";
 import { escapeHtml, sanitizePostHtml } from "./lib/html.js";
 import { checkReferences, type ReferenceCheck } from "./lib/references.js";
-import { slugify } from "./lib/slug.js";
+import { slugWithKeyword } from "./lib/slug.js";
 import type { ImageProvider } from "./image/provider.js";
 import { markAsAiGenerated } from "./lib/png.js";
 import type { FileStorage } from "./lib/storage.js";
@@ -153,7 +153,7 @@ export async function generatePost(deps: PipelineDeps, postId: string): Promise<
     const draft = await ai.draft({ site, topic, research, styleSamples });
     const draftFields = {
       title: clip(draft.title, 120),
-      slug: slugify(draft.slug || draft.title, 50),
+      slug: slugWithKeyword(draft.slug || draft.title, draft.focusKeyword, 50),
       metaDescription: clip(draft.metaDescription, 160),
       focusKeyword: draft.focusKeyword.trim(),
       secondaryKeywords: draft.secondaryKeywords,
