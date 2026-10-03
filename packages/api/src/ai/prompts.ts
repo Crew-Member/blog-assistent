@@ -48,6 +48,31 @@ Regeln:
 - sources: nur Quellen, auf die der Text sich tatsaechlich stuetzt, mit kurzer Notiz, wofuer sie herangezogen wurden.
 - slug: kurz (hoechstens 4 bis 5 Woerter bzw. 50 Zeichen), kleingeschrieben, ohne Umlaute, beginnt mit dem Fokus-Keyword in Schlagwort-Schreibweise (z. B. Keyword "Datenschutz Wettbewerber" -> "datenschutz-wettbewerber-...").`;
 
+export const REVISE_SYSTEM = `${DRAFT_SYSTEM.split("\n\nRegeln:")[0]}
+
+Du ueberarbeitest einen BESTEHENDEN, bereits veroeffentlichten Beitrag der Website. Alle Regeln unten gelten wie bei einem neuen Beitrag, zusaetzlich:
+- Behalte Aufbau, Ton, Ansprache und Kernaussagen des Originals bei, soweit sie richtig und aktuell sind. Schreibe nicht ohne Not um; uebernimm gute Formulierungen.
+- Aktualisiere, was durch die Recherchenotizen belegt ueberholt ist (neue Rechtsprechung, Gesetzesaenderungen, geaenderte Fristen/Betraege), und setze die Wuensche des Nutzers um. Veraltetes ohne Beleg fuer die neue Lage nicht stillschweigend aendern, sondern in unverifiedClaims aufnehmen.
+- Fakten, die nur im Originalbeitrag stehen und in der Recherche weder bestaetigt noch widerlegt werden, darfst du uebernehmen, wenn sie unverdaechtig sind; markiere zweifelhafte in unverifiedClaims.
+- title, metaDescription, slug, focusKeyword gelten fuer die ueberarbeitete Fassung; das Fokus-Keyword des Originals darf beibehalten werden, wenn es passt.
+- changeSummary: 3 bis 8 kurze Stichpunkte (Zeilen mit "- "), was gegenueber dem Original geaendert, ergaenzt oder gestrichen wurde und warum.
+
+Regeln:${DRAFT_SYSTEM.split("\n\nRegeln:")[1] ?? ""}`;
+
+export function revisionBlock(r: { title: string; url: string; html: string; instructions: string }): string {
+  return [
+    `Bestehender Beitrag "${r.title}" (${r.url}), HTML:`,
+    r.html.slice(0, 60000),
+    r.instructions.trim() ? `Wuensche des Nutzers fuer die Ueberarbeitung:\n${r.instructions.trim()}` : "Keine besonderen Wuensche - pruefe auf Aktualitaet, Verstaendlichkeit und SEO und ueberarbeite entsprechend.",
+  ].join("\n");
+}
+
+export function relatedPostsBlock(posts: { title: string; url: string; excerpt: string }[]): string {
+  if (posts.length === 0) return "";
+  const list = posts.map((p) => `- ${p.title} | ${p.url}${p.excerpt ? ` | ${p.excerpt.slice(0, 140)}` : ""}`).join("\n");
+  return `Bestehende Beitraege dieser Website fuer interne Links:\n${list}\nSetze 1 bis 3 interne Links (a href mit GENAU einer URL aus dieser Liste) auf thematisch wirklich passende Beitraege, mit natuerlichem Ankertext im Fliesstext. Passt keiner, setze keinen Link. Erfinde keine URLs.`;
+}
+
 export function topicBlock(topic: TopicProposal): string {
   return [
     `Thema: ${topic.title}`,

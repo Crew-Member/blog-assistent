@@ -49,8 +49,36 @@ export const draftResultSchema = z.object({
   contentHtml: z.string().min(1),
   sources: z.array(z.object({ title: z.string(), url: z.string(), note: z.string() })),
   unverifiedClaims: z.array(z.string()),
+  /** Nur bei Ueberarbeitungen: knappe Liste, was gegenueber dem Original geaendert wurde. */
+  changeSummary: z.string().default(""),
 });
 export type DraftResult = z.infer<typeof draftResultSchema>;
+
+export interface RelatedPost {
+  title: string;
+  url: string;
+  excerpt: string;
+}
+
+export interface RevisionInput {
+  title: string;
+  url: string;
+  /** Bereinigtes HTML des bestehenden Beitrags. */
+  html: string;
+  /** Wunsch des Nutzers, was geaendert werden soll (kann leer sein). */
+  instructions: string;
+}
+
+export interface DraftInput {
+  site: SiteProfile;
+  topic: TopicProposal;
+  research: ResearchResult;
+  styleSamples: StyleSampleInput[];
+  /** Bestehende Beitraege der Website, auf die intern verlinkt werden darf. */
+  relatedPosts?: RelatedPost[];
+  /** Gesetzt, wenn ein bestehender Beitrag ueberarbeitet statt neu geschrieben wird. */
+  revision?: RevisionInput;
+}
 
 export interface StyleSampleInput {
   title: string;
@@ -101,7 +129,7 @@ export type ImagePlan = z.infer<typeof imagePlanSchema>;
 export interface AiService {
   analyze(input: { site: SiteProfile; note: string; documents: AiDocument[] }): Promise<TopicProposal[]>;
   research(input: { site: SiteProfile; topic: TopicProposal }): Promise<ResearchResult>;
-  draft(input: { site: SiteProfile; topic: TopicProposal; research: ResearchResult; styleSamples: StyleSampleInput[] }): Promise<DraftResult>;
+  draft(input: DraftInput): Promise<DraftResult>;
   /** Unabhaengige Pruefung des Entwurfs gegen Recherche und Originalunterlagen; liefert korrigiertes HTML. */
   factCheck(input: { site: SiteProfile; topic: TopicProposal; research: ResearchResult; draft: DraftResult; documents: AiDocument[] }): Promise<FactCheckResult>;
   /** Waehlt aus den vorhandenen WordPress-Kategorien die passenden (hoechstens drei) fuer einen fertigen Beitrag. */

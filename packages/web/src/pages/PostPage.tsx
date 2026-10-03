@@ -357,6 +357,12 @@ export function PostPage({ id }: { id: string }) {
         <StatusChip status={data.status} label={POST_LABEL[data.status]} tones={POST_TONE} />
       </PageHeader>
 
+      {data.revisionOf && (
+        <div className="notice">
+          <Icon name="pen" size={16} /> Überarbeitung von{" "}
+          <a href={data.revisionOf.url} target="_blank" rel="noreferrer noopener">„{data.revisionOf.title}“</a>. Beim Senden an WordPress entsteht ein <strong>neuer Entwurf</strong>; der veröffentlichte Beitrag bleibt unverändert. Übernimm danach die Änderungen in WordPress (oder ersetze den alten Beitrag) – die Änderungsliste steht unten bei den Recherchenotizen.
+        </div>
+      )}
       {data.status !== "DRAFT_READY" && (
         <div className="card stack">
           <Stepper steps={steps} current={stepIndex} failed={data.status === "FAILED"} />

@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { ANALYZE_SYSTEM, CATEGORY_SYSTEM, DRAFT_SYSTEM, IMAGE_PLAN_SYSTEM, FACTCHECK_SYSTEM, RESEARCH_SYSTEM, STYLE_SYSTEM, siteBlock, styleSamplesBlock, topicBlock } from "./prompts.js";
+import { REVISE_SYSTEM, relatedPostsBlock, revisionBlock, ANALYZE_SYSTEM, CATEGORY_SYSTEM, DRAFT_SYSTEM, IMAGE_PLAN_SYSTEM, FACTCHECK_SYSTEM, RESEARCH_SYSTEM, STYLE_SYSTEM, siteBlock, styleSamplesBlock, topicBlock } from "./prompts.js";
 import {
   analyzeResultSchema,
   categorySuggestionSchema,
@@ -11,6 +11,7 @@ import {
   type AiService,
   type CategoryOption,
   type CategorySuggestion,
+  type DraftInput,
   type DraftResult,
   type FactCheckResult,
   type ImagePlan,
@@ -84,8 +85,9 @@ const DRAFT_SCHEMA = {
       },
     },
     unverifiedClaims: stringArray,
+    changeSummary: { type: "string" },
   },
-  required: ["title", "slug", "metaDescription", "focusKeyword", "secondaryKeywords", "excerpt", "contentHtml", "sources", "unverifiedClaims"],
+  required: ["title", "slug", "metaDescription", "focusKeyword", "secondaryKeywords", "excerpt", "contentHtml", "sources", "unverifiedClaims", "changeSummary"],
   additionalProperties: false,
 } as const;
 
@@ -271,7 +273,7 @@ export class ClaudeAiService implements AiService {
     return { notes, sources: [...sources.values()] };
   }
 
-  async draft(input: { site: SiteProfile; topic: TopicProposal; research: ResearchResult; styleSamples: StyleSampleInput[] }): Promise<DraftResult> {
+  async draft(input: DraftInput): Promise<DraftResult> {
     const sourceList = input.research.sources.map((s) => `- ${s.title}: ${s.url}`).join("\n") || "(keine)";
     const content: Anthropic.ContentBlockParam[] = [
       {
@@ -280,15 +282,17 @@ export class ClaudeAiService implements AiService {
           siteBlock(input.site),
           styleSamplesBlock(input.styleSamples),
           topicBlock(input.topic),
+          input.revision ? revisionBlock(input.revision) : "",
           `Recherchenotizen:\n${input.research.notes}`,
           `Gefundene Quellen (nur diese duerfen in sources erscheinen):\n${sourceList}`,
-          "Schreibe jetzt den Beitrag.",
+          relatedPostsBlock(input.relatedPosts ?? []),
+          input.revision ? "Ueberarbeite den bestehenden Beitrag jetzt." : "Schreibe jetzt den Beitrag.",
         ]
           .filter(Boolean)
           .join("\n\n"),
       },
     ];
-    return this.structured(DRAFT_SYSTEM, content, DRAFT_SCHEMA, (v) => draftResultSchema.parse(v));
+    return this.structured(input.revision ? REVISE_SYSTEM : DRAFT_SYSTEM, content, DRAFT_SCHEMA, (v) => draftResultSchema.parse(v));
   }
 
   async factCheck(input: { site: SiteProfile; topic: TopicProposal; research: ResearchResult; draft: DraftResult; documents: AiDocument[] }): Promise<FactCheckResult> {

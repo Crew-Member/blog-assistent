@@ -160,6 +160,8 @@ model Post {
   // Ergebnis des Faktencheck-Durchlaufs: { status, summary, issues[], references[], ranAt } oder { status: "skipped", error }
   factCheck         Json?
   researchNotes     String?
+  // Bei Ueberarbeitungen: { wpPostId, title, url, html, instructions } des bestehenden Beitrags. Das Original wird nie veraendert.
+  revisionSource    Json?
   // Verknuepfung mit dem Entwurf in WordPress (nach "An WordPress senden")
   wpPostId          Int?
   wpEditUrl         String?

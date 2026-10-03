@@ -1,7 +1,8 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { explainAiError } from "./ai/errors.js";
 import type { AiDocument, AiService, DraftResult, FactCheckResult, ResearchResult, SiteProfile, TopicProposal } from "./ai/types.js";
-import { escapeHtml, sanitizePostHtml } from "./lib/html.js";
+import { escapeHtml, sanitizePostHtml, unwrapUnknownInternalLinks } from "./lib/html.js";
+import { fetchSitePosts } from "./lib/wordpress.js";
 import { checkReferences, type ReferenceCheck } from "./lib/references.js";
 import { slugWithKeyword } from "./lib/slug.js";
 import type { ImageProvider } from "./image/provider.js";
@@ -14,6 +15,8 @@ export interface PipelineDeps {
   storage: FileStorage;
   /** Optional: ohne Anbieter gibt es nur Prompts, Stockfoto-Suche und Upload. */
   images?: ImageProvider;
+  /** Fuer Tests austauschbar (Abruf vorhandener Beitraege fuer interne Links). */
+  fetcher?: typeof fetch;
 }
 
 function profileOf(site: { name: string; language: string; audience: string; tone: string; styleGuide: string }): SiteProfile {
@@ -150,7 +153,26 @@ export async function generatePost(deps: PipelineDeps, postId: string): Promise<
     await prisma.post.update({ where: { id: postId }, data: { status: "DRAFTING", researchNotes: research.notes, factCheck: Prisma.DbNull } });
 
     const styleSamples = post.site.styleSamples.map((s) => ({ title: s.title, text: s.text }));
-    const draft = await ai.draft({ site, topic, research, styleSamples });
+    const rev = post.revisionSource as { wpPostId?: number; title?: string; url?: string; html?: string; instructions?: string } | null;
+    const revision = rev ? { title: rev.title ?? "", url: rev.url ?? "", html: sanitizePostHtml(rev.html ?? ""), instructions: rev.instructions ?? "" } : undefined;
+    // Interne Links: vorhandene Beitraege der Website (best effort - ohne Liste gibt es einfach keine internen Links).
+    let relatedPosts: { title: string; url: string; excerpt: string }[] = [];
+    if (post.site.baseUrl) {
+      try {
+        relatedPosts = (await fetchSitePosts(post.site.baseUrl, { count: 30 }, deps.fetcher as never))
+          .filter((p) => p.url && p.url !== revision?.url)
+          .map((p) => ({ title: p.title, url: p.url, excerpt: p.excerpt }));
+      } catch {
+        relatedPosts = [];
+      }
+    }
+    const draft = await ai.draft({ site, topic, research, styleSamples, relatedPosts, ...(revision ? { revision } : {}) });
+    if (post.site.baseUrl) {
+      draft.contentHtml = unwrapUnknownInternalLinks(draft.contentHtml, post.site.baseUrl, relatedPosts.map((p) => p.url));
+    }
+    if (draft.changeSummary.trim()) {
+      await prisma.post.update({ where: { id: postId }, data: { researchNotes: `Änderungen gegenüber dem Original:\n${draft.changeSummary.trim()}\n\n${research.notes}` } });
+    }
     const draftFields = {
       title: clip(draft.title, 120),
       slug: slugWithKeyword(draft.slug || draft.title, draft.focusKeyword, 50),

@@ -4,6 +4,7 @@ import { useHashRoute } from "./hooks";
 import { HomePage } from "./pages/HomePage";
 import { Login } from "./pages/Login";
 import { PostPage } from "./pages/PostPage";
+import { RevisePage } from "./pages/RevisePage";
 import { SitesPage } from "./pages/SitesPage";
 import { SubmissionPage } from "./pages/SubmissionPage";
 import { Icon, Logo, SkeletonPage } from "./ui";
@@ -25,6 +26,7 @@ export function App() {
   const [, section, id] = hash.split("/");
   let page = <HomePage />;
   if (section === "sites") page = <SitesPage />;
+  else if (section === "revise") page = <RevisePage />;
   else if (section === "submissions" && id) page = <SubmissionPage key={id} id={id} />;
   else if (section === "posts" && id) page = <PostPage key={id} id={id} />;
   const inContent = !section || section === "submissions" || section === "posts";
@@ -38,6 +40,7 @@ export function App() {
         </a>
         <nav aria-label="Hauptnavigation">
           <a href="#/" className={inContent ? "active" : ""}><Icon name="file" /> <span className="nav-label">Uploads &amp; Beiträge</span></a>
+          <a href="#/revise" className={section === "revise" ? "active" : ""}><Icon name="pen" /> <span className="nav-label">Überarbeiten</span></a>
           <a href="#/sites" className={section === "sites" ? "active" : ""}><Icon name="globe" /> <span className="nav-label">Websites</span></a>
         </nav>
         <button

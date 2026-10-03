@@ -15,7 +15,7 @@ import { sanitizePostHtml } from "./lib/html.js";
 import { seoChecks } from "./lib/seo.js";
 import { slugify } from "./lib/slug.js";
 import { decryptSecret, encryptSecret } from "./lib/secrets.js";
-import { fetchWordPressPosts } from "./lib/wordpress.js";
+import { fetchSitePost, fetchSitePosts, fetchWordPressPosts } from "./lib/wordpress.js";
 import { WordPressClient, WordPressError, type WpDraftInput } from "./lib/wp-client.js";
 import { markAsAiGenerated, sniffImageType } from "./lib/png.js";
 import type { ImageProvider } from "./image/provider.js";
@@ -493,6 +493,57 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     return reply.code(201).send(post);
   });
 
+  // --- Bestehende Beitraege ueberarbeiten --------------------------------
+  // Liste der veroeffentlichten Beitraege einer Website (oeffentliche REST-API), optional mit Suche.
+  app.get<{ Params: { id: string }; Querystring: { search?: string } }>("/api/sites/:id/wp-posts", async (request, reply) => {
+    const site = await prisma.site.findUnique({ where: { id: request.params.id }, select: { baseUrl: true } });
+    if (!site) return reply.code(404).send({ error: "Website nicht gefunden" });
+    if (!site.baseUrl) return reply.code(400).send({ error: "Für die Website ist keine Adresse hinterlegt" });
+    try {
+      return await fetchSitePosts(site.baseUrl, { search: request.query.search, count: 20 }, fetcher);
+    } catch (error) {
+      return reply.code(502).send({ error: `Beiträge konnten nicht geladen werden: ${error instanceof Error ? error.message : String(error)}` });
+    }
+  });
+
+  // Legt eine Ueberarbeitung als NEUEN Beitragsentwurf an; der bestehende Beitrag in WordPress bleibt unveraendert.
+  app.post<{ Params: { id: string } }>("/api/sites/:id/revisions", async (request, reply) => {
+    const body = z.object({ wpPostId: z.number().int().positive(), instructions: z.string().max(3000).default("") }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "Ungültige Eingabe" });
+    const site = await prisma.site.findUnique({ where: { id: request.params.id }, select: { id: true, baseUrl: true } });
+    if (!site) return reply.code(404).send({ error: "Website nicht gefunden" });
+    if (!site.baseUrl) return reply.code(400).send({ error: "Für die Website ist keine Adresse hinterlegt" });
+    let original;
+    try {
+      original = await fetchSitePost(site.baseUrl, body.data.wpPostId, fetcher);
+    } catch (error) {
+      return reply.code(502).send({ error: `Beitrag konnte nicht geladen werden: ${error instanceof Error ? error.message : String(error)}` });
+    }
+    const html = sanitizePostHtml(original.html);
+    const text = stripHtml(original.html);
+    const post = await prisma.$transaction(async (tx) => {
+      const submission = await tx.submission.create({ data: { siteId: site.id, note: `Überarbeitung: ${original.title}`.slice(0, 300), status: "ANALYZED" } });
+      const topic = await tx.topic.create({
+        data: {
+          submissionId: submission.id,
+          title: original.title,
+          angle: body.data.instructions.trim() || "Bestehenden Beitrag auf Aktualität, Verständlichkeit und SEO prüfen und überarbeiten",
+          summary: `Überarbeitung des bestehenden Beitrags „${original.title}“ (${original.url}).\n\n${text.slice(0, 4000)}`,
+          keyFacts: [],
+          keywords: [],
+        },
+      });
+      return tx.post.create({
+        data: {
+          siteId: site.id,
+          topicId: topic.id,
+          revisionSource: { wpPostId: original.id, title: original.title, url: original.url, html, instructions: body.data.instructions.trim() },
+        },
+      });
+    });
+    return reply.code(201).send(post);
+  });
+
   app.get("/api/posts", async () =>
     prisma.post.findMany({
       orderBy: { createdAt: "desc" },
@@ -510,8 +561,10 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     const seo = post.status === "DRAFT_READY"
       ? seoChecks({ title: post.title ?? "", slug: post.slug ?? "", metaDescription: post.metaDescription ?? "", focusKeyword: post.focusKeyword ?? "", contentHtml: post.contentHtml ?? "" })
       : [];
-    const { image, ...rest } = post;
-    return { ...rest, image: image ? publicImage(image) : null, seoChecks: seo };
+    const { image, revisionSource, ...rest } = post;
+    const rev = revisionSource as { wpPostId?: number; title?: string; url?: string; instructions?: string } | null;
+    const revisionOf = rev ? { wpPostId: rev.wpPostId ?? 0, title: rev.title ?? "", url: rev.url ?? "", instructions: rev.instructions ?? "" } : null;
+    return { ...rest, revisionOf, image: image ? publicImage(image) : null, seoChecks: seo };
   });
 
   app.put<{ Params: { id: string } }>("/api/posts/:id", async (request, reply) => {

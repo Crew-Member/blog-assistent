@@ -8,7 +8,7 @@ import { FakeAiService } from "./ai/fake.js";
 import { FakeImageProvider } from "./image/fake.js";
 import type { ImageProvider } from "./image/provider.js";
 import { isPng, makePlaceholderPng, readChunks } from "./lib/png.js";
-import type { AiService } from "./ai/types.js";
+import type { AiService, DraftInput } from "./ai/types.js";
 import { loadConfig } from "./config.js";
 import { buildMsg } from "./lib/msgfixture.testutil.js";
 import { FileStorage } from "./lib/storage.js";
@@ -58,7 +58,7 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     ai = service;
     const storage = new FileStorage(dir);
     app = buildServer({ config, prisma, storage, ai, images: imageProvider, fetcher: wpFetcher });
-    worker = new Worker({ prisma, ai, storage, images: imageProvider });
+    worker = new Worker({ prisma, ai, storage, images: imageProvider, fetcher: wpFetcher });
     await app.ready();
     const login = await app.inject({ method: "POST", url: "/api/auth/login", payload: { password: "geheim-passwort" } });
     expect(login.statusCode).toBe(200);
@@ -279,6 +279,53 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     const blocked = await app.inject({ method: "POST", url: `/api/sites/${internal}/style-samples/import-wordpress`, headers: { cookie } });
     expect(blocked.statusCode).toBe(502);
     expect(blocked.json().error).toContain("intern");
+  });
+
+  it("ueberarbeitet einen bestehenden Beitrag als neuen Entwurf und setzt nur bekannte interne Links", async () => {
+    const original = '<!-- wp:paragraph --><p>Alter Text mit Fakt.</p><!-- /wp:paragraph --><script>x()</script>';
+    wpFetcher = (async (url: string) => {
+      const u = new URL(url);
+      if (u.pathname === "/wp-json/wp/v2/posts/7") return new Response(JSON.stringify({ id: 7, title: { rendered: "Alter Beitrag" }, link: "https://93.184.216.34/alt/", date: "2024-01-01T00:00:00", excerpt: { rendered: "" }, content: { rendered: original } }));
+      if (u.pathname === "/wp-json/wp/v2/posts")
+        return new Response(JSON.stringify([
+          { id: 7, title: { rendered: "Alter Beitrag" }, link: "https://93.184.216.34/alt/", date: "", excerpt: { rendered: "" } },
+          { id: 8, title: { rendered: "Anderer Beitrag" }, link: "https://93.184.216.34/anderer/", date: "", excerpt: { rendered: "<p>Auszug</p>" } },
+        ]));
+      return new Response("[]");
+    }) as typeof fetch;
+    let seen: DraftInput | undefined;
+    const fake = new FakeAiService();
+    await setup(fakeWith({
+      research: fake.research.bind(fake),
+      draft: async (input) => {
+        seen = input;
+        return { ...(await fake.draft(input)), contentHtml: '<p>Neu <a href="https://93.184.216.34/anderer/">gut</a> und <a href="https://93.184.216.34/erfunden/">schlecht</a> und <a href="https://extern.example/x">extern</a></p>', changeSummary: "- Fakt aktualisiert" };
+      },
+    }));
+    const siteId = (await app.inject({ method: "POST", url: "/api/sites", headers: { cookie }, payload: { name: "S", baseUrl: "https://93.184.216.34" } })).json().id as string;
+
+    const list = await app.inject({ method: "GET", url: `/api/sites/${siteId}/wp-posts?search=alt`, headers: { cookie } });
+    expect(list.json().map((p: { id: number }) => p.id)).toEqual([7, 8]);
+
+    const created = await app.inject({ method: "POST", url: `/api/sites/${siteId}/revisions`, headers: { cookie }, payload: { wpPostId: 7, instructions: "Neues Urteil ergaenzen" } });
+    expect(created.statusCode).toBe(201);
+    await worker.tick();
+
+    expect(seen?.revision?.title).toBe("Alter Beitrag");
+    expect(seen?.revision?.html).not.toContain("script");
+    expect(seen?.revision?.html).not.toContain("wp:paragraph");
+    expect(seen?.revision?.instructions).toBe("Neues Urteil ergaenzen");
+    expect(seen?.relatedPosts?.map((p) => p.url)).toEqual(["https://93.184.216.34/anderer/"]);
+
+    const post = (await app.inject({ method: "GET", url: `/api/posts/${created.json().id}`, headers: { cookie } })).json();
+    expect(post.status).toBe("DRAFT_READY");
+    expect(post.wpPostId).toBeNull();
+    expect(post.revisionOf).toMatchObject({ wpPostId: 7, title: "Alter Beitrag" });
+    expect(post.revisionSource).toBeUndefined();
+    expect(post.contentHtml).toContain('href="https://93.184.216.34/anderer/"');
+    expect(post.contentHtml).not.toContain("erfunden");
+    expect(post.contentHtml).toContain("extern.example");
+    expect(post.researchNotes).toContain("Fakt aktualisiert");
   });
 
   it("gibt die gewuenschte Anzahl an den WordPress-Import weiter", async () => {

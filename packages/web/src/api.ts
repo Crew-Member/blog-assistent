@@ -117,7 +117,17 @@ export interface PostImage {
   updatedAt: string;
 }
 
+export interface SitePostSummary {
+  id: number;
+  title: string;
+  url: string;
+  date: string;
+  excerpt: string;
+}
+
 export interface PostDetail {
+  /** Gesetzt, wenn der Beitrag eine Überarbeitung eines bestehenden WordPress-Beitrags ist. */
+  revisionOf: { wpPostId: number; title: string; url: string; instructions: string } | null;
   id: string;
   status: PostStatus;
   error: string | null;
