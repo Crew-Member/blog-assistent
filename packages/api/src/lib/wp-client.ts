@@ -4,6 +4,8 @@ export class WordPressError extends Error {
   constructor(
     message: string,
     readonly status?: number,
+    /** Bei "term_exists": ID des bereits vorhandenen Begriffs. */
+    readonly termId?: number,
   ) {
     super(message);
   }
@@ -108,7 +110,11 @@ export class WordPressClient {
     } catch {
       if (res.ok) throw new WordPressError("WordPress liefert keine gültige REST-Antwort (Permalinks, Sicherheits-Plugin oder Firewall?).", res.status);
     }
-    if (!res.ok) throw new WordPressError(explainStatus(res.status, data), res.status);
+    if (!res.ok) {
+      const body = data as { code?: string; data?: { term_id?: number } } | undefined;
+      const termId = body?.code === "term_exists" && typeof body.data?.term_id === "number" ? body.data.term_id : undefined;
+      throw new WordPressError(explainStatus(res.status, data), res.status, termId);
+    }
     return data as T;
   }
 
@@ -146,6 +152,10 @@ export class WordPressClient {
       try {
         ids.push((await this.request<{ id: number }>("/wp-json/wp/v2/categories", { method: "POST", body: { name } })).id);
       } catch (error) {
+        if (error instanceof WordPressError && error.termId) {
+          ids.push(error.termId);
+          continue;
+        }
         if (error instanceof WordPressError && error.status === 403) {
           throw new WordPressError(`Die neue Kategorie „${name}“ konnte nicht angelegt werden: Der WordPress-Benutzer darf keine Kategorien verwalten. Bitte die Kategorie in WordPress selbst anlegen oder einen Benutzer mit der Rolle Redakteur verwenden.`, 403);
         }
@@ -165,8 +175,12 @@ export class WordPressClient {
         ids.push(exact.id);
         continue;
       }
-      const created = await this.request<{ id: number }>("/wp-json/wp/v2/tags", { method: "POST", body: { name } });
-      ids.push(created.id);
+      try {
+        ids.push((await this.request<{ id: number }>("/wp-json/wp/v2/tags", { method: "POST", body: { name } })).id);
+      } catch (error) {
+        if (error instanceof WordPressError && error.termId) ids.push(error.termId);
+        else throw error;
+      }
     }
     return ids;
   }

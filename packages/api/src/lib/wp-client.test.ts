@@ -92,6 +92,17 @@ describe("WordPressClient", () => {
     expect(calls[1]?.body?.status).toBe("draft");
   });
 
+  it("uebernimmt die ID, wenn WordPress meldet, dass der Begriff schon existiert", async () => {
+    const exists = { status: 400, body: { code: "term_exists", message: "Ein Begriff mit dem angegebenen Namen existiert bereits in dieser Taxonomie.", data: { status: 400, term_id: 12 } } };
+    const { client } = wp({
+      "POST /wp-json/wp/v2/categories": exists,
+      "GET /wp-json/wp/v2/tags": { body: [] },
+      "POST /wp-json/wp/v2/tags": exists,
+    });
+    expect(await client.ensureCategories(["Datenschutz & Recht"], [])).toEqual([12]);
+    expect(await client.ensureTags(["Löschkonzept"])).toEqual([12]);
+  });
+
   it("verwendet vorhandene Schlagwoerter und legt fehlende an", async () => {
     const { client, calls } = wp({
       "GET /wp-json/wp/v2/tags": [{ body: [{ id: 5, name: "DSGVO" }] }, { body: [] }],
