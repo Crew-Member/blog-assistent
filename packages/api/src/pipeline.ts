@@ -4,6 +4,7 @@ import type { AiDocument, AiService, DraftResult, FactCheckResult, ResearchResul
 import { escapeHtml, sanitizePostHtml, applyLinkPolicy } from "./lib/html.js";
 import { fetchSitePosts } from "./lib/wordpress.js";
 import { parsePreferredLinks } from "./lib/links.js";
+import { fetchPrimarySources } from "./lib/sources.js";
 import { checkReferences, type ReferenceCheck } from "./lib/references.js";
 import { slugWithKeyword } from "./lib/slug.js";
 import type { ImageProvider } from "./image/provider.js";
@@ -95,6 +96,8 @@ export interface StoredFactCheck {
   summary: string;
   issues: FactCheckResult["issues"];
   references: Pick<ReferenceCheck, "kind" | "text" | "found">[];
+  /** Frei zugaengliche Primaerquellen (Gerichte, Gesetze, Behoerden), die fuer die Pruefung abgerufen wurden. */
+  sourcesChecked?: { url: string; ok: boolean; reason?: string }[];
   ranAt: string;
   error?: string;
 }
@@ -195,7 +198,13 @@ export async function generatePost(deps: PipelineDeps, postId: string): Promise<
       data: { ...draftFields, status: "FACTCHECKING", contentHtml: assemblePostHtml(draft.contentHtml, post.site.disclaimer, post.site.closingHtml), unverifiedClaims: draft.unverifiedClaims },
     });
 
-    const documents = await loadAiDocuments(deps, post.topic.submissionId);
+    const uploaded = await loadAiDocuments(deps, post.topic.submissionId);
+    // Primaerquellen direkt abrufen: Quellen aus der Recherche und im Entwurf verlinkte amtliche Seiten.
+    const hrefs = [...draft.contentHtml.matchAll(/href="([^"]+)"/g)].map((m) => (m[1] ?? "").replace(/&amp;/g, "&"));
+    const primary = await fetchPrimarySources([...research.sources.map((s) => s.url), ...draft.sources.map((s) => s.url), ...hrefs], deps.fetcher as never).catch(() => []);
+    const primaryDocs = primary.flatMap((p) => (p.document ? [p.document] : []));
+    const documents = [...uploaded, ...primaryDocs];
+    const sourcesChecked = primary.map((p) => ({ url: p.url, ok: p.ok, ...(p.reason ? { reason: p.reason } : {}) }));
     const evidence = [
       research.notes,
       topic.summary,
@@ -206,7 +215,8 @@ export async function generatePost(deps: PipelineDeps, postId: string): Promise<
 
     try {
       const check = await ai.factCheck({ site, topic, research, draft, documents, internalLinks });
-      const { html: checked, stored, unverified } = evaluateFactCheck(draft, check, evidence);
+      const { html: checked, stored: base, unverified } = evaluateFactCheck(draft, check, evidence);
+      const stored: StoredFactCheck = { ...base, ...(sourcesChecked.length ? { sourcesChecked } : {}) };
       const html = applyLinkPolicy(checked, post.site.baseUrl, knownInternal);
       await prisma.post.update({
         where: { id: postId },

@@ -36,6 +36,19 @@ function FactCheckPanel({ check, claims }: { check: FactCheck; claims: string[] 
           {missing.length > 0 && <> Nicht wiederzufinden: {missing.map((r) => `${REF_LABEL[r.kind]} ${r.text}`).join("; ")}</>}
         </p>
       )}
+      {check.sourcesChecked && check.sourcesChecked.length > 0 && (
+        <details>
+          <summary>Primärquellen direkt geprüft: {check.sourcesChecked.filter((q) => q.ok).length} von {check.sourcesChecked.length} abgerufen</summary>
+          <ul>
+            {check.sourcesChecked.map((q) => (
+              <li key={q.url}>
+                <a href={q.url} target="_blank" rel="noreferrer noopener">{q.url}</a>{" "}
+                <span className="muted">{q.ok ? "– abgerufen und für die Prüfung verwendet" : `– nicht verwendet (${q.reason ?? "unbekannt"})`}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       {claims.length > 0 && (
         <>
           <strong>Offen – bitte prüfen:</strong>

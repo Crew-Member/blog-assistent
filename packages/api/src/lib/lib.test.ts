@@ -140,3 +140,32 @@ describe("applyLinkPolicy", () => {
     expect(out.match(/gesetze-im-internet\.de/g)).toHaveLength(1);
   });
 });
+
+describe("fetchPrimarySources", () => {
+  it("ruft nur freie Primaerquellen ab und meldet Fehler je Quelle", async () => {
+    const { fetchPrimarySources } = await import("./sources.js");
+    const page = "<html><body><p>" + "Der Senat hat am 07.11.2019 unter dem Aktenzeichen 9 U 39/18 entschieden. ".repeat(5) + "</p></body></html>";
+    const calls: string[] = [];
+    const fetcher = (async (url: string) => {
+      calls.push(url);
+      if (url.includes("gesetze-im-internet.de")) return new Response(page, { headers: { "content-type": "text/html; charset=utf-8" } });
+      if (url.includes("curia.europa.eu")) return new Response("nope", { status: 404 });
+      return new Response("x");
+    }) as never;
+    const result = await fetchPrimarySources(
+      ["https://www.gesetze-im-internet.de/dsgvo/", "https://curia.europa.eu/x", "https://www.haufe.de/x", "https://beck-online.beck.de/x", "https://www.gesetze-im-internet.de/dsgvo/#a"],
+      fetcher,
+    );
+    expect(result.map((r) => [r.url, r.ok])).toEqual([["https://www.gesetze-im-internet.de/dsgvo/", true], ["https://curia.europa.eu/x", false]]);
+    expect(result[0]?.document?.text).toContain("9 U 39/18");
+    expect(result[1]?.reason).toContain("404");
+    expect(calls.some((c) => c.includes("haufe") || c.includes("beck"))).toBe(false);
+  });
+
+  it("folgt Weiterleitungen nur innerhalb vertrauenswuerdiger Quellen", async () => {
+    const { fetchPrimarySources } = await import("./sources.js");
+    const fetcher = (async (url: string) => (url.includes("gesetze-im-internet") ? new Response(null, { status: 302, headers: { location: "https://www.haufe.de/umleitung" } }) : new Response("x"))) as never;
+    const [r] = await fetchPrimarySources(["https://www.gesetze-im-internet.de/a"], fetcher);
+    expect(r?.ok).toBe(false);
+  });
+});

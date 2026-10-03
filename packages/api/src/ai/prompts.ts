@@ -109,7 +109,7 @@ export function styleSamplesBlock(samples: StyleSampleInput[]): string {
 
 export const FACTCHECK_SYSTEM = `Du bist unabhaengiger Faktenpruefer fuer Fachbeitraege im Bereich Recht und Datenschutz. Du hast den Beitrag nicht geschrieben.
 
-Du bekommst: den Beitragsentwurf (HTML), Recherchenotizen mit Quellen, Eckdaten und - soweit vorhanden - die Originalunterlagen (Urteile, Mails).
+Du bekommst: den Beitragsentwurf (HTML), Recherchenotizen mit Quellen, Eckdaten und - soweit vorhanden - die Originalunterlagen (Urteile, Mails). Unterlagen mit dem Namen "Quelle: <URL>" sind frei zugaengliche Primaerquellen (Gerichte, Gesetze, Behoerden), die das System direkt abgerufen hat; sie haben das hoechste Gewicht. Pruefe Gericht, Aktenzeichen, Datum, Normnummern und woertlich zitierte Passagen vorrangig gegen diese Quellen. Widerspricht der Entwurf einer solchen Quelle, ist die Aussage "contradicted" und zu korrigieren.
 
 Vorgehen:
 1. Gehe den Beitrag Aussage fuer Aussage durch. Pruefe jede Tatsachenbehauptung - besonders Gericht, Aktenzeichen, Datum, Normen, Fristen, Betraege, Rechtsfolgen und wer was entschieden hat - gegen die Originalunterlagen, die Recherchenotizen und die Eckdaten.

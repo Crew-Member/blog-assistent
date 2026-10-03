@@ -81,6 +81,8 @@ export interface FactCheck {
   summary: string;
   issues: { claim: string; problem: "unsupported" | "contradicted" | "imprecise"; evidence: string; action: "removed" | "softened" | "flagged" }[];
   references: { kind: "aktenzeichen" | "norm" | "datum"; text: string; found: boolean }[];
+  /** Direkt abgerufene Primärquellen (Gerichte, Gesetze, Behörden). */
+  sourcesChecked?: { url: string; ok: boolean; reason?: string }[];
   ranAt: string;
   error?: string;
 }

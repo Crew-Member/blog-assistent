@@ -406,6 +406,23 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect(after.indexOf("Kontakt aufnehmen")).toBeLessThan(after.indexOf("Disclaimer."));
   });
 
+  it("ruft Primaerquellen fuer den Faktencheck ab und weist sie im Ergebnis aus", async () => {
+    const page = "<html><body><p>" + "Gesetzestext mit Aktenzeichen 9 U 39/18 und Datum 07.11.2019. ".repeat(6) + "</p></body></html>";
+    wpFetcher = (async (url: string) => (url.includes("gesetze-im-internet.de") ? new Response(page, { headers: { "content-type": "text/html; charset=utf-8" } }) : new Response("[]"))) as typeof fetch;
+    let docs: string[] = [];
+    const fake = new FakeAiService();
+    await setup(fakeWith({
+      factCheck: async (input) => {
+        docs = input.documents.map((d) => d.filename);
+        return fake.factCheck(input);
+      },
+    }));
+    const postId = await makePost(await createSite());
+    expect(docs).toContain("Quelle: https://www.gesetze-im-internet.de/");
+    const post = (await app.inject({ method: "GET", url: `/api/posts/${postId}`, headers: { cookie } })).json();
+    expect(post.factCheck.sourcesChecked).toEqual([{ url: "https://www.gesetze-im-internet.de/", ok: true }]);
+  });
+
   it("gibt die gewuenschte Anzahl an den WordPress-Import weiter", async () => {
     const urls: string[] = [];
     wpFetcher = (async (url: string) => {
