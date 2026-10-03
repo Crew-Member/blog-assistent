@@ -48,6 +48,8 @@ const siteSchema = z.object({
   tone: z.string().trim().max(2000).default(""),
   styleGuide: z.string().max(20000).default(""),
   disclaimer: z.string().max(4000).default(""),
+  closingHtml: z.string().max(4000).default(""),
+  preferredLinks: z.string().max(4000).default(""),
   labelAiImages: z.boolean().default(true),
   wpUsername: z.string().trim().max(120).default(""),
   // Leer/fehlend = vorhandenes Passwort behalten
@@ -554,8 +556,15 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     const post = await prisma.post.findUnique({ where: { id: request.params.id }, include: { site: true } });
     if (!post) return reply.code(404).send({ error: "Beitrag nicht gefunden" });
     if (post.status !== "DRAFT_READY" || !post.contentHtml) return reply.code(409).send({ error: "Der Entwurf ist noch nicht fertig." });
-    const footer = post.contentHtml.match(FOOTER_RE)?.[0] ?? "";
-    const current = post.contentHtml.replace(FOOTER_RE, "");
+    const footerStamp = post.contentHtml.match(FOOTER_RE)?.[0] ?? "";
+    let current = post.contentHtml.replace(FOOTER_RE, "");
+    // Der feste Schlussabsatz der Website gehoert nicht zum Text, den die KI sieht.
+    const closing = sanitizePostHtml(post.site.closingHtml);
+    let footer = footerStamp;
+    if (closing && current.trimEnd().endsWith(closing)) {
+      current = current.trimEnd().slice(0, -closing.length).trimEnd();
+      footer = `\n${closing}${footerStamp}`;
+    }
     let result;
     try {
       result = await ai.refine({

@@ -70,7 +70,7 @@ export function revisionBlock(r: { title: string; url: string; html: string; ins
 export function relatedPostsBlock(posts: { title: string; url: string; excerpt: string }[]): string {
   if (posts.length === 0) return "";
   const list = posts.map((p) => `- ${p.title} | ${p.url}${p.excerpt ? ` | ${p.excerpt.slice(0, 140)}` : ""}`).join("\n");
-  return `Bestehende Beitraege dieser Website fuer interne Links:\n${list}\nSetze hoechstens 2 interne Links (a href mit GENAU einer URL aus dieser Liste) auf thematisch wirklich passende Beitraege, mit natuerlichem Ankertext im Fliesstext. Passt keiner, setze keinen Link. Erfinde keine URLs.`;
+  return `Bestehende Beitraege dieser Website fuer interne Links:\n${list}\nMit "(bevorzugt)" markierte Seiten wuenscht der Redakteur; verlinke eine davon, wenn sie thematisch vertretbar passt. Setze hoechstens 2 interne Links (a href mit GENAU einer URL aus dieser Liste) auf thematisch wirklich passende Beitraege, mit natuerlichem Ankertext im Fliesstext. Passt keiner, setze keinen Link. Erfinde keine URLs.`;
 }
 
 export const REFINE_SYSTEM = `Du ueberarbeitest den Text eines fertigen Blogbeitrags (Recht/Datenschutz) nach einer Anweisung des Redakteurs.

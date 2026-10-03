@@ -70,3 +70,21 @@ export function isTrustedSource(url: string): boolean {
   if (/^justiz\.[a-z-]+\.de$/.test(host) || /^(olg|lg|ag|vg|ovg|bag|bgh|bsg|lag|lsg|fg|kg)[-.]/.test(host)) return true;
   return [...TRUSTED_EXACT].some((t) => host.endsWith(`.${t}`));
 }
+
+/** Liest die Liste bevorzugter interner Link-Ziele: je Zeile "Titel | https://..." oder nur die Adresse. */
+export function parsePreferredLinks(text: string): { title: string; url: string }[] {
+  const result: { title: string; url: string }[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const parts = line.split("|").map((p) => p.trim());
+    const url = parts.length > 1 ? parts[parts.length - 1]! : parts[0]!;
+    const title = parts.length > 1 ? parts.slice(0, -1).join(" | ") : "";
+    try {
+      const u = new URL(url);
+      if (u.protocol === "http:" || u.protocol === "https:") result.push({ title: title || u.pathname.replace(/\/+$/, "").split("/").pop() || u.hostname, url: u.toString() });
+    } catch {
+      /* Zeile ignorieren */
+    }
+    if (result.length >= 20) break;
+  }
+  return result;
+}

@@ -3,7 +3,7 @@ import { api, type Site, type StyleSample, type WpTestResult } from "../api";
 import { useLoad } from "../hooks";
 import { Chip, EmptyState, Icon, PageHeader } from "../ui";
 
-const EMPTY = { name: "", baseUrl: "", language: "de", audience: "", tone: "", styleGuide: "", disclaimer: "", labelAiImages: true, wpUsername: "", wpAppPassword: "", clearWpPassword: false };
+const EMPTY = { name: "", baseUrl: "", language: "de", audience: "", tone: "", styleGuide: "", disclaimer: "", closingHtml: "", preferredLinks: "", labelAiImages: true, wpUsername: "", wpAppPassword: "", clearWpPassword: false };
 
 function StyleSamples({ site, onApply }: { site: Site; onApply: (tone: string, styleGuide: string) => void }) {
   const { data: samples, reload } = useLoad(() => api.get<StyleSample[]>(`/api/sites/${site.id}/style-samples`));
@@ -175,6 +175,12 @@ function SiteForm({ initial, onSaved, onCancel }: { initial?: Site; onSaved: () 
       <label>Zielgruppe<textarea rows={2} value={form.audience} onChange={set("audience")} placeholder="z. B. Geschäftsführer und Rechtsabteilungen mittelständischer Unternehmen" /></label>
       <label>Tonalität<textarea rows={2} value={form.tone} onChange={set("tone")} placeholder="z. B. sachlich, präzise, Sie-Ansprache, keine Werbesprache" /></label>
       <label>Stilleitfaden / Beispiele<textarea rows={5} value={form.styleGuide} onChange={set("styleGuide")} placeholder="Gewünschte Länge, Gliederung, Besonderheiten – oder Auszüge aus bestehenden Beiträgen als Stilvorlage" /></label>
+      <label>Fester Schlussabsatz <span className="muted">(optional, HTML erlaubt: &lt;a&gt;, &lt;strong&gt;, &lt;em&gt;)</span>
+        <textarea rows={3} value={form.closingHtml} onChange={set("closingHtml")} placeholder='z. B. <p>Haben Sie Fragen zum Datenschutz in Ihrem Unternehmen? <a href="https://…/kontakt/">Sprechen Sie uns an.</a></p>' />
+      </label>
+      <label>Bevorzugte interne Links <span className="muted">(optional, eine Zeile je Seite: „Titel | Adresse“ – die KI verlinkt sie, wo es passt)</span>
+        <textarea rows={3} value={form.preferredLinks} onChange={set("preferredLinks")} placeholder={"Datenschutzberatung | https://…/leistungen/datenschutz/\nKontakt | https://…/kontakt/"} />
+      </label>
       <label>Disclaimer (wird unter jeden Beitrag gesetzt)<textarea rows={3} value={form.disclaimer} onChange={set("disclaimer")} /></label>
       <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
         <input type="checkbox" style={{ width: "auto" }} checked={form.labelAiImages} onChange={(e) => setForm({ ...form, labelAiImages: e.target.checked })} />
@@ -214,6 +220,8 @@ export function SitesPage() {
                   <div className="chips">
                     {site.hasWpPassword && site.wpUsername ? <Chip tone="success" icon="check">WordPress verbunden ({site.wpUsername})</Chip> : <Chip tone="neutral" icon="alert">WordPress nicht eingerichtet</Chip>}
                     <Chip tone={site.disclaimer ? "success" : "warn"} icon={site.disclaimer ? "check" : "alert"}>{site.disclaimer ? "Disclaimer hinterlegt" : "Kein Disclaimer"}</Chip>
+                    {site.closingHtml && <Chip tone="info" icon="check">Schlussabsatz</Chip>}
+                    {site.preferredLinks.trim() && <Chip tone="info" icon="check">Wunschlinks</Chip>}
                     {site.labelAiImages && <Chip tone="info" icon="image">KI-Bilder werden gekennzeichnet</Chip>}
                   </div>
                 </div>

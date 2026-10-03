@@ -3,6 +3,7 @@ import { explainAiError } from "./ai/errors.js";
 import type { AiDocument, AiService, DraftResult, FactCheckResult, ResearchResult, SiteProfile, TopicProposal } from "./ai/types.js";
 import { escapeHtml, sanitizePostHtml, applyLinkPolicy } from "./lib/html.js";
 import { fetchSitePosts } from "./lib/wordpress.js";
+import { parsePreferredLinks } from "./lib/links.js";
 import { checkReferences, type ReferenceCheck } from "./lib/references.js";
 import { slugWithKeyword } from "./lib/slug.js";
 import type { ImageProvider } from "./image/provider.js";
@@ -74,8 +75,9 @@ export async function analyzeSubmission(deps: PipelineDeps, submissionId: string
   }
 }
 
-export function assemblePostHtml(contentHtml: string, disclaimer: string, now = new Date()): string {
-  const body = sanitizePostHtml(contentHtml);
+export function assemblePostHtml(contentHtml: string, disclaimer: string, closingHtml = "", now = new Date()): string {
+  const closing = sanitizePostHtml(closingHtml);
+  const body = closing ? `${sanitizePostHtml(contentHtml)}\n${closing}` : sanitizePostHtml(contentHtml);
   const stand = now.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Berlin" });
   const notes = [`Stand: ${stand}.`, disclaimer.trim()].filter(Boolean).join(" ");
   return `${body}\n<p><em>${escapeHtml(notes)}</em></p>`;
@@ -166,6 +168,9 @@ export async function generatePost(deps: PipelineDeps, postId: string): Promise<
         relatedPosts = [];
       }
     }
+    // Vom Nutzer hinterlegte Wunschziele (z. B. Leistungsseiten) stehen vorn und gelten ebenfalls als bekannte Seiten.
+    const preferred = parsePreferredLinks(post.site.preferredLinks).map((l) => ({ title: `${l.title} (bevorzugt)`, url: l.url, excerpt: "" }));
+    relatedPosts = [...preferred, ...relatedPosts.filter((p) => !preferred.some((x) => x.url === p.url))];
     const draft = await ai.draft({ site, topic, research, styleSamples, relatedPosts, ...(revision ? { revision } : {}) });
     // Bekannte interne Ziele: Liste der Website plus Links, die schon im Originalbeitrag standen.
     const originalLinks = [...(revision?.html ?? "").matchAll(/href="([^"]+)"/g)].map((m) => (m[1] ?? "").replace(/&amp;/g, "&"));
@@ -187,7 +192,7 @@ export async function generatePost(deps: PipelineDeps, postId: string): Promise<
     // Entwurf sofort sichern: schlaegt der Faktencheck fehl, geht die Arbeit nicht verloren.
     await prisma.post.update({
       where: { id: postId },
-      data: { ...draftFields, status: "FACTCHECKING", contentHtml: assemblePostHtml(draft.contentHtml, post.site.disclaimer), unverifiedClaims: draft.unverifiedClaims },
+      data: { ...draftFields, status: "FACTCHECKING", contentHtml: assemblePostHtml(draft.contentHtml, post.site.disclaimer, post.site.closingHtml), unverifiedClaims: draft.unverifiedClaims },
     });
 
     const documents = await loadAiDocuments(deps, post.topic.submissionId);
@@ -205,7 +210,7 @@ export async function generatePost(deps: PipelineDeps, postId: string): Promise<
       const html = applyLinkPolicy(checked, post.site.baseUrl, knownInternal);
       await prisma.post.update({
         where: { id: postId },
-        data: { status: "DRAFT_READY", error: null, contentHtml: assemblePostHtml(html, post.site.disclaimer), unverifiedClaims: unverified, factCheck: stored as unknown as Prisma.InputJsonValue },
+        data: { status: "DRAFT_READY", error: null, contentHtml: assemblePostHtml(html, post.site.disclaimer, post.site.closingHtml), unverifiedClaims: unverified, factCheck: stored as unknown as Prisma.InputJsonValue },
       });
     } catch (error) {
       const stored: StoredFactCheck = { status: "skipped", summary: "Der Faktencheck konnte nicht durchgeführt werden – der Entwurf ist ungeprüft.", issues: [], references: [], ranAt: new Date().toISOString(), error: errorMessage(error) };

@@ -19,6 +19,10 @@ model Site {
   styleGuide String   @default("")
   // Wird (nicht durch die KI, sondern im Code) unter jeden Beitrag gesetzt.
   disclaimer String   @default("")
+  // Fester Schlussabsatz (HTML: a, strong, em), wird vor dem Disclaimer angehaengt - nicht von der KI geschrieben.
+  closingHtml String  @default("")
+  // Bevorzugte interne Link-Ziele, eine pro Zeile: "Titel | https://..." oder nur die Adresse.
+  preferredLinks String @default("")
   // WordPress-Zugang (REST-API mit Anwendungspasswort). Das Passwort liegt nur verschluesselt in der DB.
   // KI-generierte Bilder in der Bildunterschrift kennzeichnen ("Bild: KI-generiert")
   labelAiImages Boolean @default(true)

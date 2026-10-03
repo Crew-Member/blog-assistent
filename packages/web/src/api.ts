@@ -37,6 +37,8 @@ export interface Site {
   tone: string;
   styleGuide: string;
   disclaimer: string;
+  closingHtml: string;
+  preferredLinks: string;
   labelAiImages: boolean;
   wpUsername: string;
   hasWpPassword: boolean;

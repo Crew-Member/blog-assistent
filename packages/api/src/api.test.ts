@@ -370,6 +370,42 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect((await app.inject({ method: "POST", url: `/api/posts/${postId}/refine/undo`, headers: { cookie } })).statusCode).toBe(409);
   });
 
+  it("haengt den festen Schlussabsatz vor den Disclaimer, gibt Wunschlinks an die KI und laesst den Schlussabsatz beim Nachschaerfen unberuehrt", async () => {
+    let drafted: DraftInput | undefined;
+    let refined = "";
+    const fake = new FakeAiService();
+    await setup(fakeWith({
+      draft: async (input) => {
+        drafted = input;
+        return fake.draft(input);
+      },
+      refine: async (input) => {
+        refined = input.contentHtml;
+        return { contentHtml: `<p>${"Neu ".repeat(60)}</p>`, note: "ok" };
+      },
+    }));
+    const closing = '<p>Fragen? <a href="https://kirmse.eu/kontakt/">Kontakt aufnehmen</a><script>x()</script></p>';
+    const created = await app.inject({ method: "POST", url: "/api/sites", headers: { cookie }, payload: { name: "S", baseUrl: "https://93.184.216.34", disclaimer: "Disclaimer.", closingHtml: closing, preferredLinks: "Leistung Datenschutz | https://93.184.216.34/leistungen/datenschutz/\nkaputt\nhttps://93.184.216.34/kontakt/" } });
+    expect(created.statusCode).toBe(201);
+    const postId = await makePost(created.json().id);
+
+    expect(drafted?.relatedPosts?.slice(0, 2).map((p) => p.url)).toEqual(["https://93.184.216.34/leistungen/datenschutz/", "https://93.184.216.34/kontakt/"]);
+    expect(drafted?.relatedPosts?.[0]?.title).toContain("bevorzugt");
+
+    const post = (await app.inject({ method: "GET", url: `/api/posts/${postId}`, headers: { cookie } })).json();
+    const html: string = post.contentHtml;
+    expect(html).toContain("Kontakt aufnehmen");
+    expect(html).not.toContain("script");
+    expect(html.indexOf("Kontakt aufnehmen")).toBeLessThan(html.indexOf("Disclaimer."));
+
+    await app.inject({ method: "POST", url: `/api/posts/${postId}/refine`, headers: { cookie }, payload: { instruction: "Neu schreiben" } });
+    expect(refined).not.toContain("Kontakt aufnehmen");
+    const after = (await app.inject({ method: "GET", url: `/api/posts/${postId}`, headers: { cookie } })).json().contentHtml as string;
+    expect(after).toContain("Neu Neu");
+    expect(after).toContain("Kontakt aufnehmen");
+    expect(after.indexOf("Kontakt aufnehmen")).toBeLessThan(after.indexOf("Disclaimer."));
+  });
+
   it("gibt die gewuenschte Anzahl an den WordPress-Import weiter", async () => {
     const urls: string[] = [];
     wpFetcher = (async (url: string) => {
