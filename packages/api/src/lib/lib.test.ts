@@ -102,3 +102,30 @@ describe("parseJsonLoosely", () => {
     expect(() => parseJsonLoosely("<html>nix</html>")).toThrow();
   });
 });
+
+describe("applyLinkPolicy", () => {
+  it("erlaubt nur amtliche Quellen und bekannte interne Seiten und begrenzt die Anzahl", async () => {
+    const { applyLinkPolicy } = await import("./html.js");
+    const html = [
+      '<a href="https://www.gesetze-im-internet.de/dsgvo/art_83.html">Art. 83</a>',
+      '<a href="https://curia.europa.eu/x">EuGH</a>',
+      '<a href="https://www.haufe.de/x">Haufe</a>',
+      '<a href="https://kanzlei-datenschutz.de/y">Wettbewerber</a>',
+      '<a href="https://www.olg-naumburg.de/z">OLG</a>',
+      '<a href="https://www.gesetze-im-internet.de/dsgvo/art_83.html">doppelt</a>',
+      '<a href="https://kirmse.eu/bekannt/">intern</a>',
+      '<a href="https://kirmse.eu/erfunden/">intern2</a>',
+      '<a href="mailto:a@b.de">Mail</a>',
+    ].join(" ");
+    const out = applyLinkPolicy(html, "https://kirmse.eu", ["https://kirmse.eu/bekannt/"]);
+    expect(out).toContain('href="https://www.gesetze-im-internet.de/dsgvo/art_83.html">Art. 83');
+    expect(out).toContain("curia.europa.eu");
+    expect(out).toContain("olg-naumburg.de");
+    expect(out).toContain("kirmse.eu/bekannt");
+    expect(out).toContain("mailto:a@b.de");
+    for (const gone of ["haufe.de", "kanzlei-datenschutz.de", "erfunden"]) expect(out).not.toContain(gone);
+    expect(out).toContain("Haufe");
+    expect(out).toContain(">doppelt</a>".replace(">doppelt</a>", "doppelt")); // Text bleibt
+    expect(out.match(/gesetze-im-internet\.de/g)).toHaveLength(1);
+  });
+});

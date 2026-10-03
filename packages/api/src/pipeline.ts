@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { explainAiError } from "./ai/errors.js";
 import type { AiDocument, AiService, DraftResult, FactCheckResult, ResearchResult, SiteProfile, TopicProposal } from "./ai/types.js";
-import { escapeHtml, sanitizePostHtml, unwrapUnknownInternalLinks } from "./lib/html.js";
+import { escapeHtml, sanitizePostHtml, applyLinkPolicy } from "./lib/html.js";
 import { fetchSitePosts } from "./lib/wordpress.js";
 import { checkReferences, type ReferenceCheck } from "./lib/references.js";
 import { slugWithKeyword } from "./lib/slug.js";
@@ -170,9 +170,8 @@ export async function generatePost(deps: PipelineDeps, postId: string): Promise<
     // Bekannte interne Ziele: Liste der Website plus Links, die schon im Originalbeitrag standen.
     const originalLinks = [...(revision?.html ?? "").matchAll(/href="([^"]+)"/g)].map((m) => (m[1] ?? "").replace(/&amp;/g, "&"));
     const internalLinks = [...relatedPosts.map((p) => ({ title: p.title, url: p.url })), ...originalLinks.map((url) => ({ title: "", url }))];
-    if (post.site.baseUrl) {
-      draft.contentHtml = unwrapUnknownInternalLinks(draft.contentHtml, post.site.baseUrl, internalLinks.map((l) => l.url));
-    }
+    const knownInternal = internalLinks.map((l) => l.url);
+    draft.contentHtml = applyLinkPolicy(draft.contentHtml, post.site.baseUrl, knownInternal);
     if (draft.changeSummary.trim()) {
       await prisma.post.update({ where: { id: postId }, data: { researchNotes: `Änderungen gegenüber dem Original:\n${draft.changeSummary.trim()}\n\n${research.notes}` } });
     }
@@ -202,7 +201,8 @@ export async function generatePost(deps: PipelineDeps, postId: string): Promise<
 
     try {
       const check = await ai.factCheck({ site, topic, research, draft, documents, internalLinks });
-      const { html, stored, unverified } = evaluateFactCheck(draft, check, evidence);
+      const { html: checked, stored, unverified } = evaluateFactCheck(draft, check, evidence);
+      const html = applyLinkPolicy(checked, post.site.baseUrl, knownInternal);
       await prisma.post.update({
         where: { id: postId },
         data: { status: "DRAFT_READY", error: null, contentHtml: assemblePostHtml(html, post.site.disclaimer), unverifiedClaims: unverified, factCheck: stored as unknown as Prisma.InputJsonValue },

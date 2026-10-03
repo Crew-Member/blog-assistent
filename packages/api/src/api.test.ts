@@ -304,7 +304,7 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
       },
       draft: async (input) => {
         seen = input;
-        return { ...(await fake.draft(input)), contentHtml: '<p>Neu <a href="https://93.184.216.34/anderer/">gut</a> und <a href="https://93.184.216.34/erfunden/">schlecht</a> und <a href="https://extern.example/x">extern</a></p>', changeSummary: "- Fakt aktualisiert" };
+        return { ...(await fake.draft(input)), contentHtml: '<p>Neu <a href="https://93.184.216.34/anderer/">gut</a> und <a href="https://93.184.216.34/erfunden/">schlecht</a> und <a href="https://extern.example/x">extern</a> und <a href="https://www.gesetze-im-internet.de/dsgvo/">DSGVO</a></p>', changeSummary: "- Fakt aktualisiert" };
       },
     }));
     const siteId = (await app.inject({ method: "POST", url: "/api/sites", headers: { cookie }, payload: { name: "S", baseUrl: "https://93.184.216.34" } })).json().id as string;
@@ -330,7 +330,8 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect(post.revisionSource).toBeUndefined();
     expect(post.contentHtml).toContain('href="https://93.184.216.34/anderer/"');
     expect(post.contentHtml).not.toContain("erfunden");
-    expect(post.contentHtml).toContain("extern.example");
+    expect(post.contentHtml).not.toContain("extern.example");
+    expect(post.contentHtml).toContain("gesetze-im-internet.de");
     expect(post.researchNotes).toContain("Fakt aktualisiert");
   });
 
