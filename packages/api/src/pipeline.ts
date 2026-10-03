@@ -167,8 +167,11 @@ export async function generatePost(deps: PipelineDeps, postId: string): Promise<
       }
     }
     const draft = await ai.draft({ site, topic, research, styleSamples, relatedPosts, ...(revision ? { revision } : {}) });
+    // Bekannte interne Ziele: Liste der Website plus Links, die schon im Originalbeitrag standen.
+    const originalLinks = [...(revision?.html ?? "").matchAll(/href="([^"]+)"/g)].map((m) => (m[1] ?? "").replace(/&amp;/g, "&"));
+    const internalLinks = [...relatedPosts.map((p) => ({ title: p.title, url: p.url })), ...originalLinks.map((url) => ({ title: "", url }))];
     if (post.site.baseUrl) {
-      draft.contentHtml = unwrapUnknownInternalLinks(draft.contentHtml, post.site.baseUrl, relatedPosts.map((p) => p.url));
+      draft.contentHtml = unwrapUnknownInternalLinks(draft.contentHtml, post.site.baseUrl, internalLinks.map((l) => l.url));
     }
     if (draft.changeSummary.trim()) {
       await prisma.post.update({ where: { id: postId }, data: { researchNotes: `Änderungen gegenüber dem Original:\n${draft.changeSummary.trim()}\n\n${research.notes}` } });
@@ -198,7 +201,7 @@ export async function generatePost(deps: PipelineDeps, postId: string): Promise<
     ];
 
     try {
-      const check = await ai.factCheck({ site, topic, research, draft, documents });
+      const check = await ai.factCheck({ site, topic, research, draft, documents, internalLinks });
       const { html, stored, unverified } = evaluateFactCheck(draft, check, evidence);
       await prisma.post.update({
         where: { id: postId },

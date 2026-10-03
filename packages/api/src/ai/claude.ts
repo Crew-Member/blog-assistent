@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { REVISE_SYSTEM, relatedPostsBlock, revisionBlock, ANALYZE_SYSTEM, CATEGORY_SYSTEM, DRAFT_SYSTEM, IMAGE_PLAN_SYSTEM, FACTCHECK_SYSTEM, RESEARCH_SYSTEM, STYLE_SYSTEM, siteBlock, styleSamplesBlock, topicBlock } from "./prompts.js";
+import { internalLinksBlock, REVISE_SYSTEM, relatedPostsBlock, revisionBlock, ANALYZE_SYSTEM, CATEGORY_SYSTEM, DRAFT_SYSTEM, IMAGE_PLAN_SYSTEM, FACTCHECK_SYSTEM, RESEARCH_SYSTEM, STYLE_SYSTEM, siteBlock, styleSamplesBlock, topicBlock } from "./prompts.js";
 import {
   analyzeResultSchema,
   categorySuggestionSchema,
@@ -295,7 +295,7 @@ export class ClaudeAiService implements AiService {
     return this.structured(input.revision ? REVISE_SYSTEM : DRAFT_SYSTEM, content, DRAFT_SCHEMA, (v) => draftResultSchema.parse(v));
   }
 
-  async factCheck(input: { site: SiteProfile; topic: TopicProposal; research: ResearchResult; draft: DraftResult; documents: AiDocument[] }): Promise<FactCheckResult> {
+  async factCheck(input: { site: SiteProfile; topic: TopicProposal; research: ResearchResult; draft: DraftResult; documents: AiDocument[]; internalLinks?: { title: string; url: string }[] }): Promise<FactCheckResult> {
     const sourceList = input.research.sources.map((s) => `- ${s.title}: ${s.url}`).join("\n") || "(keine)";
     const content: Anthropic.ContentBlockParam[] = [
       ...input.documents.map(documentBlock),
@@ -306,6 +306,7 @@ export class ClaudeAiService implements AiService {
           topicBlock(input.topic),
           `Recherchenotizen:\n${input.research.notes}`,
           `Gefundene Quellen:\n${sourceList}`,
+          internalLinksBlock(input.internalLinks ?? []),
           `Beitragsentwurf (HTML), Titel: ${input.draft.title}\n${input.draft.contentHtml}`,
           "Pruefe den Beitragsentwurf jetzt gegen die Belege oben.",
         ].join("\n\n"),

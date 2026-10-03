@@ -294,9 +294,14 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
       return new Response("[]");
     }) as typeof fetch;
     let seen: DraftInput | undefined;
+    let checkedLinks: string[] = [];
     const fake = new FakeAiService();
     await setup(fakeWith({
       research: fake.research.bind(fake),
+      factCheck: async (input) => {
+        checkedLinks = (input.internalLinks ?? []).map((l) => l.url);
+        return fake.factCheck(input);
+      },
       draft: async (input) => {
         seen = input;
         return { ...(await fake.draft(input)), contentHtml: '<p>Neu <a href="https://93.184.216.34/anderer/">gut</a> und <a href="https://93.184.216.34/erfunden/">schlecht</a> und <a href="https://extern.example/x">extern</a></p>', changeSummary: "- Fakt aktualisiert" };
@@ -316,6 +321,7 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect(seen?.revision?.html).not.toContain("wp:paragraph");
     expect(seen?.revision?.instructions).toBe("Neues Urteil ergaenzen");
     expect(seen?.relatedPosts?.map((p) => p.url)).toEqual(["https://93.184.216.34/anderer/"]);
+    expect(checkedLinks).toContain("https://93.184.216.34/anderer/");
 
     const post = (await app.inject({ method: "GET", url: `/api/posts/${created.json().id}`, headers: { cookie } })).json();
     expect(post.status).toBe("DRAFT_READY");

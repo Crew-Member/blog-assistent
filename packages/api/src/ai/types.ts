@@ -131,7 +131,7 @@ export interface AiService {
   research(input: { site: SiteProfile; topic: TopicProposal }): Promise<ResearchResult>;
   draft(input: DraftInput): Promise<DraftResult>;
   /** Unabhaengige Pruefung des Entwurfs gegen Recherche und Originalunterlagen; liefert korrigiertes HTML. */
-  factCheck(input: { site: SiteProfile; topic: TopicProposal; research: ResearchResult; draft: DraftResult; documents: AiDocument[] }): Promise<FactCheckResult>;
+  factCheck(input: { site: SiteProfile; topic: TopicProposal; research: ResearchResult; draft: DraftResult; documents: AiDocument[]; internalLinks?: { title: string; url: string }[] }): Promise<FactCheckResult>;
   /** Waehlt aus den vorhandenen WordPress-Kategorien die passenden (hoechstens drei) fuer einen fertigen Beitrag. */
   suggestCategories(input: { site: SiteProfile; post: { title: string; excerpt: string; focusKeyword: string; text: string }; categories: CategoryOption[] }): Promise<CategorySuggestion>;
   /** Entwirft Beitragsbild: Bild-Prompt (Englisch), Alt-Text, Bildunterschrift und Suchbegriff fuer Stockfotos. */

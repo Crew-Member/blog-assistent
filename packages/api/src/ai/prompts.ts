@@ -40,7 +40,7 @@ Regeln:
 - Keine erfundenen Aktenzeichen, Daten, Paragrafen oder Zitate.
 - Gib keine individuelle Rechtsberatung; formuliere Handlungsempfehlungen als allgemeine Hinweise. Einen Disclaimer fuegt das System selbst an - schreibe keinen.
 - Struktur: kurzer Einstieg (worum geht es, warum ist es fuer die Zielgruppe relevant), Abschnitte mit aussagekraeftigen Zwischenueberschriften (h2, bei Bedarf h3), am Ende ein Abschnitt "Was Unternehmen jetzt tun sollten" mit konkreten Punkten. Keine h1 (der Titel wird separat gesetzt).
-- contentHtml enthaelt nur diese Tags: h2, h3, p, ul, ol, li, strong, em, blockquote, a. Keine Inline-Styles, kein Markdown. Quellen im Text als Link auf die jeweilige URL.
+- contentHtml enthaelt nur diese Tags: h2, h3, p, ul, ol, li, strong, em, blockquote, a. Keine Inline-Styles, kein Markdown. Quellen im Text als Link auf die jeweilige URL. Schreibe URLs nie als sichtbaren Text oder in Klammern aus, sondern nur als Link (a href) mit einem sprechenden Linktext.
 - Der Fliesstext soll gut lesbar sein, ohne Floskeln und ohne Werbesprache. Laenge etwa 600 bis 1000 Woerter, es sei denn der Stilleitfaden sagt etwas anderes.
 - title: max. 65 Zeichen, enthaelt das Fokus-Keyword woertlich, moeglichst weit vorn. Enthaelt der Inhalt eine konkrete Zahl (Betrag, Frist, Anzahl), darf der Titel sie nennen - nur wenn sie belegt ist. metaDescription: max. 155 Zeichen, enthaelt das Fokus-Keyword woertlich und nennt den Nutzen fuer den Leser. excerpt: 2 bis 3 Saetze.
 - focusKeyword: ein konkreter Suchbegriff aus 2 bis 4 Woertern, wie ihn die Zielgruppe eintippen wuerde, in der Form, in der er im Text vorkommt. secondaryKeywords: 3 bis 6 verwandte Begriffe, die im Text natuerlich vorkommen.
@@ -73,6 +73,12 @@ export function relatedPostsBlock(posts: { title: string; url: string; excerpt: 
   return `Bestehende Beitraege dieser Website fuer interne Links:\n${list}\nSetze 1 bis 3 interne Links (a href mit GENAU einer URL aus dieser Liste) auf thematisch wirklich passende Beitraege, mit natuerlichem Ankertext im Fliesstext. Passt keiner, setze keinen Link. Erfinde keine URLs.`;
 }
 
+export function internalLinksBlock(links: { title: string; url: string }[]): string {
+  if (links.length === 0) return "";
+  const list = links.map((l) => `- ${l.title ? `${l.title} | ` : ""}${l.url}`).join("\n");
+  return `Bekannte Seiten der Website (gepruefte interne Link-Ziele; Links darauf gelten als belegt und werden weder entfernt noch beanstandet):\n${list}`;
+}
+
 export function topicBlock(topic: TopicProposal): string {
   return [
     `Thema: ${topic.title}`,
@@ -102,7 +108,7 @@ Vorgehen:
    - problem: "unsupported" (nicht belegt), "contradicted" (widerspricht den Belegen), "imprecise" (verkuerzt oder uebertrieben, sodass es falsch wirken kann).
    - evidence: kurz, was die Belege tatsaechlich sagen (oder dass nichts dazu steht).
    - action: "removed" (Aussage aus dem Text genommen), "softened" (vorsichtiger formuliert, z. B. "nach Auffassung des Gerichts", "in der Regel"), "flagged" (Text unveraendert, aber der Redakteur muss pruefen - nur wenn die Aussage fuer den Beitrag unverzichtbar ist und du sie nicht entschaerfen kannst).
-4. Korrigiere den Beitrag entsprechend und gib in revisedHtml das vollstaendige HTML zurueck. Aendere nur, was die Pruefung erfordert; Struktur, Stil und belegte Passagen bleiben unveraendert. Erlaubte Tags: h2, h3, p, ul, ol, li, strong, em, blockquote, a. Keine neuen Fakten hinzufuegen. Kein Disclaimer.
+4. Korrigiere den Beitrag entsprechend und gib in revisedHtml das vollstaendige HTML zurueck. Aendere nur, was die Pruefung erfordert; Struktur, Stil und belegte Passagen bleiben unveraendert. Erlaubte Tags: h2, h3, p, ul, ol, li, strong, em, blockquote, a. Keine neuen Fakten hinzufuegen. Kein Disclaimer. Links auf eigene Seiten der Website sind nur dann zu beanstanden, wenn die URL weder in der Liste der bekannten Seiten steht noch in den Belegen vorkommt; alle anderen internen Links bleiben unveraendert.
 5. Entfernte oder entschaerfte Aussagen duerfen keine Luecken im Lesefluss hinterlassen; passe angrenzende Saetze an.
 6. summary: zwei bis drei Saetze fuer den Redakteur - wie belastbar ist der Beitrag, was war auffaellig.
 Wenn alles belegt ist, ist issues leer und revisedHtml identisch mit dem Entwurf. Sei streng, aber erfinde keine Probleme.`;
