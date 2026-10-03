@@ -103,6 +103,17 @@ describe("parseJsonLoosely", () => {
   });
 });
 
+describe("isTrustedSource", () => {
+  it("nimmt beck-online und Wolters Kluwer auf, aber keine Wettbewerber", async () => {
+    const { isTrustedSource } = await import("./links.js");
+    for (const url of ["https://beck-online.beck.de/Dokument?vpath=x", "https://www.wolterskluwer-online.de/x", "https://www.wolterskluwer.com/de", "https://rsw.beck.de/x", "https://www.jurion.de/x"]) {
+      expect(isTrustedSource(url)).toBe(true);
+    }
+    expect(isTrustedSource("https://www.haufe.de/x")).toBe(false);
+    expect(isTrustedSource("https://evil-beck.de/x")).toBe(false);
+  });
+});
+
 describe("applyLinkPolicy", () => {
   it("erlaubt nur amtliche Quellen und bekannte interne Seiten und begrenzt die Anzahl", async () => {
     const { applyLinkPolicy } = await import("./html.js");
