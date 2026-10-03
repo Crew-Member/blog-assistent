@@ -88,7 +88,7 @@ describe("seoChecks", () => {
     slug: "datenschutzverstoesse-konkurrenten-abmahnen",
     metaDescription: "Datenschutzverstöße Konkurrenten: Das OLG Naumburg lässt Abmahnungen zu. Was Unternehmen jetzt wissen und prüfen sollten.",
     focusKeyword: "Datenschutzverstöße Konkurrenten",
-    contentHtml: `<p>Datenschutzverstöße Konkurrenten ${"wort ".repeat(520)}</p><h2>A</h2><h2>B</h2>`,
+    contentHtml: `<p>Datenschutzverstöße Konkurrenten ${"wort ".repeat(520)} Datenschutzverstöße Konkurrenten und Datenschutzverstöße Konkurrenten</p><h2>Datenschutzverstöße Konkurrenten</h2><h2>B</h2>`,
   };
   it("besteht bei sauberem Beitrag", () => {
     expect(seoChecks(good).filter((c) => !c.ok)).toEqual([]);
@@ -97,7 +97,7 @@ describe("seoChecks", () => {
     const failed = seoChecks({ ...good, metaDescription: "x".repeat(200), focusKeyword: "Bußgeldkatalog", contentHtml: "<p>kurz</p>" })
       .filter((c) => !c.ok)
       .map((c) => c.id);
-    expect(failed).toEqual(expect.arrayContaining(["meta-length", "kw-title", "kw-meta", "kw-intro", "kw-slug", "length", "headings"]));
+    expect(failed).toEqual(expect.arrayContaining(["meta-length", "kw-title", "kw-meta", "kw-intro", "kw-slug", "kw-h2", "kw-count", "length", "headings"]));
   });
 });
 

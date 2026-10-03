@@ -42,10 +42,11 @@ Regeln:
 - Struktur: kurzer Einstieg (worum geht es, warum ist es fuer die Zielgruppe relevant), Abschnitte mit aussagekraeftigen Zwischenueberschriften (h2, bei Bedarf h3), am Ende ein Abschnitt "Was Unternehmen jetzt tun sollten" mit konkreten Punkten. Keine h1 (der Titel wird separat gesetzt).
 - contentHtml enthaelt nur diese Tags: h2, h3, p, ul, ol, li, strong, em, blockquote, a. Keine Inline-Styles, kein Markdown. Quellen im Text als Link auf die jeweilige URL.
 - Der Fliesstext soll gut lesbar sein, ohne Floskeln und ohne Werbesprache. Laenge etwa 600 bis 1000 Woerter, es sei denn der Stilleitfaden sagt etwas anderes.
-- title: max. 65 Zeichen, enthaelt das Fokus-Keyword. metaDescription: max. 155 Zeichen, nennt den Nutzen fuer den Leser. excerpt: 2 bis 3 Saetze.
-- focusKeyword: ein konkreter Suchbegriff, der aus dem Thema folgt. secondaryKeywords: 3 bis 6 verwandte Begriffe, die im Text natuerlich vorkommen.
+- title: max. 65 Zeichen, enthaelt das Fokus-Keyword woertlich, moeglichst weit vorn. Enthaelt der Inhalt eine konkrete Zahl (Betrag, Frist, Anzahl), darf der Titel sie nennen - nur wenn sie belegt ist. metaDescription: max. 155 Zeichen, enthaelt das Fokus-Keyword woertlich und nennt den Nutzen fuer den Leser. excerpt: 2 bis 3 Saetze.
+- focusKeyword: ein konkreter Suchbegriff aus 2 bis 4 Woertern, wie ihn die Zielgruppe eintippen wuerde, in der Form, in der er im Text vorkommt. secondaryKeywords: 3 bis 6 verwandte Begriffe, die im Text natuerlich vorkommen.
+- Das Fokus-Keyword muss WOERTLICH (gleiche Schreibweise und Beugung, nicht nur Wortbestandteile) vorkommen: im ersten Satz des Textes, in mindestens einer h2-Zwischenueberschrift und insgesamt mindestens 4-mal im Fliesstext, ohne den Lesefluss zu stoeren. Waehle das Keyword deshalb so, dass es sich grammatisch natuerlich einbauen laesst.
 - sources: nur Quellen, auf die der Text sich tatsaechlich stuetzt, mit kurzer Notiz, wofuer sie herangezogen wurden.
-- slug: kurz, kleingeschrieben, ohne Umlaute.`;
+- slug: kurz (hoechstens 4 bis 5 Woerter bzw. 50 Zeichen), kleingeschrieben, ohne Umlaute, enthaelt die Kernwoerter des Fokus-Keywords.`;
 
 export function topicBlock(topic: TopicProposal): string {
   return [
@@ -101,7 +102,7 @@ export const IMAGE_PLAN_SYSTEM = `Du entwirfst das Beitragsbild fuer einen Fachb
 Liefere:
 - style: "illustration" (stilisierte Vektor-/Flat-Illustration) oder "photo" (fotorealistisch). Wurde ein Stil vorgegeben, halte dich daran; sonst waehle den passenderen - fuer abstrakte Rechts-/Datenschutzthemen meist "illustration".
 - prompt: Ein Bild-Prompt fuer ein Bildgenerierungsmodell, auf ENGLISCH, 40 bis 90 Woerter. Beschreibe Motiv, Komposition (Querformat 3:2, mit ruhigem Bereich fuer einen Titel), Stil, Licht und Farbpalette (professionell, ruhig, dezent; Blau-/Grautoene, ein Akzent).
-- altText: Deutsch, hoechstens 125 Zeichen, beschreibt sachlich, was zu sehen ist (kein "Bild von", keine Keyword-Aufzaehlung).
+- altText: Deutsch, hoechstens 125 Zeichen, beschreibt sachlich, was zu sehen ist (kein "Bild von"). Enthaelt das Fokus-Keyword woertlich, sofern das ohne Verrenkung moeglich ist.
 - caption: Deutsch, eine kurze Bildunterschrift (hoechstens 80 Zeichen) oder leer, wenn keine noetig ist.
 - searchQuery: 2 bis 4 englische Suchbegriffe, mit denen man in einer Stockfoto-Datenbank ein passendes lizenzfreies Bild findet.
 

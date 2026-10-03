@@ -16,12 +16,18 @@ export interface SeoInput {
   contentHtml: string;
 }
 
-const norm = (s: string) => slugify(s, 200).replace(/-/g, " ");
+const norm = (s: string, max = 200) => slugify(s, max).replace(/-/g, " ");
 
 function contains(haystack: string, keyword: string): boolean {
   const h = ` ${norm(haystack)} `;
   const k = norm(keyword);
-  return k.length > 0 && h.includes(` ${k}`);
+  return k.length > 0 && h.includes(` ${k} `);
+}
+
+function countOccurrences(text: string, keyword: string): number {
+  const k = norm(keyword);
+  if (!k) return 0;
+  return ` ${norm(text, text.length + 10)} `.split(` ${k} `).length - 1;
 }
 
 /** Einfache, nachvollziehbare SEO-Pruefungen (keine Ranking-Garantie, nur Hygiene). */
@@ -40,10 +46,15 @@ export function seoChecks(post: SeoInput): SeoCheck[] {
     add("kw-meta", "Fokus-Keyword in der Meta-Description", contains(post.metaDescription, kw), kw);
     add("kw-intro", "Fokus-Keyword im Einstieg (erste 150 Wörter)", contains(firstWords, kw), kw);
     const tokens = norm(kw).split(" ").filter((t) => t.length > 2);
+    const h2s = [...post.contentHtml.matchAll(/<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/g)].map((m) => stripHtml(m[1] ?? ""));
+    add("kw-h2", "Fokus-Keyword in einer Zwischenüberschrift", h2s.some((h) => contains(h, kw)), kw);
+    const count = countOccurrences(text, kw);
+    add("kw-count", "Fokus-Keyword im Text (mindestens 3×)", count >= 3, `${count}× wörtlich im Text`);
     add("kw-slug", "Fokus-Keyword im Slug", tokens.length > 0 && tokens.every((t) => post.slug.split("-").includes(t)), post.slug || "(leer)");
   } else {
     add("kw", "Fokus-Keyword gesetzt", false, "kein Keyword hinterlegt");
   }
+  add("slug-length", "Slug-Länge", post.slug.length > 0 && post.slug.length <= 50, `${post.slug.length} Zeichen (Ziel: höchstens 50)`);
   add("length", "Textlänge", words.length >= 500, `${words.length} Wörter (Ziel: mindestens 500)`);
   add("headings", "Zwischenüberschriften", (post.contentHtml.match(/<h2[\s>]/g) ?? []).length >= 2, `${(post.contentHtml.match(/<h2[\s>]/g) ?? []).length} × h2 (Ziel: mindestens 2)`);
   return checks;
