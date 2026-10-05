@@ -213,3 +213,33 @@ export interface WpTestResult {
   rankMath: boolean;
   categories: number;
 }
+
+export interface RadarFinding {
+  id: string;
+  wpPostId: number;
+  title: string;
+  url: string;
+  publishedAt: string | null;
+  checkedAt: string;
+  verdict: "current" | "update_recommended" | "outdated";
+  summary: string;
+  reasons: string[];
+  sources: { title: string; url: string }[];
+  revisionPostId: string | null;
+}
+
+export interface RadarState {
+  enabled: boolean;
+  lastRunAt: string | null;
+  runRequested: boolean;
+  lastError: string;
+  stats: { checked: number; current: number; dismissed: number };
+  findings: RadarFinding[];
+}
+
+export interface TitleSuggestion {
+  title: string;
+  note: string;
+  length: number;
+  hasKeyword: boolean;
+}

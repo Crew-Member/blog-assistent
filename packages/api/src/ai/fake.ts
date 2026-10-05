@@ -1,4 +1,4 @@
-import type { RefineResult, DraftInput, AiDocument, CategoryOption, CategorySuggestion, ImagePlan, AiService, DraftResult, FactCheckResult, ResearchResult, SiteProfile, StyleDerivation, StyleSampleInput, TopicProposal } from "./types.js";
+import type { FreshnessResult, TitleSuggestions, RefineResult, DraftInput, AiDocument, CategoryOption, CategorySuggestion, ImagePlan, AiService, DraftResult, FactCheckResult, ResearchResult, SiteProfile, StyleDerivation, StyleSampleInput, TopicProposal } from "./types.js";
 
 /** Platzhalter-Implementierung ohne API-Aufrufe - fuer Tests und zum Ausprobieren der Oberflaeche. */
 export class FakeAiService implements AiService {
@@ -43,6 +43,14 @@ export class FakeAiService implements AiService {
 
   async refine(input: { contentHtml: string; instruction: string }): Promise<RefineResult> {
     return { contentHtml: `${input.contentHtml}<p>Platzhalter-Überarbeitung: ${input.instruction.slice(0, 80)}</p>`, note: "Platzhalter-Überarbeitung (AI_PROVIDER=fake)." };
+  }
+
+  async checkFreshness(input: { post: { title: string } }): Promise<FreshnessResult> {
+    return { verdict: "update_recommended", summary: `Platzhalter-Prüfung für „${input.post.title}“ (AI_PROVIDER=fake).`, reasons: ["Platzhalter: neue Entscheidung ergänzen"], sources: [] };
+  }
+
+  async suggestTitles(input: { title: string; focusKeyword: string }): Promise<TitleSuggestions> {
+    return { titles: [1, 2, 3].map((n) => ({ title: `${input.focusKeyword}: Variante ${n}`.slice(0, 65), note: `Platzhalter-Variante ${n}` })) };
   }
 
   async deriveStyle(input: { samples: StyleSampleInput[] }): Promise<StyleDerivation> {

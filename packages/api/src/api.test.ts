@@ -423,6 +423,80 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect(post.factCheck.sourcesChecked).toEqual([{ url: "https://www.gesetze-im-internet.de/", ok: true }]);
   });
 
+  it("liefert Titelvorschlaege und markiert, ob das Fokus-Keyword vorkommt", async () => {
+    await setup(fakeWith({
+      suggestTitles: async () => ({ titles: [{ title: "Beispiel Keyword: Was jetzt gilt", note: "These" }, { title: "Ganz anderer Titel", note: "Frage" }] }),
+    }));
+    const postId = await makePost(await createSite());
+    await app.inject({ method: "PUT", url: `/api/posts/${postId}`, headers: { cookie }, payload: { focusKeyword: "Beispiel Keyword" } });
+    const res = await app.inject({ method: "POST", url: `/api/posts/${postId}/titles`, headers: { cookie } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().titles).toEqual([
+      { title: "Beispiel Keyword: Was jetzt gilt", note: "These", length: 32, hasKeyword: true },
+      { title: "Ganz anderer Titel", note: "Frage", length: 18, hasKeyword: false },
+    ]);
+  });
+
+  it("Aktualisierungsradar: standardmaessig aus, nur bei Aktivierung, prueft aeltere Beitraege und startet Ueberarbeitungen", async () => {
+    const old = "2023-01-10T10:00:00";
+    const young = new Date(Date.now() - 5 * 86_400_000).toISOString().slice(0, 19);
+    const full = (id: number) => ({ id, title: { rendered: `Beitrag ${id}` }, link: `https://93.184.216.34/b${id}/`, date: id === 3 ? young : old, excerpt: { rendered: "" }, content: { rendered: `<p>Inhalt ${id}</p>` } });
+    wpFetcher = (async (url: string) => {
+      const u = new URL(url);
+      const m = /\/posts\/(\d+)$/.exec(u.pathname);
+      if (m) return new Response(JSON.stringify(full(Number(m[1]))));
+      if (u.pathname === "/wp-json/wp/v2/posts") return new Response(JSON.stringify([full(1), full(2), full(3)].map(({ content, ...rest }) => rest)));
+      return new Response("[]");
+    }) as typeof fetch;
+    const checked: string[] = [];
+    await setup(fakeWith({
+      checkFreshness: async (input) => {
+        checked.push(input.post.title);
+        return input.post.title === "Beitrag 1"
+          ? { verdict: "update_recommended", summary: "Neues Urteil.", reasons: ["BGH 2025: neue Linie"], sources: [{ title: "BGH", url: "https://www.bundesgerichtshof.de/x" }] }
+          : { verdict: "current", summary: "Aktuell.", reasons: [], sources: [] };
+      },
+    }));
+    const siteId = (await app.inject({ method: "POST", url: "/api/sites", headers: { cookie }, payload: { name: "S", baseUrl: "https://93.184.216.34" } })).json().id as string;
+
+    // Standard: aus -> nichts geprueft, manuelle Pruefung abgelehnt
+    await worker.tick();
+    expect(checked).toEqual([]);
+    expect((await app.inject({ method: "POST", url: `/api/sites/${siteId}/radar/run`, headers: { cookie } })).statusCode).toBe(409);
+    expect((await app.inject({ method: "GET", url: `/api/sites/${siteId}/radar`, headers: { cookie } })).json().enabled).toBe(false);
+
+    // Einschalten -> naechster Worker-Lauf prueft die zwei aelteren Beitraege (der junge Beitrag 3 nicht)
+    expect((await app.inject({ method: "PUT", url: `/api/sites/${siteId}/radar`, headers: { cookie }, payload: { enabled: true } })).statusCode).toBe(200);
+    await worker.tick();
+    expect(checked.sort()).toEqual(["Beitrag 1", "Beitrag 2"]);
+    const state = (await app.inject({ method: "GET", url: `/api/sites/${siteId}/radar`, headers: { cookie } })).json();
+    expect(state.stats).toMatchObject({ checked: 2, current: 1 });
+    expect(state.findings).toHaveLength(1);
+    expect(state.findings[0]).toMatchObject({ title: "Beitrag 1", verdict: "update_recommended" });
+
+    // Kein erneuter Lauf innerhalb des Intervalls
+    await worker.tick();
+    expect(checked).toHaveLength(2);
+
+    // Ueberarbeitung aus dem Befund starten: Gruende werden zur Anweisung
+    const revised = await app.inject({ method: "POST", url: `/api/radar/findings/${state.findings[0].id}/revise`, headers: { cookie } });
+    expect(revised.statusCode).toBe(201);
+    const post = (await app.inject({ method: "GET", url: `/api/posts/${revised.json().id}`, headers: { cookie } })).json();
+    expect(post.revisionOf.instructions).toContain("BGH 2025: neue Linie");
+
+    // Ausblenden
+    await app.inject({ method: "POST", url: `/api/radar/findings/${state.findings[0].id}/dismiss`, headers: { cookie } });
+    const after = (await app.inject({ method: "GET", url: `/api/sites/${siteId}/radar`, headers: { cookie } })).json();
+    expect(after.findings).toHaveLength(0);
+    expect(after.stats.dismissed).toBe(1);
+
+    // Manuelle Pruefung nur bei eingeschaltetem Radar
+    expect((await app.inject({ method: "POST", url: `/api/sites/${siteId}/radar/run`, headers: { cookie } })).statusCode).toBe(202);
+    await app.inject({ method: "PUT", url: `/api/sites/${siteId}/radar`, headers: { cookie }, payload: { enabled: false } });
+    await worker.tick();
+    expect(checked).toHaveLength(2);
+  });
+
   it("gibt die gewuenschte Anzahl an den WordPress-Import weiter", async () => {
     const urls: string[] = [];
     wpFetcher = (async (url: string) => {

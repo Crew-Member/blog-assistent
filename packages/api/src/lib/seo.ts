@@ -30,6 +30,11 @@ function countOccurrences(text: string, keyword: string): number {
   return ` ${norm(text, text.length + 10)} `.split(` ${k} `).length - 1;
 }
 
+/** Steht das Keyword woertlich (Umlaute/Gross-Kleinschreibung egal) im Text? */
+export function keywordInText(text: string, keyword: string): boolean {
+  return contains(text, keyword);
+}
+
 /** Einfache, nachvollziehbare SEO-Pruefungen (keine Ranking-Garantie, nur Hygiene). */
 export function seoChecks(post: SeoInput): SeoCheck[] {
   const text = stripHtml(post.contentHtml);

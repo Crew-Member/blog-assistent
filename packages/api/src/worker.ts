@@ -1,4 +1,5 @@
 import { analyzeSubmission, generateImage, generatePost, type PipelineDeps } from "./pipeline.js";
+import { RADAR_INTERVAL_DAYS, runRadar } from "./radar.js";
 
 /**
  * Einfacher Hintergrund-Worker: holt Auftraege aus der DB (Status UPLOADED bzw. QUEUED) und arbeitet sie nacheinander ab.
@@ -60,6 +61,12 @@ export class Worker {
           await generateImage(this.deps, imagePostId);
           continue;
         }
+        // Nur wenn sonst nichts ansteht: Aktualisierungsradar (nur fuer Websites, bei denen er eingeschaltet ist).
+        const radarSiteId = await this.claimRadar();
+        if (radarSiteId) {
+          await runRadar(this.deps, radarSiteId);
+          continue;
+        }
         return;
       }
     } finally {
@@ -72,6 +79,17 @@ export class Worker {
     const next = await prisma.submission.findFirst({ where: { status: "UPLOADED" }, orderBy: { createdAt: "asc" }, select: { id: true } });
     if (!next) return undefined;
     const { count } = await prisma.submission.updateMany({ where: { id: next.id, status: "UPLOADED" }, data: { status: "ANALYZING" } });
+    return count === 1 ? next.id : undefined;
+  }
+
+  private async claimRadar(): Promise<string | undefined> {
+    const { prisma } = this.deps;
+    const due = new Date(Date.now() - RADAR_INTERVAL_DAYS * 86_400_000);
+    const where = { radarEnabled: true, baseUrl: { not: "" }, OR: [{ radarRunRequested: true }, { radarLastRunAt: null }, { radarLastRunAt: { lt: due } }] };
+    const next = await prisma.site.findFirst({ where, select: { id: true } });
+    if (!next) return undefined;
+    // Zeitstempel sofort setzen: Auch bei Fehlern oder Absturz kommt der naechste Lauf erst nach dem Intervall (keine Endlosschleife, keine Mehrfachkosten).
+    const { count } = await prisma.site.updateMany({ where: { id: next.id, ...where }, data: { radarRunRequested: false, radarLastRunAt: new Date() } });
     return count === 1 ? next.id : undefined;
   }
 

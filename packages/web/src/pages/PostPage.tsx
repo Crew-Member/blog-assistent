@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { POST_LABEL, api, isBusy, type FactCheck, type PostDetail, type PostImage, type WpPrepare, type WpPublishResult } from "../api";
+import { POST_LABEL, api, isBusy, type FactCheck, type PostDetail, type PostImage, type TitleSuggestion, type WpPrepare, type WpPublishResult } from "../api";
 import { useLoad } from "../hooks";
 import { Chip, Icon, PageHeader, POST_TONE, SkeletonPage, Spinner, Stepper, StatusChip, type Tone } from "../ui";
 
@@ -271,6 +271,45 @@ function RefinePanel({ post, dirty, onDone }: { post: PostDetail; dirty: boolean
   );
 }
 
+function TitleSuggestions({ postId, current, onPick }: { postId: string; current: string; onPick: (title: string) => void }) {
+  const [items, setItems] = useState<TitleSuggestion[]>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  async function load() {
+    setBusy(true);
+    setError(undefined);
+    try {
+      setItems((await api.post<{ titles: TitleSuggestion[] }>(`/api/posts/${postId}/titles`)).titles);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="stack">
+      <div className="row">
+        <button type="button" className="secondary" disabled={busy} onClick={load}>
+          {busy ? <><Spinner /> Titel werden vorgeschlagen …</> : items ? "Neue Titelvorschläge" : "Titelvorschläge ansehen"}
+        </button>
+      </div>
+      {error && <span className="error">{error}</span>}
+      {items && (
+        <div className="list">
+          {items.map((t) => (
+            <button key={t.title} type="button" className={`list-item${t.title === current ? " active" : ""}`} onClick={() => onPick(t.title)} style={{ textAlign: "left" }}>
+              <span><strong>{t.title}</strong> <span className="muted">{t.note}</span></span>
+              <span className="muted">{t.length} Z. · {t.hasKeyword ? "Keyword ✓" : "ohne Keyword"}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: boolean; onDone: () => void }) {
   const [prep, setPrep] = useState<WpPrepare>();
   const [selected, setSelected] = useState<number[]>([]);
@@ -466,6 +505,7 @@ export function PostPage({ id }: { id: string }) {
               <div className="card stack">
                 <div className="card-title"><Icon name="pen" /> Text bearbeiten</div>
                 <label>Titel<input value={form.title} onChange={set("title")} /></label>
+                <TitleSuggestions postId={id} current={form.title} onPick={(title) => { setForm({ ...form, title }); setSaved(false); setDirty(true); }} />
                 <div className="row">
                   <label>Slug<input value={form.slug} onChange={set("slug")} /></label>
                   <label>Fokus-Keyword<input value={form.focusKeyword} onChange={set("focusKeyword")} /></label>

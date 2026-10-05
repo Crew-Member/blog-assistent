@@ -33,6 +33,34 @@ model Site {
   submissions Submission[]
   posts       Post[]
   styleSamples StyleSample[]
+  radarFindings RadarFinding[]
+  // Aktualisierungsradar: prueft woechentlich einige aeltere Beitraege auf neue Rechtsprechung/Gesetzesaenderungen. Standard: aus.
+  radarEnabled      Boolean   @default(false)
+  radarLastRunAt    DateTime?
+  radarRunRequested Boolean   @default(false)
+  radarLastError    String    @default("")
+}
+
+// Ergebnis der Aktualitaetspruefung eines veroeffentlichten Beitrags (je Website und WordPress-Beitrag eines).
+model RadarFinding {
+  id             String   @id @default(cuid())
+  siteId         String
+  site           Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  wpPostId       Int
+  title          String
+  url            String   @default("")
+  publishedAt    DateTime?
+  checkedAt      DateTime @default(now())
+  // current | update_recommended | outdated
+  verdict        String
+  summary        String   @default("")
+  reasons        Json     @default("[]")
+  sources        Json     @default("[]")
+  dismissed      Boolean  @default(false)
+  // Ueberarbeitung, die aus diesem Befund gestartet wurde
+  revisionPostId String?
+
+  @@unique([siteId, wpPostId])
 }
 
 // Beispielbeitrag einer Website als Stilvorlage (importiert aus WordPress oder eingefuegt).

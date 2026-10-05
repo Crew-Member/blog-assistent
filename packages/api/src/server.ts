@@ -13,7 +13,7 @@ import type { Config } from "./config.js";
 import type { FileStorage } from "./lib/storage.js";
 import { detectKind, extractDocument, stripHtml } from "./lib/extract.js";
 import { applyLinkPolicy, sanitizePostHtml, unwrapLinksNotIn } from "./lib/html.js";
-import { seoChecks } from "./lib/seo.js";
+import { keywordInText, seoChecks } from "./lib/seo.js";
 import { slugify } from "./lib/slug.js";
 import { decryptSecret, encryptSecret } from "./lib/secrets.js";
 import { fetchSitePost, fetchSitePosts, fetchWordPressPosts } from "./lib/wordpress.js";
@@ -510,27 +510,25 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
   });
 
   // Legt eine Ueberarbeitung als NEUEN Beitragsentwurf an; der bestehende Beitrag in WordPress bleibt unveraendert.
-  app.post<{ Params: { id: string } }>("/api/sites/:id/revisions", async (request, reply) => {
-    const body = z.object({ wpPostId: z.number().int().positive(), instructions: z.string().max(3000).default("") }).safeParse(request.body);
-    if (!body.success) return reply.code(400).send({ error: "Ungültige Eingabe" });
-    const site = await prisma.site.findUnique({ where: { id: request.params.id }, select: { id: true, baseUrl: true } });
-    if (!site) return reply.code(404).send({ error: "Website nicht gefunden" });
-    if (!site.baseUrl) return reply.code(400).send({ error: "Für die Website ist keine Adresse hinterlegt" });
+  async function createRevision(siteId: string, wpPostId: number, instructions: string) {
+    const site = await prisma.site.findUnique({ where: { id: siteId }, select: { id: true, baseUrl: true } });
+    if (!site) throw new HttpError(404, "Website nicht gefunden");
+    if (!site.baseUrl) throw new HttpError(400, "Für die Website ist keine Adresse hinterlegt");
     let original;
     try {
-      original = await fetchSitePost(site.baseUrl, body.data.wpPostId, fetcher);
+      original = await fetchSitePost(site.baseUrl, wpPostId, fetcher);
     } catch (error) {
-      return reply.code(502).send({ error: `Beitrag konnte nicht geladen werden: ${error instanceof Error ? error.message : String(error)}` });
+      throw new HttpError(502, `Beitrag konnte nicht geladen werden: ${error instanceof Error ? error.message : String(error)}`);
     }
     const html = sanitizePostHtml(original.html);
     const text = stripHtml(original.html);
-    const post = await prisma.$transaction(async (tx) => {
+    return prisma.$transaction(async (tx) => {
       const submission = await tx.submission.create({ data: { siteId: site.id, note: `Überarbeitung: ${original.title}`.slice(0, 300), status: "ANALYZED" } });
       const topic = await tx.topic.create({
         data: {
           submissionId: submission.id,
           title: original.title,
-          angle: body.data.instructions.trim() || "Bestehenden Beitrag auf Aktualität, Verständlichkeit und SEO prüfen und überarbeiten",
+          angle: instructions.trim() || "Bestehenden Beitrag auf Aktualität, Verständlichkeit und SEO prüfen und überarbeiten",
           summary: `Überarbeitung des bestehenden Beitrags „${original.title}“ (${original.url}).\n\n${text.slice(0, 4000)}`,
           keyFacts: [],
           keywords: [],
@@ -540,11 +538,90 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
         data: {
           siteId: site.id,
           topicId: topic.id,
-          revisionSource: { wpPostId: original.id, title: original.title, url: original.url, html, instructions: body.data.instructions.trim() },
+          revisionSource: { wpPostId: original.id, title: original.title, url: original.url, html, instructions: instructions.trim() },
         },
       });
     });
+  }
+
+  app.post<{ Params: { id: string } }>("/api/sites/:id/revisions", async (request, reply) => {
+    const body = z.object({ wpPostId: z.number().int().positive(), instructions: z.string().max(3000).default("") }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "Ungültige Eingabe" });
+    return reply.code(201).send(await createRevision(request.params.id, body.data.wpPostId, body.data.instructions));
+  });
+
+  // --- Aktualisierungsradar ---------------------------------------------------
+  app.get<{ Params: { id: string } }>("/api/sites/:id/radar", async (request, reply) => {
+    const site = await prisma.site.findUnique({ where: { id: request.params.id }, select: { radarEnabled: true, radarLastRunAt: true, radarRunRequested: true, radarLastError: true } });
+    if (!site) return reply.code(404).send({ error: "Website nicht gefunden" });
+    const all = await prisma.radarFinding.findMany({ where: { siteId: request.params.id } });
+    const rank: Record<string, number> = { outdated: 0, update_recommended: 1, current: 2 };
+    const findings = all
+      .filter((f) => f.verdict !== "current" && !f.dismissed)
+      .sort((a, b) => (rank[a.verdict] ?? 3) - (rank[b.verdict] ?? 3) || (a.publishedAt?.getTime() ?? 0) - (b.publishedAt?.getTime() ?? 0));
+    return {
+      enabled: site.radarEnabled,
+      lastRunAt: site.radarLastRunAt,
+      runRequested: site.radarRunRequested,
+      lastError: site.radarLastError,
+      stats: { checked: all.length, current: all.filter((f) => f.verdict === "current").length, dismissed: all.filter((f) => f.dismissed && f.verdict !== "current").length },
+      findings,
+    };
+  });
+
+  app.put<{ Params: { id: string } }>("/api/sites/:id/radar", async (request, reply) => {
+    const body = z.object({ enabled: z.boolean() }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "Ungültige Eingabe" });
+    const { count } = await prisma.site.updateMany({ where: { id: request.params.id }, data: { radarEnabled: body.data.enabled, ...(body.data.enabled ? {} : { radarRunRequested: false }) } });
+    return count ? { enabled: body.data.enabled } : reply.code(404).send({ error: "Website nicht gefunden" });
+  });
+
+  app.post<{ Params: { id: string } }>("/api/sites/:id/radar/run", async (request, reply) => {
+    const site = await prisma.site.findUnique({ where: { id: request.params.id }, select: { radarEnabled: true, baseUrl: true } });
+    if (!site) return reply.code(404).send({ error: "Website nicht gefunden" });
+    if (!site.radarEnabled) return reply.code(409).send({ error: "Der Aktualisierungsradar ist für diese Website ausgeschaltet." });
+    if (!site.baseUrl) return reply.code(400).send({ error: "Für die Website ist keine Adresse hinterlegt" });
+    await prisma.site.update({ where: { id: request.params.id }, data: { radarRunRequested: true } });
+    return reply.code(202).send({ ok: true });
+  });
+
+  app.post<{ Params: { id: string } }>("/api/radar/findings/:id/dismiss", async (request, reply) => {
+    const { count } = await prisma.radarFinding.updateMany({ where: { id: request.params.id }, data: { dismissed: true } });
+    return count ? { ok: true } : reply.code(404).send({ error: "Befund nicht gefunden" });
+  });
+
+  // Startet aus einem Befund die Ueberarbeitung; die Gruende des Radars werden zur Anweisung.
+  app.post<{ Params: { id: string } }>("/api/radar/findings/:id/revise", async (request, reply) => {
+    const finding = await prisma.radarFinding.findUnique({ where: { id: request.params.id } });
+    if (!finding) return reply.code(404).send({ error: "Befund nicht gefunden" });
+    const reasons = Array.isArray(finding.reasons) ? finding.reasons.filter((r): r is string => typeof r === "string") : [];
+    const instructions = [`Aktualisiere den Beitrag. ${finding.summary}`.trim(), ...reasons.map((r) => `- ${r}`)].join("\n").slice(0, 3000);
+    const post = await createRevision(finding.siteId, finding.wpPostId, instructions);
+    await prisma.radarFinding.update({ where: { id: finding.id }, data: { revisionPostId: post.id } });
     return reply.code(201).send(post);
+  });
+
+  // --- Titelvorschlaege -------------------------------------------------------
+  app.post<{ Params: { id: string } }>("/api/posts/:id/titles", async (request, reply) => {
+    const post = await prisma.post.findUnique({ where: { id: request.params.id }, include: { site: true } });
+    if (!post) return reply.code(404).send({ error: "Beitrag nicht gefunden" });
+    if (post.status !== "DRAFT_READY" || !post.contentHtml) return reply.code(409).send({ error: "Der Entwurf ist noch nicht fertig." });
+    let result;
+    try {
+      result = await ai.suggestTitles({
+        site: { name: post.site.name, language: post.site.language, audience: post.site.audience, tone: post.site.tone, styleGuide: post.site.styleGuide },
+        title: post.title ?? "",
+        focusKeyword: post.focusKeyword ?? "",
+        excerpt: post.excerpt ?? "",
+        text: stripHtml(post.contentHtml),
+      });
+    } catch (error) {
+      return reply.code(502).send({ error: `Titelvorschläge nicht möglich: ${explainAiError(error)}` });
+    }
+    const keyword = post.focusKeyword ?? "";
+    return {
+      titles: result.titles.map((t) => ({ title: t.title.trim().slice(0, 120), note: t.note, length: t.title.trim().length, hasKeyword: keywordInText(t.title, keyword) })),
+    };
   });
 
   // --- Text nachschaerfen (KI nach Anweisung) ---------------------------------

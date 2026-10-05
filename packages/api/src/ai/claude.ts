@@ -1,11 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { REFINE_SYSTEM, internalLinksBlock, REVISE_SYSTEM, relatedPostsBlock, revisionBlock, ANALYZE_SYSTEM, CATEGORY_SYSTEM, DRAFT_SYSTEM, IMAGE_PLAN_SYSTEM, FACTCHECK_SYSTEM, RESEARCH_SYSTEM, STYLE_SYSTEM, siteBlock, styleSamplesBlock, topicBlock } from "./prompts.js";
+import { RADAR_JUDGE_SYSTEM, RADAR_SEARCH_SYSTEM, TITLES_SYSTEM, REFINE_SYSTEM, internalLinksBlock, REVISE_SYSTEM, relatedPostsBlock, revisionBlock, ANALYZE_SYSTEM, CATEGORY_SYSTEM, DRAFT_SYSTEM, IMAGE_PLAN_SYSTEM, FACTCHECK_SYSTEM, RESEARCH_SYSTEM, STYLE_SYSTEM, siteBlock, styleSamplesBlock, topicBlock } from "./prompts.js";
 import {
   analyzeResultSchema,
   categorySuggestionSchema,
   draftResultSchema,
   factCheckResultSchema,
   imagePlanSchema,
+  freshnessResultSchema,
+  titleSuggestionsSchema,
   refineResultSchema,
   styleDerivationSchema,
   type AiDocument,
@@ -16,6 +18,8 @@ import {
   type DraftResult,
   type FactCheckResult,
   type ImagePlan,
+  type FreshnessResult,
+  type TitleSuggestions,
   type RefineResult,
   type StyleDerivation,
   type StyleSampleInput,
@@ -97,6 +101,33 @@ const REFINE_SCHEMA = {
   type: "object",
   properties: { contentHtml: { type: "string" }, note: { type: "string" } },
   required: ["contentHtml", "note"],
+  additionalProperties: false,
+} as const;
+
+const FRESHNESS_SCHEMA = {
+  type: "object",
+  properties: {
+    verdict: { type: "string", enum: ["current", "update_recommended", "outdated"] },
+    summary: { type: "string" },
+    reasons: stringArray,
+    sources: {
+      type: "array",
+      items: { type: "object", properties: { title: { type: "string" }, url: { type: "string" } }, required: ["title", "url"], additionalProperties: false },
+    },
+  },
+  required: ["verdict", "summary", "reasons", "sources"],
+  additionalProperties: false,
+} as const;
+
+const TITLES_SCHEMA = {
+  type: "object",
+  properties: {
+    titles: {
+      type: "array",
+      items: { type: "object", properties: { title: { type: "string" }, note: { type: "string" } }, required: ["title", "note"], additionalProperties: false },
+    },
+  },
+  required: ["titles"],
   additionalProperties: false,
 } as const;
 
@@ -239,13 +270,9 @@ export class ClaudeAiService implements AiService {
     return result.topics;
   }
 
-  async research(input: { site: SiteProfile; topic: TopicProposal }): Promise<ResearchResult> {
-    const messages: Anthropic.MessageParam[] = [
-      {
-        role: "user",
-        content: `${siteBlock(input.site)}\n\n${topicBlock(input.topic)}\n\nRecherchiere zu diesem Thema und liefere die Recherchenotizen.`,
-      },
-    ];
+  /** Websuche-Schleife (inkl. pause_turn); liefert die Notizen der KI und alle gefundenen Quellen. */
+  private async searchNotes(system: string, userText: string): Promise<ResearchResult> {
+    const messages: Anthropic.MessageParam[] = [{ role: "user", content: userText }];
     const sources = new Map<string, ResearchSource>();
     let notes = "";
 
@@ -254,7 +281,7 @@ export class ClaudeAiService implements AiService {
         .stream({
           model: this.options.model,
           max_tokens: 32000,
-          system: RESEARCH_SYSTEM,
+          system,
           thinking: { type: "adaptive" },
           output_config: { effort: this.options.effort },
           tools: [{ type: "web_search_20260209", name: "web_search", max_uses: this.options.maxSearches }],
@@ -280,6 +307,31 @@ export class ClaudeAiService implements AiService {
 
     if (!notes) throw new Error("Die Recherche hat keine Notizen geliefert.");
     return { notes, sources: [...sources.values()] };
+  }
+
+  async research(input: { site: SiteProfile; topic: TopicProposal }): Promise<ResearchResult> {
+    return this.searchNotes(RESEARCH_SYSTEM, `${siteBlock(input.site)}\n\n${topicBlock(input.topic)}\n\nRecherchiere zu diesem Thema und liefere die Recherchenotizen.`);
+  }
+
+  async checkFreshness(input: { site: SiteProfile; post: { title: string; url: string; publishedAt: string; text: string } }): Promise<FreshnessResult> {
+    const { post } = input;
+    const material = `Veroeffentlichter Beitrag "${post.title}" (${post.url}), veroeffentlicht am ${post.publishedAt}:\n${post.text.slice(0, 12000)}`;
+    const found = await this.searchNotes(RADAR_SEARCH_SYSTEM, `${siteBlock(input.site)}\n\n${material}\n\nPruefe, ob sich seit dem ${post.publishedAt} etwas Relevantes geaendert hat.`);
+    const sourceList = found.sources.map((s) => `- ${s.title}: ${s.url}`).join("\n") || "(keine)";
+    const content: Anthropic.ContentBlockParam[] = [
+      { type: "text", text: `${material}\n\nRecherchenotizen:\n${found.notes}\n\nGefundene Quellen (nur diese duerfen in sources erscheinen):\n${sourceList}\n\nBewerte jetzt die Aktualitaet.` },
+    ];
+    return this.structured(RADAR_JUDGE_SYSTEM, content, FRESHNESS_SCHEMA, (v) => freshnessResultSchema.parse(v));
+  }
+
+  async suggestTitles(input: { site: SiteProfile; title: string; focusKeyword: string; excerpt: string; text: string }): Promise<TitleSuggestions> {
+    const content: Anthropic.ContentBlockParam[] = [
+      {
+        type: "text",
+        text: [siteBlock(input.site), `Aktueller Titel: ${input.title}\nFokus-Keyword: ${input.focusKeyword}\nAuszug: ${input.excerpt}`, `Text des Beitrags:\n${input.text.slice(0, 12000)}`, "Schlage jetzt die Titel vor."].join("\n\n"),
+      },
+    ];
+    return this.structured(TITLES_SYSTEM, content, TITLES_SCHEMA, (v) => titleSuggestionsSchema.parse(v));
   }
 
   async draft(input: DraftInput): Promise<DraftResult> {

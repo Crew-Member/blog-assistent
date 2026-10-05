@@ -83,6 +83,17 @@ export interface DraftInput {
 export const refineResultSchema = z.object({ contentHtml: z.string().min(1), note: z.string() });
 export type RefineResult = z.infer<typeof refineResultSchema>;
 
+export const freshnessResultSchema = z.object({
+  verdict: z.enum(["current", "update_recommended", "outdated"]),
+  summary: z.string(),
+  reasons: z.array(z.string()),
+  sources: z.array(z.object({ title: z.string(), url: z.string() })),
+});
+export type FreshnessResult = z.infer<typeof freshnessResultSchema>;
+
+export const titleSuggestionsSchema = z.object({ titles: z.array(z.object({ title: z.string().min(1), note: z.string() })).min(1).max(8) });
+export type TitleSuggestions = z.infer<typeof titleSuggestionsSchema>;
+
 export interface StyleSampleInput {
   title: string;
   text: string;
@@ -135,6 +146,10 @@ export interface AiService {
   draft(input: DraftInput): Promise<DraftResult>;
   /** Ueberarbeitet den Text eines fertigen Entwurfs nach Anweisung des Nutzers, ohne neue Fakten einzufuehren. */
   refine(input: { site: SiteProfile; title: string; focusKeyword: string; contentHtml: string; instruction: string }): Promise<RefineResult>;
+  /** Prueft per Websuche, ob ein veroeffentlichter Beitrag noch aktuell ist (neue Rechtsprechung, Gesetzesaenderungen, ...). */
+  checkFreshness(input: { site: SiteProfile; post: { title: string; url: string; publishedAt: string; text: string } }): Promise<FreshnessResult>;
+  /** Alternative Titel (hoechstens 65 Zeichen) fuer einen fertigen Beitrag. */
+  suggestTitles(input: { site: SiteProfile; title: string; focusKeyword: string; excerpt: string; text: string }): Promise<TitleSuggestions>;
   /** Unabhaengige Pruefung des Entwurfs gegen Recherche und Originalunterlagen; liefert korrigiertes HTML. */
   factCheck(input: { site: SiteProfile; topic: TopicProposal; research: ResearchResult; draft: DraftResult; documents: AiDocument[]; internalLinks?: { title: string; url: string }[] }): Promise<FactCheckResult>;
   /** Waehlt aus den vorhandenen WordPress-Kategorien die passenden (hoechstens drei) fuer einen fertigen Beitrag. */

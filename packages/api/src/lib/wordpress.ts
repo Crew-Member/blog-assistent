@@ -102,9 +102,10 @@ async function restUrl(baseUrl: string, path: string): Promise<URL> {
 }
 
 /** Veroeffentlichte Beitraege einer Website (oeffentliche REST-API), neueste zuerst; optional per Suchbegriff. */
-export async function fetchSitePosts(baseUrl: string, opts: { search?: string; count?: number } = {}, fetcher: Fetcher = fetch): Promise<SitePostSummary[]> {
+export async function fetchSitePosts(baseUrl: string, opts: { search?: string; count?: number; page?: number } = {}, fetcher: Fetcher = fetch): Promise<SitePostSummary[]> {
   const api = await restUrl(baseUrl, "/wp-json/wp/v2/posts");
-  api.searchParams.set("per_page", String(Math.min(Math.max(opts.count ?? 20, 1), 50)));
+  api.searchParams.set("per_page", String(Math.min(Math.max(opts.count ?? 20, 1), 100)));
+  if (opts.page && opts.page > 1) api.searchParams.set("page", String(opts.page));
   api.searchParams.set("_fields", "id,title,link,date,excerpt");
   if (opts.search?.trim()) api.searchParams.set("search", opts.search.trim().slice(0, 100));
   let data: unknown;
@@ -144,4 +145,22 @@ export async function fetchSitePost(baseUrl: string, id: number, fetcher: Fetche
     }
   }
   throw firstError ?? new Error("Der Beitrag konnte nicht geladen werden.");
+}
+
+/** Alle veroeffentlichten Beitraege (nur Kopfdaten), seitenweise, hoechstens maxPages * 100. */
+export async function fetchAllSitePosts(baseUrl: string, maxPages = 10, fetcher: Fetcher = fetch): Promise<SitePostSummary[]> {
+  const all: SitePostSummary[] = [];
+  for (let page = 1; page <= maxPages; page++) {
+    let batch: SitePostSummary[];
+    try {
+      batch = await fetchSitePosts(baseUrl, { count: 100, page }, fetcher);
+    } catch (error) {
+      // Hinter der letzten Seite antwortet WordPress mit einem Fehler (rest_post_invalid_page_number).
+      if (page > 1) break;
+      throw error;
+    }
+    all.push(...batch);
+    if (batch.length < 100) break;
+  }
+  return all;
 }
