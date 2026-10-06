@@ -51,6 +51,10 @@ Das Passwort wird mit einem aus `SESSION_SECRET` abgeleiteten Schlüssel verschl
 
 Aus Mails werden Betreff, Absender, Datum und Text gelesen; PDF-, Word- und Textanhänge (höchstens fünf, je 25 MB) kommen als eigene Unterlagen dazu. Logos, Bilder und HTML-Anhänge werden bewusst nicht übernommen. Die `.msg`-Unterstützung ist bisher nur mit selbst erzeugten Testdateien geprüft, nicht mit echten Outlook-Mails.
 
+### Vergleich mit den Top-Ergebnissen
+
+Vor dem Schreiben sucht die KI per Websuche die stärksten deutschsprachigen Treffer zum Suchbegriff (das erste Keyword des Themas). Das Tool ruft bis zu sechs dieser Seiten selbst ab (nur öffentliche Adressen, Zeitlimit, ohne Plattformen und die eigene Website) und misst Wortzahl und Zwischenüberschriften. Die KI leitet daraus Suchintention, einen Zielumfang und häufig behandelte Aspekte ab; der Schreib-Prompt bekommt sie als Orientierung (der Stilleitfaden hat Vorrang). Die Auswertung steht am Beitrag („Vergleich mit den Top-Ergebnissen“). Pro Website abschaltbar (kostet eine zusätzliche Websuche je Beitrag). Die Treffer stammen aus einer KI-Websuche, nicht aus Googles Ergebnisliste.
+
 ### Wie der Faktencheck arbeitet
 
 1. Ein zweiter Claude-Durchlauf bekommt den Entwurf, die Recherchenotizen, die Eckdaten und die Originalunterlagen (PDFs/Mails) und prüft jede Tatsachenbehauptung. Als belegt gilt nur, was dort steht.

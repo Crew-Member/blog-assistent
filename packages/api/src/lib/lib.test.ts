@@ -169,3 +169,26 @@ describe("fetchPrimarySources", () => {
     expect(r?.ok).toBe(false);
   });
 });
+
+describe("Wettbewerbsvergleich (Seitenanalyse)", () => {
+  it("zaehlt Woerter im Hauptinhalt, liest Titel und Ueberschriften und waehlt Treffer sinnvoll aus", async () => {
+    const { analyzeHtml, pickCompetitorUrls, median, clampWords } = await import("./competition.js");
+    const body = "Wort ".repeat(300);
+    const html = `<html><head><title>Ratgeber &amp; Co</title></head><body><nav>Menü Menü Menü</nav><header>Kopf</header><article><h1>Haupt</h1><h2>Erster Abschnitt</h2><p>${body}</p><h3>Zweiter Abschnitt</h3><p>${body}</p></article><footer>Impressum Datenschutz</footer></body></html>`;
+    const page = analyzeHtml("https://x.example/a", html);
+    expect(page.title).toBe("Ratgeber & Co");
+    expect(page.words).toBeGreaterThanOrEqual(600);
+    expect(page.words).toBeLessThan(620);
+    expect(page.headings).toEqual(["Erster Abschnitt", "Zweiter Abschnitt"]);
+
+    const urls = pickCompetitorUrls(
+      [{ url: "https://www.kirmse.eu/a" }, { url: "https://www.youtube.com/watch" }, { url: "https://a.example/1" }, { url: "https://a.example/2" }, { url: "https://b.example/x.pdf" }, { url: "https://c.example/3" }],
+      "https://kirmse.eu",
+    );
+    expect(urls).toEqual(["https://a.example/1", "https://c.example/3"]);
+    expect(median([300, 900, 700])).toBe(700);
+    expect(median([400, 800])).toBe(600);
+    expect(clampWords(100)).toBe(400);
+    expect(clampWords(5000)).toBe(1800);
+  });
+});

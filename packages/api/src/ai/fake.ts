@@ -1,4 +1,4 @@
-import type { FreshnessResult, TitleSuggestions, RefineResult, DraftInput, AiDocument, CategoryOption, CategorySuggestion, ImagePlan, AiService, DraftResult, FactCheckResult, ResearchResult, SiteProfile, StyleDerivation, StyleSampleInput, TopicProposal } from "./types.js";
+import type { CompetitionInsights, CompetitorPage, FreshnessResult, TitleSuggestions, RefineResult, DraftInput, AiDocument, CategoryOption, CategorySuggestion, ImagePlan, AiService, DraftResult, FactCheckResult, ResearchResult, SiteProfile, StyleDerivation, StyleSampleInput, TopicProposal } from "./types.js";
 
 /** Platzhalter-Implementierung ohne API-Aufrufe - fuer Tests und zum Ausprobieren der Oberflaeche. */
 export class FakeAiService implements AiService {
@@ -43,6 +43,14 @@ export class FakeAiService implements AiService {
 
   async refine(input: { contentHtml: string; instruction: string }): Promise<RefineResult> {
     return { contentHtml: `${input.contentHtml}<p>Platzhalter-Überarbeitung: ${input.instruction.slice(0, 80)}</p>`, note: "Platzhalter-Überarbeitung (AI_PROVIDER=fake)." };
+  }
+
+  async findCompetitors(): Promise<{ notes: string; results: { title: string; url: string }[] }> {
+    return { notes: "Platzhalter (AI_PROVIDER=fake): keine Suche.", results: [] };
+  }
+
+  async analyzeCompetition(input: { pages: CompetitorPage[] }): Promise<CompetitionInsights> {
+    return { intent: "Platzhalter", recommendedMinWords: 600, recommendedMaxWords: 1000, rationale: `Platzhalter aus ${input.pages.length} Seite(n).`, missingTopics: [], structureHints: [] };
   }
 
   async checkFreshness(input: { post: { title: string } }): Promise<FreshnessResult> {

@@ -39,6 +39,7 @@ export interface Site {
   disclaimer: string;
   closingHtml: string;
   preferredLinks: string;
+  competitionCheck: boolean;
   labelAiImages: boolean;
   wpUsername: string;
   hasWpPassword: boolean;
@@ -129,7 +130,21 @@ export interface SitePostSummary {
   excerpt: string;
 }
 
+export interface Competition {
+  keyword: string;
+  intent: string;
+  pages: { url: string; title: string; words: number }[];
+  failed: { url: string; reason: string }[];
+  medianWords: number;
+  recommended: { min: number; max: number };
+  rationale: string;
+  missingTopics: string[];
+  structureHints: string[];
+  ranAt: string;
+}
+
 export interface PostDetail {
+  competition: Competition | null;
   /** Gesetzt, wenn der Beitrag eine Überarbeitung eines bestehenden WordPress-Beitrags ist. */
   /** True, wenn die letzte KI-Nachschärfung rückgängig gemacht werden kann. */
   canUndoRefine: boolean;

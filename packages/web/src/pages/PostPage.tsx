@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { POST_LABEL, api, isBusy, type FactCheck, type PostDetail, type PostImage, type TitleSuggestion, type WpPrepare, type WpPublishResult } from "../api";
+import { POST_LABEL, api, isBusy, type Competition, type FactCheck, type PostDetail, type PostImage, type TitleSuggestion, type WpPrepare, type WpPublishResult } from "../api";
 import { useLoad } from "../hooks";
 import { Chip, Icon, PageHeader, POST_TONE, SkeletonPage, Spinner, Stepper, StatusChip, type Tone } from "../ui";
 
@@ -310,6 +310,40 @@ function TitleSuggestions({ postId, current, onPick }: { postId: string; current
   );
 }
 
+function CompetitionPanel({ c, ownWords }: { c: Competition; ownWords: number }) {
+  const inRange = ownWords >= c.recommended.min * 0.85 && ownWords <= c.recommended.max * 1.15;
+  return (
+    <div className="card stack">
+      <div className="card-title"><Icon name="layers" /> Vergleich mit den Top-Ergebnissen</div>
+      <span className="muted">Suchbegriff „{c.keyword}“ · Suchintention: {c.intent}</span>
+      <div className="row">
+        <Chip tone={inRange ? "success" : "warn"} icon={inRange ? "check" : "alert"}>Dein Beitrag: {ownWords} Wörter</Chip>
+        <Chip tone="neutral">Empfohlen: {c.recommended.min}–{c.recommended.max}</Chip>
+        <Chip tone="neutral">Median der Treffer: {c.medianWords}</Chip>
+      </div>
+      {c.rationale && <span>{c.rationale}</span>}
+      <details>
+        <summary>{c.pages.length} verglichene Seiten</summary>
+        <ul>
+          {c.pages.map((p) => (
+            <li key={p.url}><a href={p.url} target="_blank" rel="noreferrer noopener">{p.title}</a> <span className="muted">– {p.words} Wörter</span></li>
+          ))}
+          {c.failed.map((f) => <li key={f.url} className="muted">{f.url} – nicht ausgewertet ({f.reason})</li>)}
+        </ul>
+        <span className="muted">Treffer einer Websuche, nicht exakt Googles Reihenfolge. Die Länge ist nur eine Orientierung.</span>
+      </details>
+      {c.missingTopics.length > 0 && (
+        <div>
+          <strong>Aspekte, die Konkurrenzseiten behandeln:</strong>
+          <ul>{c.missingTopics.map((t, i) => <li key={i}>{t}</li>)}</ul>
+          <span className="muted">Die KI greift sie nur auf, wenn die Recherche sie belegt. Fehlt dir einer, ergänze ihn von Hand oder lass den Beitrag mit „Mit KI nachschärfen“ anpassen.</span>
+        </div>
+      )}
+      {c.structureHints.length > 0 && <span className="muted">Gliederung bei den Top-Seiten: {c.structureHints.join(" · ")}</span>}
+    </div>
+  );
+}
+
 function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: boolean; onDone: () => void }) {
   const [prep, setPrep] = useState<WpPrepare>();
   const [selected, setSelected] = useState<number[]>([]);
@@ -559,6 +593,7 @@ export function PostPage({ id }: { id: string }) {
                   </ul>
                 </div>
               )}
+              {data.competition && <CompetitionPanel c={data.competition} ownWords={(form.contentHtml.replace(/<[^>]+>/g, " ").match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? []).length} />}
               {data.secondaryKeywords.length > 0 && <div>{data.secondaryKeywords.map((k) => <span key={k} className="tag">{k}</span>)}</div>}
             </div>
           </div>

@@ -1,10 +1,11 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { explainAiError } from "./ai/errors.js";
-import type { AiDocument, AiService, DraftResult, FactCheckResult, ResearchResult, SiteProfile, TopicProposal } from "./ai/types.js";
+import type { AiDocument, AiService, CompetitionGuidance, DraftResult, FactCheckResult, ResearchResult, SiteProfile, TopicProposal } from "./ai/types.js";
 import { escapeHtml, sanitizePostHtml, applyLinkPolicy } from "./lib/html.js";
 import { fetchSitePosts } from "./lib/wordpress.js";
 import { parsePreferredLinks } from "./lib/links.js";
 import { fetchPrimarySources } from "./lib/sources.js";
+import { clampWords, fetchCompetitorPages, median, pickCompetitorUrls } from "./lib/competition.js";
 import { checkReferences, type ReferenceCheck } from "./lib/references.js";
 import { slugWithKeyword } from "./lib/slug.js";
 import type { ImageProvider } from "./image/provider.js";
@@ -137,6 +138,50 @@ export function evaluateFactCheck(
   };
 }
 
+export interface StoredCompetition {
+  keyword: string;
+  intent: string;
+  pages: { url: string; title: string; words: number }[];
+  failed: { url: string; reason: string }[];
+  medianWords: number;
+  recommended: { min: number; max: number };
+  rationale: string;
+  missingTopics: string[];
+  structureHints: string[];
+  ranAt: string;
+}
+
+/** Vergleich mit den Top-Ergebnissen zum Suchbegriff. Liefert nichts, wenn zu wenige vergleichbare Seiten gefunden werden. */
+async function runCompetition(deps: PipelineDeps, site: SiteProfile, topic: TopicProposal, baseUrl: string): Promise<{ guidance: CompetitionGuidance; stored: StoredCompetition } | undefined> {
+  const keyword = (topic.keywords[0] ?? "").trim() || topic.title;
+  const found = await deps.ai.findCompetitors({ site, keyword });
+  const urls = pickCompetitorUrls(found.results, baseUrl);
+  if (urls.length < 2) return undefined;
+  const fetched = await fetchCompetitorPages(urls, deps.fetcher as never);
+  const pages = fetched.flatMap((p) => (p.ok ? [p] : []));
+  if (pages.length < 2) return undefined;
+  const insights = await deps.ai.analyzeCompetition({ site, keyword, topic, notes: found.notes, pages });
+  const min = clampWords(insights.recommendedMinWords);
+  const max = Math.max(clampWords(insights.recommendedMaxWords), min + 100);
+  const missingTopics = insights.missingTopics.slice(0, 8);
+  const structureHints = insights.structureHints.slice(0, 5);
+  return {
+    guidance: { keyword, intent: insights.intent, recommendedMinWords: min, recommendedMaxWords: max, missingTopics, structureHints },
+    stored: {
+      keyword,
+      intent: insights.intent,
+      pages: pages.map((p) => ({ url: p.url, title: p.title, words: p.words })),
+      failed: fetched.flatMap((p) => (p.ok ? [] : [{ url: p.url, reason: p.reason }])),
+      medianWords: median(pages.map((p) => p.words)),
+      recommended: { min, max },
+      rationale: insights.rationale,
+      missingTopics,
+      structureHints,
+      ranAt: new Date().toISOString(),
+    },
+  };
+}
+
 /** Schritt 2-4: Recherche, Entwurf und Faktencheck fuer ein ausgewaehltes Thema. */
 export async function generatePost(deps: PipelineDeps, postId: string): Promise<void> {
   const { prisma, ai } = deps;
@@ -155,7 +200,7 @@ export async function generatePost(deps: PipelineDeps, postId: string): Promise<
     };
 
     const research: ResearchResult = await ai.research({ site, topic });
-    await prisma.post.update({ where: { id: postId }, data: { status: "DRAFTING", researchNotes: research.notes, factCheck: Prisma.DbNull } });
+    await prisma.post.update({ where: { id: postId }, data: { status: "DRAFTING", researchNotes: research.notes, factCheck: Prisma.DbNull, competition: Prisma.DbNull } });
 
     const styleSamples = post.site.styleSamples.map((s) => ({ title: s.title, text: s.text }));
     const rev = post.revisionSource as { wpPostId?: number; title?: string; url?: string; html?: string; instructions?: string } | null;
@@ -174,7 +219,16 @@ export async function generatePost(deps: PipelineDeps, postId: string): Promise<
     // Vom Nutzer hinterlegte Wunschziele (z. B. Leistungsseiten) stehen vorn und gelten ebenfalls als bekannte Seiten.
     const preferred = parsePreferredLinks(post.site.preferredLinks).map((l) => ({ title: `${l.title} (bevorzugt)`, url: l.url, excerpt: "" }));
     relatedPosts = [...preferred, ...relatedPosts.filter((p) => !preferred.some((x) => x.url === p.url))];
-    const draft = await ai.draft({ site, topic, research, styleSamples, relatedPosts, ...(revision ? { revision } : {}) });
+    // Optional: Vergleich mit den Top-Ergebnissen (Umfang, Gliederung). Fehler hier stoppen den Beitrag nie.
+    let competition: CompetitionGuidance | undefined;
+    if (post.site.competitionCheck) {
+      const result = await runCompetition(deps, site, topic, post.site.baseUrl).catch(() => undefined);
+      if (result) {
+        competition = result.guidance;
+        await prisma.post.update({ where: { id: postId }, data: { competition: result.stored as unknown as Prisma.InputJsonValue } });
+      }
+    }
+    const draft = await ai.draft({ site, topic, research, styleSamples, relatedPosts, ...(competition ? { competition } : {}), ...(revision ? { revision } : {}) });
     // Bekannte interne Ziele: Liste der Website plus Links, die schon im Originalbeitrag standen.
     const originalLinks = [...(revision?.html ?? "").matchAll(/href="([^"]+)"/g)].map((m) => (m[1] ?? "").replace(/&amp;/g, "&"));
     const internalLinks = [...relatedPosts.map((p) => ({ title: p.title, url: p.url })), ...originalLinks.map((url) => ({ title: "", url }))];

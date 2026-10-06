@@ -76,6 +76,8 @@ export interface DraftInput {
   styleSamples: StyleSampleInput[];
   /** Bestehende Beitraege der Website, auf die intern verlinkt werden darf. */
   relatedPosts?: RelatedPost[];
+  /** Ergebnis des Vergleichs mit den Top-Ergebnissen zum Suchbegriff (optional). */
+  competition?: CompetitionGuidance;
   /** Gesetzt, wenn ein bestehender Beitrag ueberarbeitet statt neu geschrieben wird. */
   revision?: RevisionInput;
 }
@@ -93,6 +95,33 @@ export type FreshnessResult = z.infer<typeof freshnessResultSchema>;
 
 export const titleSuggestionsSchema = z.object({ titles: z.array(z.object({ title: z.string().min(1), note: z.string() })).min(1).max(8) });
 export type TitleSuggestions = z.infer<typeof titleSuggestionsSchema>;
+
+export interface CompetitorPage {
+  url: string;
+  title: string;
+  words: number;
+  headings: string[];
+}
+
+export const competitionInsightsSchema = z.object({
+  intent: z.string(),
+  recommendedMinWords: z.number().int(),
+  recommendedMaxWords: z.number().int(),
+  rationale: z.string(),
+  missingTopics: z.array(z.string()),
+  structureHints: z.array(z.string()),
+});
+export type CompetitionInsights = z.infer<typeof competitionInsightsSchema>;
+
+/** Hinweise aus dem Vergleich mit den Top-Ergebnissen, die in den Schreib-Prompt einfliessen. */
+export interface CompetitionGuidance {
+  keyword: string;
+  intent: string;
+  recommendedMinWords: number;
+  recommendedMaxWords: number;
+  missingTopics: string[];
+  structureHints: string[];
+}
 
 export interface StyleSampleInput {
   title: string;
@@ -146,6 +175,10 @@ export interface AiService {
   draft(input: DraftInput): Promise<DraftResult>;
   /** Ueberarbeitet den Text eines fertigen Entwurfs nach Anweisung des Nutzers, ohne neue Fakten einzufuehren. */
   refine(input: { site: SiteProfile; title: string; focusKeyword: string; contentHtml: string; instruction: string }): Promise<RefineResult>;
+  /** Websuche zum Suchbegriff: liefert die relevantesten Treffer (URLs in Reihenfolge) und Notizen zur Suchintention. */
+  findCompetitors(input: { site: SiteProfile; keyword: string }): Promise<{ notes: string; results: { title: string; url: string }[] }>;
+  /** Wertet die abgerufenen Top-Seiten (Laenge, Gliederung) aus und leitet Zielumfang und fehlende Themen ab. */
+  analyzeCompetition(input: { site: SiteProfile; keyword: string; topic: TopicProposal; notes: string; pages: CompetitorPage[] }): Promise<CompetitionInsights>;
   /** Prueft per Websuche, ob ein veroeffentlichter Beitrag noch aktuell ist (neue Rechtsprechung, Gesetzesaenderungen, ...). */
   checkFreshness(input: { site: SiteProfile; post: { title: string; url: string; publishedAt: string; text: string } }): Promise<FreshnessResult>;
   /** Alternative Titel (hoechstens 65 Zeichen) fuer einen fertigen Beitrag. */

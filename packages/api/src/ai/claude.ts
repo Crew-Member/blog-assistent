@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { RADAR_JUDGE_SYSTEM, RADAR_SEARCH_SYSTEM, TITLES_SYSTEM, REFINE_SYSTEM, internalLinksBlock, REVISE_SYSTEM, relatedPostsBlock, revisionBlock, ANALYZE_SYSTEM, CATEGORY_SYSTEM, DRAFT_SYSTEM, IMAGE_PLAN_SYSTEM, FACTCHECK_SYSTEM, RESEARCH_SYSTEM, STYLE_SYSTEM, siteBlock, styleSamplesBlock, topicBlock } from "./prompts.js";
+import { COMPETITOR_SEARCH_SYSTEM, COMPETITION_SYSTEM, competitionBlock, RADAR_JUDGE_SYSTEM, RADAR_SEARCH_SYSTEM, TITLES_SYSTEM, REFINE_SYSTEM, internalLinksBlock, REVISE_SYSTEM, relatedPostsBlock, revisionBlock, ANALYZE_SYSTEM, CATEGORY_SYSTEM, DRAFT_SYSTEM, IMAGE_PLAN_SYSTEM, FACTCHECK_SYSTEM, RESEARCH_SYSTEM, STYLE_SYSTEM, siteBlock, styleSamplesBlock, topicBlock } from "./prompts.js";
 import {
   analyzeResultSchema,
   categorySuggestionSchema,
@@ -7,6 +7,7 @@ import {
   factCheckResultSchema,
   imagePlanSchema,
   freshnessResultSchema,
+  competitionInsightsSchema,
   titleSuggestionsSchema,
   refineResultSchema,
   styleDerivationSchema,
@@ -19,6 +20,8 @@ import {
   type FactCheckResult,
   type ImagePlan,
   type FreshnessResult,
+  type CompetitionInsights,
+  type CompetitorPage,
   type TitleSuggestions,
   type RefineResult,
   type StyleDerivation,
@@ -128,6 +131,20 @@ const TITLES_SCHEMA = {
     },
   },
   required: ["titles"],
+  additionalProperties: false,
+} as const;
+
+const COMPETITION_SCHEMA = {
+  type: "object",
+  properties: {
+    intent: { type: "string" },
+    recommendedMinWords: { type: "integer" },
+    recommendedMaxWords: { type: "integer" },
+    rationale: { type: "string" },
+    missingTopics: stringArray,
+    structureHints: stringArray,
+  },
+  required: ["intent", "recommendedMinWords", "recommendedMaxWords", "rationale", "missingTopics", "structureHints"],
   additionalProperties: false,
 } as const;
 
@@ -313,6 +330,19 @@ export class ClaudeAiService implements AiService {
     return this.searchNotes(RESEARCH_SYSTEM, `${siteBlock(input.site)}\n\n${topicBlock(input.topic)}\n\nRecherchiere zu diesem Thema und liefere die Recherchenotizen.`);
   }
 
+  async findCompetitors(input: { site: SiteProfile; keyword: string }): Promise<{ notes: string; results: { title: string; url: string }[] }> {
+    const found = await this.searchNotes(COMPETITOR_SEARCH_SYSTEM, `${siteBlock(input.site)}\n\nSuchbegriff: ${input.keyword}\n\nBestimme die staerksten deutschsprachigen Treffer.`);
+    return { notes: found.notes, results: found.sources };
+  }
+
+  async analyzeCompetition(input: { site: SiteProfile; keyword: string; topic: TopicProposal; notes: string; pages: CompetitorPage[] }): Promise<CompetitionInsights> {
+    const pages = input.pages.map((p) => `- ${p.title} | ${p.url} | ${p.words} Woerter | Ueberschriften: ${p.headings.slice(0, 12).join(" / ") || "(keine)"}`).join("\n");
+    const content: Anthropic.ContentBlockParam[] = [
+      { type: "text", text: [siteBlock(input.site), `Suchbegriff: ${input.keyword}`, topicBlock(input.topic), `Notizen zur Suche:\n${input.notes}`, `Abgerufene Top-Seiten:\n${pages}`, "Werte die Seiten jetzt aus."].join("\n\n") },
+    ];
+    return this.structured(COMPETITION_SYSTEM, content, COMPETITION_SCHEMA, (v) => competitionInsightsSchema.parse(v));
+  }
+
   async checkFreshness(input: { site: SiteProfile; post: { title: string; url: string; publishedAt: string; text: string } }): Promise<FreshnessResult> {
     const { post } = input;
     const material = `Veroeffentlichter Beitrag "${post.title}" (${post.url}), veroeffentlicht am ${post.publishedAt}:\n${post.text.slice(0, 12000)}`;
@@ -347,6 +377,7 @@ export class ClaudeAiService implements AiService {
           `Recherchenotizen:\n${input.research.notes}`,
           `Gefundene Quellen (nur diese duerfen in sources erscheinen):\n${sourceList}`,
           relatedPostsBlock(input.relatedPosts ?? []),
+          input.competition ? competitionBlock(input.competition) : "",
           input.revision ? "Ueberarbeite den bestehenden Beitrag jetzt." : "Schreibe jetzt den Beitrag.",
         ]
           .filter(Boolean)

@@ -53,6 +53,32 @@ Regeln:
 - Keine neuen Tatsachen, die nicht im Text stehen.
 - note: ein kurzer Satz (hoechstens 12 Woerter), was an der Variante anders ist.`;
 
+export const COMPETITOR_SEARCH_SYSTEM = `Du bestimmst die aktuell staerksten deutschsprachigen Suchergebnisse zu einem Suchbegriff, damit ein Fachbeitrag (Recht/Datenschutz) gegen sie eingeordnet werden kann.
+Suche gezielt nach dem Suchbegriff und ein bis zwei naheliegenden Varianten, wie ein Nutzer sie eintippen wuerde. Beruecksichtige nur organische, inhaltliche Treffer (Fachbeitraege, Ratgeber, Kanzlei- und Verbandsseiten, Behoerdenseiten, Fachmedien) - keine Shops, Anzeigen oder Verzeichnisse.
+Liefere kurze Notizen auf Deutsch: Was fuer eine Suchintention steckt hinter dem Begriff (z. B. Nachricht zu einem Urteil, Ratgeber/Anleitung, Definition, Checkliste)? Nenne die relevantesten Treffer mit Titel und URL in der Reihenfolge ihrer Relevanz.`;
+
+export const COMPETITION_SYSTEM = `Du wertest die Top-Ergebnisse zu einem Suchbegriff fuer einen Fachbeitrag (Recht/Datenschutz) aus.
+Du bekommst je Seite Titel, URL, Wortzahl und Zwischenueberschriften. Die Seiten stammen aus einer Websuche (nicht exakt Googles Reihenfolge).
+Liefere:
+- intent: ein kurzer Satz zur Suchintention (z. B. "Kurzmeldung zu einem Urteil", "Ratgeber fuer Unternehmen").
+- recommendedMinWords / recommendedMaxWords: ein sinnvoller Zielumfang fuer den eigenen Beitrag (Ganzzahlen). Orientiere dich an Median und Streuung der Top-Seiten UND an der Suchintention; bei Kurzmeldungen darf er kurz sein. Nicht ueber 1800 und nicht unter 400. Laenge ist kein Selbstzweck: nenne in rationale kurz, warum.
+- rationale: ein bis drei Saetze.
+- missingTopics: bis zu 8 Aspekte, die mehrere Top-Seiten behandeln und die im Eckdaten-/Themenvorschlag des eigenen Beitrags noch nicht auftauchen. Nur sachliche Themen, keine Behauptungen.
+- structureHints: bis zu 5 knappe Hinweise zur Gliederung (typische Abschnitte, FAQ, Checkliste, Praxisbeispiel), soweit die Top-Seiten sie nutzen.
+Erfinde keine Seiten und keine Zahlen.`;
+
+export function competitionBlock(c: { keyword: string; intent: string; recommendedMinWords: number; recommendedMaxWords: number; missingTopics: string[]; structureHints: string[] }): string {
+  return [
+    `Wettbewerbsanalyse zum Suchbegriff "${c.keyword}" (Treffer einer Websuche, nur als Orientierung):`,
+    `- Suchintention: ${c.intent}`,
+    `- Empfohlener Umfang: ${c.recommendedMinWords} bis ${c.recommendedMaxWords} Woerter. Gilt anstelle der Standardlaenge, aber nur sofern der Stilleitfaden nichts anderes vorgibt; Laenge nie durch Fuelltext erreichen.`,
+    c.missingTopics.length ? `- Aspekte, die Konkurrenzseiten behandeln (nur aufgreifen, wenn die Recherchenotizen sie belegen):\n${c.missingTopics.map((t) => `  * ${t}`).join("\n")}` : "",
+    c.structureHints.length ? `- Gliederungshinweise:\n${c.structureHints.map((t) => `  * ${t}`).join("\n")}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 export const DRAFT_SYSTEM = `Du schreibst Blogbeitraege fuer eine Fachwebsite im Bereich Recht und Datenschutz.
 
 Regeln:
@@ -61,7 +87,7 @@ Regeln:
 - Gib keine individuelle Rechtsberatung; formuliere Handlungsempfehlungen als allgemeine Hinweise. Einen Disclaimer fuegt das System selbst an - schreibe keinen.
 - Struktur: kurzer Einstieg (worum geht es, warum ist es fuer die Zielgruppe relevant), Abschnitte mit aussagekraeftigen Zwischenueberschriften (h2, bei Bedarf h3), am Ende ein Abschnitt "Was Unternehmen jetzt tun sollten" mit konkreten Punkten. Keine h1 (der Titel wird separat gesetzt).
 - contentHtml enthaelt nur diese Tags: h2, h3, p, ul, ol, li, strong, em, blockquote, a. Keine Inline-Styles, kein Markdown. Quellen im Text als Link auf die jeweilige URL. LINKS SPARSAM: Setze insgesamt hoechstens 3 bis 5 Links. Extern nur auf Primaerquellen: Gerichte (Pressemitteilungen, Entscheidungen), Gesetze und Rechtsprechungsdatenbanken (z. B. gesetze-im-internet.de, rechtsprechung-im-internet.de, eur-lex.europa.eu, curia.europa.eu, dejure.org, beck-online.beck.de, wolterskluwer-online.de) und Datenschutzbehoerden (z. B. Datenschutzkonferenz, EDSA, Landesbehoerden). KEINE Links auf Kanzleien, Beratungsunternehmen, Fachportale, Blogs, Zeitungen oder sonstige Wettbewerber; deren Inhalte darfst du als Hintergrund nutzen, aber nicht verlinken. Links auf kostenpflichtige Portale (z. B. beck-online, Wolters Kluwer/jurion, juris) nur sparsam und nur, wenn sie einen echten Mehrwert bieten; die Fundstelle (Gericht, Datum, Aktenzeichen bzw. Norm und Fundstelle) steht IMMER auch im Text, damit der Leser sie ohne Zugang nachvollziehen kann. Bei frei zugaenglichen Primaerquellen (Gerichte, Gesetze im Internet, EUR-Lex) ist der Link vorzuziehen. Schreibe URLs nie als sichtbaren Text oder in Klammern aus, sondern nur als Link (a href) mit einem sprechenden Linktext.
-- Der Fliesstext soll gut lesbar sein, ohne Floskeln und ohne Werbesprache. Laenge etwa 600 bis 1000 Woerter, es sei denn der Stilleitfaden sagt etwas anderes.
+- Der Fliesstext soll gut lesbar sein, ohne Floskeln und ohne Werbesprache. Laenge etwa 600 bis 1000 Woerter, es sei denn der Stilleitfaden oder eine mitgelieferte Wettbewerbsanalyse (Empfohlener Umfang) sagt etwas anderes; der Stilleitfaden hat Vorrang.
 - title: max. 65 Zeichen, enthaelt das Fokus-Keyword woertlich, moeglichst weit vorn. Enthaelt der Inhalt eine konkrete Zahl (Betrag, Frist, Anzahl), darf der Titel sie nennen - nur wenn sie belegt ist. metaDescription: max. 155 Zeichen, enthaelt das Fokus-Keyword woertlich und nennt den Nutzen fuer den Leser. excerpt: 2 bis 3 Saetze.
 - focusKeyword: ein konkreter Suchbegriff aus 2 bis 4 Woertern, wie ihn die Zielgruppe eintippen wuerde, in der Form, in der er im Text vorkommt. secondaryKeywords: 3 bis 6 verwandte Begriffe, die im Text natuerlich vorkommen.
 - Das Fokus-Keyword muss WOERTLICH (gleiche Schreibweise und Beugung, nicht nur Wortbestandteile) vorkommen: im ersten Satz des Textes, in mindestens einer h2-Zwischenueberschrift und insgesamt etwa einmal pro 100 Woerter im Fliesstext (bei 900 Woertern also rund 8- bis 9-mal; Varianten und Pronomen dazwischen sind normal), ohne den Lesefluss zu stoeren. Waehle das Keyword deshalb so, dass es sich grammatisch natuerlich einbauen laesst.

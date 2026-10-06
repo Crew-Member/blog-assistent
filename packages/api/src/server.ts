@@ -50,6 +50,7 @@ const siteSchema = z.object({
   disclaimer: z.string().max(4000).default(""),
   closingHtml: z.string().max(4000).default(""),
   preferredLinks: z.string().max(4000).default(""),
+  competitionCheck: z.boolean().default(true),
   labelAiImages: z.boolean().default(true),
   wpUsername: z.string().trim().max(120).default(""),
   // Leer/fehlend = vorhandenes Passwort behalten

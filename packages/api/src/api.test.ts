@@ -516,6 +516,44 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect(seen[1]?.recent?.[0]).toContain("Besprechungstisch");
   });
 
+  it("vergleicht mit den Top-Ergebnissen, gibt den Zielumfang an den Entwurf und speichert die Auswertung", async () => {
+    const article = (n: number) => `<html><head><title>Treffer ${n}</title></head><body><article><h2>Abschnitt ${n}</h2><p>${"Wort ".repeat(n * 300)}</p></article></body></html>`;
+    wpFetcher = (async (url: string) => {
+      const m = /competitor(\d)/.exec(url);
+      return m ? new Response(article(Number(m[1])), { headers: { "content-type": "text/html" } }) : new Response("[]");
+    }) as typeof fetch;
+    let draftInput: DraftInput | undefined;
+    let analyzed: { words: number }[] = [];
+    const fake = new FakeAiService();
+    await setup(fakeWith({
+      findCompetitors: async () => ({ notes: "Ratgeber-Intention", results: [{ title: "a", url: "https://93.184.216.34/competitor2/a" }, { title: "b", url: "https://93.184.216.35/competitor3/b" }, { title: "c", url: "https://93.184.216.36/kanzlei/c" }] }),
+      analyzeCompetition: async (input) => {
+        analyzed = input.pages;
+        return { intent: "Ratgeber", recommendedMinWords: 900, recommendedMaxWords: 1200, rationale: "Median 750", missingTopics: ["Bußgeldrahmen"], structureHints: ["Checkliste"] };
+      },
+      draft: async (input) => {
+        draftInput = input;
+        return fake.draft(input);
+      },
+    }));
+    const postId = await makePost(await createSite());
+    expect(analyzed.map((p) => p.words > 500)).toEqual([true, true]);
+    expect(draftInput?.competition).toMatchObject({ recommendedMinWords: 900, recommendedMaxWords: 1200, missingTopics: ["Bußgeldrahmen"] });
+    const post = (await app.inject({ method: "GET", url: `/api/posts/${postId}`, headers: { cookie } })).json();
+    expect(post.competition.pages).toHaveLength(2);
+    expect(post.competition.recommended).toEqual({ min: 900, max: 1200 });
+    expect(post.competition.failed.map((f: { url: string }) => f.url)).toEqual(["https://93.184.216.36/kanzlei/c"]);
+    expect(post.competition.medianWords).toBeGreaterThan(500);
+  });
+
+  it("ueberspringt den Wettbewerbsvergleich, wenn er fuer die Website ausgeschaltet ist", async () => {
+    let called = false;
+    await setup(fakeWith({ findCompetitors: async () => { called = true; return { notes: "", results: [] }; } }));
+    const created = await app.inject({ method: "POST", url: "/api/sites", headers: { cookie }, payload: { name: "S", competitionCheck: false } });
+    await makePost(created.json().id);
+    expect(called).toBe(false);
+  });
+
   it("gibt die gewuenschte Anzahl an den WordPress-Import weiter", async () => {
     const urls: string[] = [];
     wpFetcher = (async (url: string) => {
