@@ -41,6 +41,7 @@ services:
       IMAGE_MODEL: ${IMAGE_MODEL:-}
       IMAGE_WIDTH: ${IMAGE_WIDTH:-}
       IMAGE_HEIGHT: ${IMAGE_HEIGHT:-}
+      IMAGE_PROMPT_LANGUAGE: ${IMAGE_PROMPT_LANGUAGE:-de}
       IMAGE_QUALITY: ${IMAGE_QUALITY:-medium}
       STORAGE_DIR: /data/uploads
       PORT: "3100"

@@ -10,7 +10,7 @@ export interface ImageProvider {
 
 /** Wird an jeden Bild-Prompt angehaengt - unabhaengig davon, was das Sprachmodell geschrieben hat. */
 export const PROMPT_GUARDRAILS =
-  "No text, no letters, no numbers, no logos, no brand names, no watermarks, no signatures. No recognizable real people or faces.";
+  "Keine Schrift, keine Buchstaben oder Zahlen im Bild, keine Logos, Markennamen, Wasserzeichen oder Signaturen. Keine erkennbaren realen Personen; frei erfundene, natürlich wirkende Menschen sind erwünscht.";
 
 export function withGuardrails(prompt: string): string {
   return `${prompt.trim()}\n\n${PROMPT_GUARDRAILS}`;

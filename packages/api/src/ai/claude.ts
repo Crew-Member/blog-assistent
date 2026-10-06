@@ -420,7 +420,7 @@ export class ClaudeAiService implements AiService {
     };
   }
 
-  async planImage(input: { site: SiteProfile; post: { title: string; excerpt: string; focusKeyword: string; text: string }; style?: "illustration" | "photo" }): Promise<ImagePlan> {
+  async planImage(input: { site: SiteProfile; post: { title: string; excerpt: string; focusKeyword: string; text: string }; style?: "illustration" | "photo"; promptLanguage?: "de" | "en"; recentPrompts?: string[] }): Promise<ImagePlan> {
     const content: Anthropic.ContentBlockParam[] = [
       {
         type: "text",
@@ -429,6 +429,8 @@ export class ClaudeAiService implements AiService {
           input.site.audience && `Zielgruppe: ${input.site.audience}`,
           `Beitrag:\nTitel: ${input.post.title}\nFokus-Keyword: ${input.post.focusKeyword}\nAuszug: ${input.post.excerpt}\nAnfang des Textes: ${input.post.text.slice(0, 1800)}`,
           input.style ? `Vorgegebener Stil: ${input.style}` : "Stil: frei waehlen",
+          `Sprache des Bild-Prompts (Feld prompt): ${input.promptLanguage === "en" ? "Englisch" : "Deutsch"}`,
+          input.recentPrompts?.length ? `Zuletzt verwendete Bildideen dieser Website (nicht wiederholen):\n${input.recentPrompts.map((p) => `- ${p.slice(0, 220)}`).join("\n")}` : "",
           "Entwirf das Beitragsbild.",
         ]
           .filter(Boolean)

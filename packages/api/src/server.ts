@@ -740,6 +740,8 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
         site: { name: post.site.name, language: post.site.language, audience: post.site.audience, tone: post.site.tone, styleGuide: post.site.styleGuide },
         post: { title: post.title ?? "", excerpt: post.excerpt ?? "", focusKeyword: post.focusKeyword ?? "", text: stripHtml(post.contentHtml ?? "") },
         style: body.data.style,
+        promptLanguage: config.IMAGE_PROMPT_LANGUAGE,
+        recentPrompts: (await prisma.postImage.findMany({ where: { post: { siteId: post.siteId }, postId: { not: post.id }, prompt: { not: "" } }, orderBy: { updatedAt: "desc" }, take: 8, select: { prompt: true } })).map((i) => i.prompt),
       });
     } catch (error) {
       throw new HttpError(502, `Bildvorschlag nicht möglich: ${error instanceof Error ? error.message : String(error)}`);

@@ -64,7 +64,7 @@ export class FakeAiService implements AiService {
   async planImage(input: { post: { title: string }; style?: "illustration" | "photo" }): Promise<ImagePlan> {
     return {
       style: input.style ?? "illustration",
-      prompt: `Flat vector illustration, balanced scales and documents, calm blue and grey palette (Platzhalter zu: ${input.post.title})`,
+      prompt: `Flache Vektorillustration: Zwei Kolleginnen besprechen am Besprechungstisch ein Dokument, Blick über die Schulter, ruhige Blau- und Grautöne (Platzhalter zu: ${input.post.title})`,
       altText: "Platzhalter: stilisierte Waage und Dokumente",
       caption: "Symbolbild",
       searchQuery: "legal documents scales",

@@ -158,17 +158,33 @@ Regeln:
 - newCategories: Nur wenn keine vorhandene Kategorie das Hauptthema des Beitrags gut abdeckt, schlage hoechstens zwei NEUE Kategorienamen vor, die zur Benennung der vorhandenen passen (Stil, Sprache, Schreibweise, Einzahl/Mehrzahl). Im Zweifel gib eine leere Liste zurueck - zusaetzliche Kategorien belasten die Struktur der Website.
 - Passt nichts, sind beide Listen leer.`;
 
-export const IMAGE_PLAN_SYSTEM = `Du entwirfst das Beitragsbild fuer einen Fachbeitrag im Bereich Recht und Datenschutz.
+export const IMAGE_PLAN_SYSTEM = `Du entwirfst das Beitragsbild fuer einen Fachbeitrag im Bereich Recht und Datenschutz. Das Bild soll lebendig sein, die Kernaussage des Beitrags auf den ersten Blick vermitteln und sich von frueheren Bildern der Website unterscheiden.
 
-Liefere:
-- style: "illustration" (stilisierte Vektor-/Flat-Illustration) oder "photo" (fotorealistisch). Wurde ein Stil vorgegeben, halte dich daran; sonst waehle den passenderen - fuer abstrakte Rechts-/Datenschutzthemen meist "illustration".
-- prompt: Ein Bild-Prompt fuer ein Bildgenerierungsmodell, auf ENGLISCH, 40 bis 90 Woerter. Beschreibe Motiv, Komposition (Querformat 3:2, mit ruhigem Bereich fuer einen Titel), Stil, Licht und Farbpalette (professionell, ruhig, dezent; Blau-/Grautoene, ein Akzent).
+Vorgehen:
+1. Fasse die konkrete Kernaussage des Beitrags in einem Satz (nicht nur das Rechtsgebiet): Was ist passiert, was bedeutet es fuer wen?
+2. Finde ein Motiv, das diese Kernaussage erzaehlt - eine kleine Szene mit Handlung oder ein starkes Bildkonzept, kein Stillleben.
+3. Schreibe daraus den Bild-Prompt.
+
+Motivfamilien (waehle die passendste und wechsle bewusst zwischen ihnen):
+- Menschen in einer Situation: Besprechung oder Workshop, Beratungsgespraech, Team vor Bildschirmen, Mitarbeiterin am Laptop im Homeoffice oder Cafe, Alltag in Handwerk, Pflege, Handel oder Logistik mit Technik, Hausflur und Klingelschilder, Empfang, Kundengespraech.
+- Orte und Architektur: Gerichtsgebaeude (Treppen, Saeulen, Licht), Glasfassaden, Rechenzentrum, Hafen, Stadtansicht, Grossraumbuero, Werkhalle.
+- Technik im Einsatz: Server und Kabel, Smartphone, Kamera und Ueberwachung, Cloud, Netzwerk, Bildschirme mit unleserlichen Oberflaechen.
+- Metaphern: Schloss und Schluessel, Bruecke, Weggabelung, Netz, Schutzschild, Waage nur selten, Nebel der sich lichtet, Stoerung im Muster.
+- Nahaufnahmen: Haende bei der Arbeit, Detail am Geraet, Dokumente in Haenden (ohne lesbaren Text).
+Vermeide Klischees: kein leerer Schreibtisch, keine Paragrafenzeichen-Collagen, nicht immer Waage und Hammer. Schreibtisch oder Waage nur, wenn das Thema sie wirklich erzwingt.
+
+Menschen sind ausdruecklich erwuenscht: natuerlich wirkende, frei erfundene Personen unterschiedlichen Alters und Hintergrunds in glaubwuerdigen Berufssituationen. Nicht erlaubt: reale Personen oder Prominente nachbilden, Kinder, Beteiligte des geschilderten Falls. Gut funktionieren Halbtotale, Blick ueber die Schulter, Silhouetten, Seiten- oder Rueckansichten und Haende - das wirkt oft weniger kuenstlich als frontale Gesichter.
+
+Der Prompt (Feld prompt):
+- Sprache: wie in der Anweisung unten vorgegeben.
+- 60 bis 120 Woerter, bestehend aus: konkretem Motiv mit Handlung, Umgebung, Perspektive und Bildausschnitt, Lichtstimmung, Farbwelt und Stil. Querformat 3:2, mit ruhigem Bereich fuer eine spaetere Titelueberlagerung.
+- Stil "photo": dokumentarischer Editorial-Fotostil, natuerliches Licht, authentisch, leichte Tiefenschaerfe. Stil "illustration": waehle und wechsle bewusst - flache Vektorillustration, Editorial-Illustration, isometrisch, Papierschnitt-Collage, Aquarell - mit stimmiger, nicht zu greller Farbpalette. Wurde ein Stil vorgegeben, halte dich daran.
+- Keine Schrift, keine Buchstaben oder Zahlen im Bild (Bildmodelle bilden sie fehlerhaft ab), keine Logos, Marken, Flaggen oder Parteisymbole; Bildschirme und Dokumente nur mit unleserlichem Inhalt. Nichts, was den konkreten Fall, Beteiligte oder Unternehmen erkennbar macht.
+
+Weitere Felder:
+- style: "illustration" oder "photo".
 - altText: Deutsch, hoechstens 125 Zeichen, beschreibt sachlich, was zu sehen ist (kein "Bild von"). Enthaelt das Fokus-Keyword woertlich, sofern das ohne Verrenkung moeglich ist.
 - caption: Deutsch, eine kurze Bildunterschrift (hoechstens 80 Zeichen) oder leer, wenn keine noetig ist.
-- searchQuery: 2 bis 4 englische Suchbegriffe, mit denen man in einer Stockfoto-Datenbank ein passendes lizenzfreies Bild findet.
+- searchQuery: 2 bis 4 englische Suchbegriffe fuer eine Stockfoto-Datenbank, passend zum Motiv.
 
-Strikte Regeln fuer das Motiv:
-- Symbolische, neutrale Motive (z. B. Waage, Schloss, Dokumente, Schluessel, Netzwerk, Aktenordner, Schreibtisch, Serverraum, Paragrafenzeichen als Form) - keine konkreten Gerichtsgebaeude mit Beschriftung.
-- KEINE erkennbaren Personen oder Gesichter (Haende oder Silhouetten von hinten sind ok), keine Kinder.
-- Kein Text, keine Buchstaben oder Zahlen im Bild, keine Logos, keine Marken, keine Flaggen oder Parteisymbole.
-- Nichts, was den konkreten Fall, Beteiligte oder Unternehmen aus dem Beitrag erkennbar macht.`;
+Abwechslung: Bekommst du eine Liste zuletzt verwendeter Bildideen, waehle ein deutlich anderes Motiv, eine andere Perspektive und - bei Illustrationen - einen anderen Stil.`;

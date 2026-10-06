@@ -25,6 +25,8 @@ const schema = z.object({
   // Ohne Angabe gilt der Standard des jeweiligen Anbieters (openai: gpt-image-1, supermachine: Supermachine NextGen)
   IMAGE_MODEL: cleaned,
   IMAGE_BASE_URL: cleaned,
+  // Sprache der Bild-Prompts. Deutsch ist Standard; manche Bildmodelle (z. B. aeltere Stable-Diffusion-Modelle) liefern mit Englisch bessere Ergebnisse.
+  IMAGE_PROMPT_LANGUAGE: z.enum(["de", "en"]).default("de"),
   IMAGE_QUALITY: z.enum(["low", "medium", "high"]).default("medium"),
   IMAGE_WIDTH: z.coerce.number().int().min(256).max(2048).optional(),
   IMAGE_HEIGHT: z.coerce.number().int().min(256).max(2048).optional(),

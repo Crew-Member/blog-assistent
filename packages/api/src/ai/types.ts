@@ -155,7 +155,7 @@ export interface AiService {
   /** Waehlt aus den vorhandenen WordPress-Kategorien die passenden (hoechstens drei) fuer einen fertigen Beitrag. */
   suggestCategories(input: { site: SiteProfile; post: { title: string; excerpt: string; focusKeyword: string; text: string }; categories: CategoryOption[] }): Promise<CategorySuggestion>;
   /** Entwirft Beitragsbild: Bild-Prompt (Englisch), Alt-Text, Bildunterschrift und Suchbegriff fuer Stockfotos. */
-  planImage(input: { site: SiteProfile; post: { title: string; excerpt: string; focusKeyword: string; text: string }; style?: "illustration" | "photo" }): Promise<ImagePlan>;
+  planImage(input: { site: SiteProfile; post: { title: string; excerpt: string; focusKeyword: string; text: string }; style?: "illustration" | "photo"; promptLanguage?: "de" | "en"; recentPrompts?: string[] }): Promise<ImagePlan>;
   /** Leitet aus Beispielbeitraegen Tonalitaet und Stilleitfaden ab. */
   deriveStyle(input: { site: SiteProfile; samples: StyleSampleInput[] }): Promise<StyleDerivation>;
 }

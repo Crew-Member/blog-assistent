@@ -112,7 +112,7 @@ function ImagePanel({ post, onChanged }: { post: PostDetail; onChanged: () => vo
         <div className="row">
           <button disabled={busy} onClick={() => run(() => api.post(`/api/posts/${post.id}/image/plan`, { style: "illustration" }))}>{busy ? "Bitte warten …" : "Bildvorschlag: Illustration"}</button>
           <button className="secondary" disabled={busy} onClick={() => run(() => api.post(`/api/posts/${post.id}/image/plan`, { style: "photo" }))}>Bildvorschlag: Foto</button>
-          <span className="muted">Die KI schreibt Prompt, Alt-Text und Bildunterschrift – ohne erkennbare Personen, Text oder Logos.</span>
+          <span className="muted">Die KI schreibt Prompt, Alt-Text und Bildunterschrift – mit lebendigem Motiv, ohne Schrift im Bild und ohne reale Personen.</span>
         </div>
       )}
 
@@ -125,7 +125,7 @@ function ImagePanel({ post, onChanged }: { post: PostDetail; onChanged: () => vo
                 <option value="photo">Foto</option>
               </select>
             </label>}
-            {!uploadOnly && <label>Bild-Prompt (Englisch) <span className="muted">– auch für andere Bilddienste nutzbar</span>
+            {!uploadOnly && <label>Bild-Prompt <span className="muted">– auch für andere Bilddienste nutzbar</span>
               <textarea rows={5} value={form.prompt} onChange={edit("prompt")} />
             </label>}
             <label>Alt-Text (Barrierefreiheit, höchstens 125 Zeichen) <span className="muted">({form.altText.length})</span>

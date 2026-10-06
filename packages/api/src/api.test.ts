@@ -497,6 +497,25 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect(checked).toHaveLength(2);
   });
 
+  it("gibt dem Bildvorschlag Sprache und zuletzt verwendete Bildideen mit", async () => {
+    const seen: { language?: string; recent?: string[] }[] = [];
+    const fake = new FakeAiService();
+    await setup(fakeWith({
+      planImage: async (input) => {
+        seen.push({ language: input.promptLanguage, recent: input.recentPrompts });
+        return fake.planImage(input);
+      },
+    }));
+    const siteId = await createSite();
+    const first = await makePost(siteId);
+    const second = await makePost(siteId);
+    await app.inject({ method: "POST", url: `/api/posts/${first}/image/plan`, headers: { cookie }, payload: { style: "photo" } });
+    await app.inject({ method: "POST", url: `/api/posts/${second}/image/plan`, headers: { cookie }, payload: { style: "photo" } });
+    expect(seen[0]).toEqual({ language: "de", recent: [] });
+    expect(seen[1]?.recent).toHaveLength(1);
+    expect(seen[1]?.recent?.[0]).toContain("Besprechungstisch");
+  });
+
   it("gibt die gewuenschte Anzahl an den WordPress-Import weiter", async () => {
     const urls: string[] = [];
     wpFetcher = (async (url: string) => {
