@@ -258,3 +258,28 @@ export interface TitleSuggestion {
   length: number;
   hasKeyword: boolean;
 }
+
+export interface UsageStep {
+  step: string;
+  label: string;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  webSearches: number;
+  costUsd: number;
+}
+
+export interface UsageOverview {
+  days: number;
+  prices: { inputPerMTok: number; outputPerMTok: number; searchPer1000: number; imageUsd: number };
+  totals: { costUsd: number; calls: number; webSearches: number; images: number; posts: number; avgPerPostUsd: number };
+  steps: UsageStep[];
+  bySite: { siteId: string; name: string; costUsd: number }[];
+  recentPosts: { postId: string; title: string; costUsd: number; lastAt: string }[];
+}
+
+export interface PostUsage {
+  costUsd: number;
+  calls: number;
+  steps: UsageStep[];
+}

@@ -55,6 +55,10 @@ Aus Mails werden Betreff, Absender, Datum und Text gelesen; PDF-, Word- und Text
 
 Vor dem Schreiben sucht die KI per Websuche die stärksten deutschsprachigen Treffer zum Suchbegriff (das erste Keyword des Themas). Das Tool ruft bis zu sechs dieser Seiten selbst ab (nur öffentliche Adressen, Zeitlimit, ohne Plattformen und die eigene Website) und misst Wortzahl und Zwischenüberschriften. Die KI leitet daraus Suchintention, einen Zielumfang und häufig behandelte Aspekte ab; der Schreib-Prompt bekommt sie als Orientierung (der Stilleitfaden hat Vorrang). Die Auswertung steht am Beitrag („Vergleich mit den Top-Ergebnissen“). Pro Website abschaltbar (kostet eine zusätzliche Websuche je Beitrag). Die Treffer stammen aus einer KI-Websuche, nicht aus Googles Ergebnisliste.
 
+### Kosten
+
+Jeder KI-Aufruf wird mit Tokens und Websuchen protokolliert; die Seite **Kosten** zeigt die Summen je Schritt, Website und Beitrag, am Beitrag steht „Kosten dieses Beitrags“. Die Euro-/Dollarbeträge sind Schätzungen aus den Preisen in der `.env` (`AI_PRICE_INPUT_PER_MTOK`, `AI_PRICE_OUTPUT_PER_MTOK`, `AI_PRICE_SEARCH_PER_1000`, optional `IMAGE_COST_USD`). Bitte mit der aktuellen Preisliste des Anbieters abgleichen; maßgeblich ist die Rechnung. Erfasst wird ab Einführung der Übersicht.
+
 ### Wie der Faktencheck arbeitet
 
 1. Ein zweiter Claude-Durchlauf bekommt den Entwurf, die Recherchenotizen, die Eckdaten und die Originalunterlagen (PDFs/Mails) und prüft jede Tatsachenbehauptung. Als belegt gilt nur, was dort steht.

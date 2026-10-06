@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { useHashRoute } from "./hooks";
+import { CostsPage } from "./pages/CostsPage";
 import { HomePage } from "./pages/HomePage";
 import { Login } from "./pages/Login";
 import { PostPage } from "./pages/PostPage";
@@ -27,6 +28,7 @@ export function App() {
   let page = <HomePage />;
   if (section === "sites") page = <SitesPage />;
   else if (section === "revise") page = <RevisePage />;
+  else if (section === "costs") page = <CostsPage />;
   else if (section === "submissions" && id) page = <SubmissionPage key={id} id={id} />;
   else if (section === "posts" && id) page = <PostPage key={id} id={id} />;
   const inContent = !section || section === "submissions" || section === "posts";
@@ -41,6 +43,7 @@ export function App() {
         <nav aria-label="Hauptnavigation">
           <a href="#/" className={inContent ? "active" : ""}><Icon name="file" /> <span className="nav-label">Uploads &amp; Beiträge</span></a>
           <a href="#/revise" className={section === "revise" ? "active" : ""}><Icon name="pen" /> <span className="nav-label">Überarbeiten</span></a>
+          <a href="#/costs" className={section === "costs" ? "active" : ""}><Icon name="layers" /> <span className="nav-label">Kosten</span></a>
           <a href="#/sites" className={section === "sites" ? "active" : ""}><Icon name="globe" /> <span className="nav-label">Websites</span></a>
         </nav>
         <button

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { POST_LABEL, api, isBusy, type Competition, type FactCheck, type PostDetail, type PostImage, type TitleSuggestion, type WpPrepare, type WpPublishResult } from "../api";
+import { POST_LABEL, api, isBusy, type Competition, type PostUsage, type FactCheck, type PostDetail, type PostImage, type TitleSuggestion, type WpPrepare, type WpPublishResult } from "../api";
 import { useLoad } from "../hooks";
+import { usd } from "./CostsPage";
 import { Chip, Icon, PageHeader, POST_TONE, SkeletonPage, Spinner, Stepper, StatusChip, type Tone } from "../ui";
 
 const FACT_LABEL: Record<FactCheck["status"], string> = {
@@ -344,6 +345,20 @@ function CompetitionPanel({ c, ownWords }: { c: Competition; ownWords: number })
   );
 }
 
+function UsageNote({ postId, status }: { postId: string; status: string }) {
+  const { data } = useLoad(() => api.get<PostUsage>(`/api/posts/${postId}/usage`), () => isBusy(status));
+  if (!data || data.calls === 0) return null;
+  return (
+    <details className="muted">
+      <summary>Kosten dieses Beitrags: ca. {usd(data.costUsd)} (Schätzung)</summary>
+      <ul>
+        {data.steps.map((s) => <li key={s.step}>{s.label}: {usd(s.costUsd)}{s.calls > 1 ? ` (${s.calls}×)` : ""}</li>)}
+      </ul>
+      <a href="#/costs">Gesamtübersicht</a>
+    </details>
+  );
+}
+
 function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: boolean; onDone: () => void }) {
   const [prep, setPrep] = useState<WpPrepare>();
   const [selected, setSelected] = useState<number[]>([]);
@@ -603,6 +618,7 @@ export function PostPage({ id }: { id: string }) {
           {data.researchNotes && <details className="card"><summary>Recherchenotizen der KI</summary><pre>{data.researchNotes}</pre></details>}
         </div>
       )}
+      <UsageNote postId={id} status={data.status} />
       <hr />
       <button className="secondary danger" onClick={async () => { if (confirm("Beitrag löschen?")) { await api.del(`/api/posts/${id}`); window.location.hash = `#/submissions/${data.topic.submissionId}`; } }}><Icon name="trash" size={16} /> Beitrag löschen</button>
     </>

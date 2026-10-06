@@ -192,3 +192,16 @@ describe("Wettbewerbsvergleich (Seitenanalyse)", () => {
     expect(clampWords(5000)).toBe(1800);
   });
 });
+
+describe("costOf", () => {
+  it("rechnet Tokens, Cache und Websuchen nach den Preisen und nimmt feste Kosten (Bilder) unveraendert", async () => {
+    const { costOf } = await import("./usage.js");
+    const prices = { inputPerMTok: 5, outputPerMTok: 25, searchPer1000: 10 };
+    const base = { step: "draft", model: "m", inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, webSearches: 0 };
+    expect(costOf({ ...base, inputTokens: 1_000_000, outputTokens: 100_000 }, prices)).toBeCloseTo(5 + 2.5, 6);
+    expect(costOf({ ...base, cacheReadTokens: 1_000_000 }, prices)).toBeCloseTo(0.5, 6);
+    expect(costOf({ ...base, cacheWriteTokens: 1_000_000 }, prices)).toBeCloseTo(6.25, 6);
+    expect(costOf({ ...base, webSearches: 8 }, prices)).toBeCloseTo(0.08, 6);
+    expect(costOf({ ...base, step: "image_generate", fixedCostUsd: 0.04 }, prices)).toBe(0.04);
+  });
+});

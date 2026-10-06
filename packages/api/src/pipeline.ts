@@ -5,6 +5,7 @@ import { escapeHtml, sanitizePostHtml, applyLinkPolicy } from "./lib/html.js";
 import { fetchSitePosts } from "./lib/wordpress.js";
 import { parsePreferredLinks } from "./lib/links.js";
 import { fetchPrimarySources } from "./lib/sources.js";
+import { recordUsage, withUsageContext } from "./lib/usage.js";
 import { clampWords, fetchCompetitorPages, median, pickCompetitorUrls } from "./lib/competition.js";
 import { checkReferences, type ReferenceCheck } from "./lib/references.js";
 import { slugWithKeyword } from "./lib/slug.js";
@@ -20,6 +21,8 @@ export interface PipelineDeps {
   images?: ImageProvider;
   /** Fuer Tests austauschbar (Abruf vorhandener Beitraege fuer interne Links). */
   fetcher?: typeof fetch;
+  /** Kosten je erzeugtem Bild (USD) fuer die Kostenuebersicht. */
+  imageCostUsd?: number;
 }
 
 function profileOf(site: { name: string; language: string; audience: string; tone: string; styleGuide: string }): SiteProfile {
@@ -50,7 +53,11 @@ async function loadAiDocuments({ prisma, storage }: PipelineDeps, submissionId: 
 }
 
 /** Schritt 1: Unterlagen lesen und Themen vorschlagen. */
-export async function analyzeSubmission(deps: PipelineDeps, submissionId: string): Promise<void> {
+export function analyzeSubmission(deps: PipelineDeps, submissionId: string): Promise<void> {
+  return withUsageContext({ submissionId }, () => analyzeSubmissionRun(deps, submissionId));
+}
+
+async function analyzeSubmissionRun(deps: PipelineDeps, submissionId: string): Promise<void> {
   const { prisma, ai } = deps;
   try {
     const submission = await prisma.submission.findUniqueOrThrow({ where: { id: submissionId }, include: { site: true } });
@@ -183,7 +190,11 @@ async function runCompetition(deps: PipelineDeps, site: SiteProfile, topic: Topi
 }
 
 /** Schritt 2-4: Recherche, Entwurf und Faktencheck fuer ein ausgewaehltes Thema. */
-export async function generatePost(deps: PipelineDeps, postId: string): Promise<void> {
+export function generatePost(deps: PipelineDeps, postId: string): Promise<void> {
+  return withUsageContext({ postId }, () => generatePostRun(deps, postId));
+}
+
+async function generatePostRun(deps: PipelineDeps, postId: string): Promise<void> {
   const { prisma, ai } = deps;
   try {
     const post = await prisma.post.findUniqueOrThrow({
@@ -295,12 +306,17 @@ export function finalCaption(caption: string, aiGenerated: boolean, labelAiImage
 }
 
 /** Erzeugt das Bild zu einem geplanten Prompt ueber den konfigurierten Anbieter und legt es ab. */
-export async function generateImage({ prisma, storage, images }: PipelineDeps, postId: string): Promise<void> {
+export function generateImage(deps: PipelineDeps, postId: string): Promise<void> {
+  return withUsageContext({ postId }, () => generateImageRun(deps, postId));
+}
+
+async function generateImageRun({ prisma, storage, images, imageCostUsd }: PipelineDeps, postId: string): Promise<void> {
   try {
     if (!images) throw new Error("Bildgenerierung ist nicht eingerichtet (IMAGE_PROVIDER).");
     const image = await prisma.postImage.findUniqueOrThrow({ where: { postId } });
     if (!image.prompt.trim()) throw new Error("Es gibt keinen Bild-Prompt.");
     const generated = await images.generate({ prompt: image.prompt });
+    recordUsage({ step: "image_generate", model: images.name, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, webSearches: 0, fixedCostUsd: imageCostUsd ?? 0 });
     const data = markAsAiGenerated(generated.data, `KI-generiert (${images.name})`);
     const key = await storage.save(data);
     if (image.storageKey) await storage.remove(image.storageKey);

@@ -211,3 +211,24 @@ model Post {
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 }
+
+// Verbrauch je KI-Aufruf (Tokens, Websuchen) bzw. Bild - Grundlage der Kostenuebersicht. Bewusst ohne Fremdschluessel: bleibt auch nach dem Loeschen von Beitraegen erhalten.
+model AiUsage {
+  id               String   @id @default(cuid())
+  createdAt        DateTime @default(now())
+  step             String
+  model            String   @default("")
+  siteId           String?
+  postId           String?
+  submissionId     String?
+  inputTokens      Int      @default(0)
+  outputTokens     Int      @default(0)
+  cacheReadTokens  Int      @default(0)
+  cacheWriteTokens Int      @default(0)
+  webSearches      Int      @default(0)
+  // Zum Zeitpunkt des Aufrufs berechnet (Preise aus der .env); aendern sich Preise spaeter, bleibt die Historie stehen.
+  costUsd          Float    @default(0)
+
+  @@index([createdAt])
+  @@index([postId])
+}

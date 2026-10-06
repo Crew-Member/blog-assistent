@@ -27,6 +27,12 @@ const schema = z.object({
   IMAGE_BASE_URL: cleaned,
   // Sprache der Bild-Prompts. Deutsch ist Standard; manche Bildmodelle (z. B. aeltere Stable-Diffusion-Modelle) liefern mit Englisch bessere Ergebnisse.
   IMAGE_PROMPT_LANGUAGE: z.enum(["de", "en"]).default("de"),
+  // Preise fuer die Kostenuebersicht (USD). Bitte mit der aktuellen Preisliste des Anbieters abgleichen - die Vorgaben sind Schaetzwerte.
+  AI_PRICE_INPUT_PER_MTOK: z.coerce.number().min(0).default(5),
+  AI_PRICE_OUTPUT_PER_MTOK: z.coerce.number().min(0).default(25),
+  AI_PRICE_SEARCH_PER_1000: z.coerce.number().min(0).default(10),
+  // Kosten je erzeugtem Bild (USD), abhaengig vom Bildanbieter/Modell; 0 = nicht mitrechnen
+  IMAGE_COST_USD: z.coerce.number().min(0).default(0),
   IMAGE_QUALITY: z.enum(["low", "medium", "high"]).default("medium"),
   IMAGE_WIDTH: z.coerce.number().int().min(256).max(2048).optional(),
   IMAGE_HEIGHT: z.coerce.number().int().min(256).max(2048).optional(),

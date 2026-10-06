@@ -1,3 +1,4 @@
+import { STEP_LABELS, useUsageContext } from "./lib/usage.js";
 import { explainAiError } from "./ai/errors.js";
 import { timingSafeEqual } from "node:crypto";
 import path from "node:path";
@@ -233,6 +234,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     if (!post) throw new HttpError(404, "Beitrag nicht gefunden");
     if (post.status !== "DRAFT_READY") throw new HttpError(409, "Nur fertige Entwürfe können an WordPress gesendet werden.");
     const { client } = await wpClientFor(post.siteId);
+    useUsageContext({ postId: post.id, siteId: post.siteId });
     const categories = await client.categories();
 
     let suggested: number[] = [];
@@ -371,6 +373,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     const site = await prisma.site.findUnique({ where: { id: request.params.id }, include: { styleSamples: { orderBy: { createdAt: "desc" }, take: 5 } } });
     if (!site) return reply.code(404).send({ error: "Website nicht gefunden" });
     if (site.styleSamples.length === 0) return reply.code(400).send({ error: "Bitte zuerst Beispielbeiträge hinzufügen" });
+    useUsageContext({ siteId: site.id });
     try {
       return await ai.deriveStyle({
         site: { name: site.name, language: site.language, audience: site.audience, tone: site.tone, styleGuide: site.styleGuide },
@@ -607,6 +610,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     const post = await prisma.post.findUnique({ where: { id: request.params.id }, include: { site: true } });
     if (!post) return reply.code(404).send({ error: "Beitrag nicht gefunden" });
     if (post.status !== "DRAFT_READY" || !post.contentHtml) return reply.code(409).send({ error: "Der Entwurf ist noch nicht fertig." });
+    useUsageContext({ postId: post.id, siteId: post.siteId });
     let result;
     try {
       result = await ai.suggestTitles({
@@ -634,6 +638,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     const post = await prisma.post.findUnique({ where: { id: request.params.id }, include: { site: true } });
     if (!post) return reply.code(404).send({ error: "Beitrag nicht gefunden" });
     if (post.status !== "DRAFT_READY" || !post.contentHtml) return reply.code(409).send({ error: "Der Entwurf ist noch nicht fertig." });
+    useUsageContext({ postId: post.id, siteId: post.siteId });
     const footerStamp = post.contentHtml.match(FOOTER_RE)?.[0] ?? "";
     let current = post.contentHtml.replace(FOOTER_RE, "");
     // Der feste Schlussabsatz der Website gehoert nicht zum Text, den die KI sieht.
@@ -669,6 +674,71 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     if (!post.previousContentHtml) return reply.code(409).send({ error: "Es gibt nichts rückgängig zu machen." });
     await prisma.post.update({ where: { id: post.id }, data: { contentHtml: post.previousContentHtml, previousContentHtml: null } });
     return { ok: true };
+  });
+
+  // --- Kostenuebersicht ---------------------------------------------------------
+  const round = (n: number, digits = 4) => Math.round(n * 10 ** digits) / 10 ** digits;
+
+  function summarize(rows: { step: string; inputTokens: number; outputTokens: number; webSearches: number; costUsd: number }[]) {
+    const byStep = new Map<string, { step: string; label: string; calls: number; inputTokens: number; outputTokens: number; webSearches: number; costUsd: number }>();
+    for (const r of rows) {
+      const e = byStep.get(r.step) ?? { step: r.step, label: STEP_LABELS[r.step] ?? r.step, calls: 0, inputTokens: 0, outputTokens: 0, webSearches: 0, costUsd: 0 };
+      e.calls++;
+      e.inputTokens += r.inputTokens;
+      e.outputTokens += r.outputTokens;
+      e.webSearches += r.webSearches;
+      e.costUsd += r.costUsd;
+      byStep.set(r.step, e);
+    }
+    const steps = [...byStep.values()].sort((a, b) => b.costUsd - a.costUsd).map((e) => ({ ...e, costUsd: round(e.costUsd) }));
+    return { steps, costUsd: round(rows.reduce((sum, r) => sum + r.costUsd, 0)) };
+  }
+
+  const prices = { inputPerMTok: config.AI_PRICE_INPUT_PER_MTOK, outputPerMTok: config.AI_PRICE_OUTPUT_PER_MTOK, searchPer1000: config.AI_PRICE_SEARCH_PER_1000, imageUsd: config.IMAGE_COST_USD };
+
+  app.get<{ Querystring: { days?: string } }>("/api/usage", async (request) => {
+    const days = Math.min(Math.max(Number.parseInt(request.query.days ?? "30", 10) || 0, 0), 3650);
+    const since = days > 0 ? new Date(Date.now() - days * 86_400_000) : undefined;
+    const rows = await prisma.aiUsage.findMany({ where: since ? { createdAt: { gte: since } } : {}, orderBy: { createdAt: "desc" } });
+    const all = summarize(rows);
+
+    const siteNames = new Map((await prisma.site.findMany({ select: { id: true, name: true } })).map((s) => [s.id, s.name]));
+    const bySiteMap = new Map<string, number>();
+    for (const r of rows) bySiteMap.set(r.siteId ?? "", (bySiteMap.get(r.siteId ?? "") ?? 0) + r.costUsd);
+    const bySite = [...bySiteMap.entries()].map(([id, cost]) => ({ siteId: id, name: siteNames.get(id) ?? "(gelöschte oder keine Website)", costUsd: round(cost) })).sort((a, b) => b.costUsd - a.costUsd);
+
+    const perPost = new Map<string, { cost: number; last: Date }>();
+    for (const r of rows) {
+      if (!r.postId) continue;
+      const e = perPost.get(r.postId) ?? { cost: 0, last: r.createdAt };
+      e.cost += r.costUsd;
+      if (r.createdAt > e.last) e.last = r.createdAt;
+      perPost.set(r.postId, e);
+    }
+    const recentIds = [...perPost.entries()].sort((a, b) => b[1].last.getTime() - a[1].last.getTime()).slice(0, 20);
+    const titles = new Map((await prisma.post.findMany({ where: { id: { in: recentIds.map(([id]) => id) } }, select: { id: true, title: true, topic: { select: { title: true } } } })).map((p) => [p.id, p.title ?? p.topic.title]));
+    const postCosts = [...perPost.values()].map((p) => p.cost);
+
+    return {
+      days,
+      prices,
+      totals: {
+        costUsd: all.costUsd,
+        calls: rows.length,
+        webSearches: rows.reduce((n, r) => n + r.webSearches, 0),
+        images: rows.filter((r) => r.step === "image_generate").length,
+        posts: perPost.size,
+        avgPerPostUsd: postCosts.length ? round(postCosts.reduce((a, b) => a + b, 0) / postCosts.length) : 0,
+      },
+      steps: all.steps,
+      bySite,
+      recentPosts: recentIds.map(([id, v]) => ({ postId: id, title: titles.get(id) ?? "(gelöschter Beitrag)", costUsd: round(v.cost), lastAt: v.last })),
+    };
+  });
+
+  app.get<{ Params: { id: string } }>("/api/posts/:id/usage", async (request) => {
+    const rows = await prisma.aiUsage.findMany({ where: { postId: request.params.id } });
+    return { ...summarize(rows), calls: rows.length };
   });
 
   app.get("/api/posts", async () =>
@@ -735,6 +805,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     const body = z.object({ style: z.enum(["illustration", "photo"]).optional() }).safeParse(request.body ?? {});
     if (!body.success) throw new HttpError(400, "Ungültiger Stil");
     const post = await loadReadyPost(request.params.id);
+    useUsageContext({ postId: post.id, siteId: post.siteId });
     let plan;
     try {
       plan = await ai.planImage({

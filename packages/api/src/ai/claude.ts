@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { recordUsage } from "../lib/usage.js";
 import { COMPETITOR_SEARCH_SYSTEM, COMPETITION_SYSTEM, competitionBlock, RADAR_JUDGE_SYSTEM, RADAR_SEARCH_SYSTEM, TITLES_SYSTEM, REFINE_SYSTEM, internalLinksBlock, REVISE_SYSTEM, relatedPostsBlock, revisionBlock, ANALYZE_SYSTEM, CATEGORY_SYSTEM, DRAFT_SYSTEM, IMAGE_PLAN_SYSTEM, FACTCHECK_SYSTEM, RESEARCH_SYSTEM, STYLE_SYSTEM, siteBlock, styleSamplesBlock, topicBlock } from "./prompts.js";
 import {
   analyzeResultSchema,
@@ -229,6 +230,16 @@ function assertUsable(message: Anthropic.Message): void {
   }
 }
 
+/** Ordnet einen System-Prompt dem Verbrauchsschritt zu. */
+function stepOf(system: string): string {
+  const table: [string, string][] = [
+    [ANALYZE_SYSTEM, "analyze"], [RESEARCH_SYSTEM, "research"], [COMPETITOR_SEARCH_SYSTEM, "competition_search"], [COMPETITION_SYSTEM, "competition"],
+    [DRAFT_SYSTEM, "draft"], [REVISE_SYSTEM, "draft"], [FACTCHECK_SYSTEM, "factcheck"], [REFINE_SYSTEM, "refine"], [TITLES_SYSTEM, "titles"],
+    [IMAGE_PLAN_SYSTEM, "image_plan"], [CATEGORY_SYSTEM, "categories"], [STYLE_SYSTEM, "style"], [RADAR_SEARCH_SYSTEM, "radar_search"], [RADAR_JUDGE_SYSTEM, "radar"],
+  ];
+  return table.find(([prompt]) => prompt === system)?.[1] ?? "other";
+}
+
 export class ClaudeAiService implements AiService {
   private readonly client: Anthropic;
 
@@ -241,6 +252,25 @@ export class ClaudeAiService implements AiService {
       defaultHeaders: options.workspaceId ? { "anthropic-workspace-id": options.workspaceId } : undefined,
       fetch: options.fetch,
       maxRetries: options.fetch ? 0 : undefined,
+    });
+  }
+
+  private track(system: string, message: Anthropic.Message): void {
+    const u = message.usage as unknown as {
+      input_tokens?: number;
+      output_tokens?: number;
+      cache_read_input_tokens?: number | null;
+      cache_creation_input_tokens?: number | null;
+      server_tool_use?: { web_search_requests?: number } | null;
+    };
+    recordUsage({
+      step: stepOf(system),
+      model: this.options.model,
+      inputTokens: u?.input_tokens ?? 0,
+      outputTokens: u?.output_tokens ?? 0,
+      cacheReadTokens: u?.cache_read_input_tokens ?? 0,
+      cacheWriteTokens: u?.cache_creation_input_tokens ?? 0,
+      webSearches: u?.server_tool_use?.web_search_requests ?? 0,
     });
   }
 
@@ -260,6 +290,7 @@ export class ClaudeAiService implements AiService {
         messages: [{ role: "user", content }],
       })
       .finalMessage();
+    this.track(system, message);
     assertUsable(message);
     const text = textOf(message);
     try {
@@ -305,6 +336,7 @@ export class ClaudeAiService implements AiService {
           messages,
         })
         .finalMessage();
+      this.track(system, message);
       assertUsable(message);
 
       for (const block of message.content) {

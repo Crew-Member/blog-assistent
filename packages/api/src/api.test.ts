@@ -14,6 +14,8 @@ import { buildMsg } from "./lib/msgfixture.testutil.js";
 import { FileStorage } from "./lib/storage.js";
 import { buildServer } from "./server.js";
 import { Worker } from "./worker.js";
+import { recordUsage, setUsageSink } from "./lib/usage.js";
+import { createUsageSink } from "./lib/usage-db.js";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 
@@ -70,6 +72,7 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
   });
   beforeEach(async () => {
     await prisma.site.deleteMany();
+    await prisma.aiUsage.deleteMany();
     await setup(new FakeAiService());
   });
   afterAll(async () => {
@@ -552,6 +555,47 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     const created = await app.inject({ method: "POST", url: "/api/sites", headers: { cookie }, payload: { name: "S", competitionCheck: false } });
     await makePost(created.json().id);
     expect(called).toBe(false);
+  });
+
+  it("erfasst den KI-Verbrauch je Beitrag und fasst ihn in der Kostenuebersicht zusammen", async () => {
+    setUsageSink(createUsageSink(prisma, { inputPerMTok: 5, outputPerMTok: 25, searchPer1000: 10 }));
+    try {
+      const fake = new FakeAiService();
+      const entry = { model: "m", cacheReadTokens: 0, cacheWriteTokens: 0 };
+      await setup(fakeWith({
+        analyze: async (input) => {
+          recordUsage({ ...entry, step: "analyze", inputTokens: 10_000, outputTokens: 1_000, webSearches: 0 });
+          return fake.analyze(input);
+        },
+        research: async (input) => {
+          recordUsage({ ...entry, step: "research", inputTokens: 100_000, outputTokens: 4_000, webSearches: 6 });
+          return fake.research(input);
+        },
+        draft: async (input) => {
+          recordUsage({ ...entry, step: "draft", inputTokens: 20_000, outputTokens: 8_000, webSearches: 0 });
+          return fake.draft(input);
+        },
+      }));
+      const siteId = await createSite();
+      const postId = await makePost(siteId);
+      await new Promise((r) => setTimeout(r, 300)); // Speichern der Eintraege laeuft im Hintergrund
+
+      // research: 100000*5/1e6 + 4000*25/1e6 + 6*10/1000 = 0.5 + 0.1 + 0.06 = 0.66
+      // draft: 20000*5/1e6 + 8000*25/1e6 = 0.1 + 0.2 = 0.3 ; analyze: 0.05 + 0.025 = 0.075
+      const perPost = (await app.inject({ method: "GET", url: `/api/posts/${postId}/usage`, headers: { cookie } })).json();
+      expect(perPost.costUsd).toBeCloseTo(0.96, 4);
+      expect(perPost.steps.map((x: { step: string }) => x.step)).toEqual(["research", "draft"]);
+
+      const overview = (await app.inject({ method: "GET", url: "/api/usage?days=30", headers: { cookie } })).json();
+      expect(overview.totals).toMatchObject({ calls: 3, webSearches: 6, posts: 1 });
+      expect(overview.totals.costUsd).toBeCloseTo(1.035, 4);
+      expect(overview.steps[0]).toMatchObject({ step: "research", label: "Recherche", calls: 1 });
+      expect(overview.bySite[0]).toMatchObject({ name: "Kanzlei Test" });
+      expect(overview.recentPosts[0]).toMatchObject({ postId });
+      expect(overview.prices.inputPerMTok).toBe(5);
+    } finally {
+      setUsageSink(undefined);
+    }
   });
 
   it("gibt die gewuenschte Anzahl an den WordPress-Import weiter", async () => {

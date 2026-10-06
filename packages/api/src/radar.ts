@@ -2,6 +2,7 @@ import { explainAiError } from "./ai/errors.js";
 import { stripHtml } from "./lib/extract.js";
 import { fetchAllSitePosts, fetchSitePost } from "./lib/wordpress.js";
 import type { PipelineDeps } from "./pipeline.js";
+import { withUsageContext } from "./lib/usage.js";
 
 /** Beitraege juenger als das werden nicht geprueft. */
 export const RADAR_MIN_AGE_DAYS = 90;
@@ -15,7 +16,11 @@ export const RADAR_BATCH = 5;
 const DAY_MS = 86_400_000;
 
 /** Prueft einige aeltere Beitraege einer Website auf Aktualitaet und speichert die Befunde. Wirft nie. */
-export async function runRadar(deps: PipelineDeps, siteId: string, now = new Date(), batch = RADAR_BATCH): Promise<void> {
+export function runRadar(deps: PipelineDeps, siteId: string, now = new Date(), batch = RADAR_BATCH): Promise<void> {
+  return withUsageContext({ siteId }, () => runRadarRun(deps, siteId, now, batch));
+}
+
+async function runRadarRun(deps: PipelineDeps, siteId: string, now: Date, batch: number): Promise<void> {
   const { prisma, ai } = deps;
   try {
     const site = await prisma.site.findUniqueOrThrow({ where: { id: siteId } });
