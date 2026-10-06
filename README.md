@@ -55,9 +55,9 @@ Aus Mails werden Betreff, Absender, Datum und Text gelesen; PDF-, Word- und Text
 
 Vor dem Schreiben sucht die KI per Websuche die stärksten deutschsprachigen Treffer zum Suchbegriff (das erste Keyword des Themas). Das Tool ruft bis zu sechs dieser Seiten selbst ab (nur öffentliche Adressen, Zeitlimit, ohne Plattformen und die eigene Website) und misst Wortzahl und Zwischenüberschriften. Die KI leitet daraus Suchintention, einen Zielumfang und häufig behandelte Aspekte ab; der Schreib-Prompt bekommt sie als Orientierung (der Stilleitfaden hat Vorrang). Die Auswertung steht am Beitrag („Vergleich mit den Top-Ergebnissen“). Pro Website abschaltbar (kostet eine zusätzliche Websuche je Beitrag). Die Treffer stammen aus einer KI-Websuche, nicht aus Googles Ergebnisliste.
 
-### KI-Hinweis (Kennzeichnung)
+### Kennzeichnung KI-generierter Beitragsbilder
 
-Jeder Beitrag beginnt standardmäßig mit einem sichtbaren Hinweis („KI-Hinweis: Dieser Beitrag wurde mit Unterstützung von KI erstellt und redaktionell geprüft.“). Wortlaut und Ein/Aus stellst du pro Website ein. Fehlt der Hinweis beim Senden an WordPress (alter Entwurf, versehentlich gelöscht), wird er automatisch vorn ergänzt. Die KI selbst schreibt ihn nicht und sieht ihn beim Nachschärfen nicht. Ob und wie gekennzeichnet werden muss, ist eine rechtliche Frage; der Standardwortlaut ist ein Vorschlag, keine Rechtsberatung. Bilder werden zusätzlich in der Unterschrift und in den Metadaten gekennzeichnet.
+Ist das Beitragsbild KI-generiert (oder beim Upload als KI-generiert markiert) und die Kennzeichnung bei der Website eingeschaltet (Standard), geschieht beim Senden an WordPress dreierlei: die Bildunterschrift bekommt „Bild: KI-generiert“, die Bilddatei einen Metadaten-Vermerk und der Beitrag einen **sichtbaren Hinweis vorn im Text** („Beitragsbild: KI-generiert.“, Wortlaut pro Website einstellbar). Der Hinweis wird nur beim Versand eingefügt und nicht im Entwurf gespeichert; wird das Bild durch ein eigenes Foto ersetzt, entfällt er. Beiträge ohne KI-Bild bekommen keinen Hinweis. Ob und wie gekennzeichnet werden muss, ist eine rechtliche Frage; der Standardwortlaut ist ein Vorschlag.
 
 ### Kosten
 

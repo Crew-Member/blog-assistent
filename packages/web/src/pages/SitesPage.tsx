@@ -3,7 +3,7 @@ import { api, type Site, type StyleSample, type WpTestResult } from "../api";
 import { useLoad } from "../hooks";
 import { Chip, EmptyState, Icon, PageHeader } from "../ui";
 
-const EMPTY = { name: "", baseUrl: "", language: "de", audience: "", tone: "", styleGuide: "", disclaimer: "", closingHtml: "", preferredLinks: "", competitionCheck: true, aiNoticeEnabled: true, aiNoticeText: "", labelAiImages: true, wpUsername: "", wpAppPassword: "", clearWpPassword: false };
+const EMPTY = { name: "", baseUrl: "", language: "de", audience: "", tone: "", styleGuide: "", disclaimer: "", closingHtml: "", preferredLinks: "", competitionCheck: true, aiNoticeText: "", labelAiImages: true, wpUsername: "", wpAppPassword: "", clearWpPassword: false };
 
 function StyleSamples({ site, onApply }: { site: Site; onApply: (tone: string, styleGuide: string) => void }) {
   const { data: samples, reload } = useLoad(() => api.get<StyleSample[]>(`/api/sites/${site.id}/style-samples`));
@@ -184,15 +184,11 @@ function SiteForm({ initial, onSaved, onCancel }: { initial?: Site; onSaved: () 
       <label>Disclaimer (wird unter jeden Beitrag gesetzt)<textarea rows={3} value={form.disclaimer} onChange={set("disclaimer")} /></label>
       <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
         <input type="checkbox" style={{ width: "auto" }} checked={form.labelAiImages} onChange={(e) => setForm({ ...form, labelAiImages: e.target.checked })} />
-        KI-generierte Beitragsbilder in der Bildunterschrift kennzeichnen („Bild: KI-generiert“)
+        KI-generierte Beitragsbilder kennzeichnen: Bildunterschrift („Bild: KI-generiert“), Vermerk in der Bilddatei und sichtbarer Hinweis im Beitrag
       </label>
-      <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
-        <input type="checkbox" style={{ width: "auto" }} checked={form.aiNoticeEnabled} onChange={(e) => setForm({ ...form, aiNoticeEnabled: e.target.checked })} />
-        <span>Sichtbaren KI-Hinweis am Anfang jedes Beitrags einfügen (Kennzeichnung) <span className="muted">– wird beim Senden an WordPress ergänzt, falls er fehlt</span></span>
-      </label>
-      {form.aiNoticeEnabled && (
-        <label>Wortlaut des KI-Hinweises <span className="muted">(leer = Standard)</span>
-          <input value={form.aiNoticeText} onChange={set("aiNoticeText")} placeholder="Dieser Beitrag wurde mit Unterstützung von KI erstellt und redaktionell geprüft." />
+      {form.labelAiImages && (
+        <label>Wortlaut des sichtbaren Hinweises im Beitrag <span className="muted">(erscheint nur bei KI-generiertem Beitragsbild; leer = Standard)</span>
+          <input value={form.aiNoticeText} onChange={set("aiNoticeText")} placeholder="Beitragsbild: KI-generiert." />
         </label>
       )}
       <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
@@ -234,7 +230,6 @@ export function SitesPage() {
                     {site.hasWpPassword && site.wpUsername ? <Chip tone="success" icon="check">WordPress verbunden ({site.wpUsername})</Chip> : <Chip tone="neutral" icon="alert">WordPress nicht eingerichtet</Chip>}
                     <Chip tone={site.disclaimer ? "success" : "warn"} icon={site.disclaimer ? "check" : "alert"}>{site.disclaimer ? "Disclaimer hinterlegt" : "Kein Disclaimer"}</Chip>
                     {site.closingHtml && <Chip tone="info" icon="check">Schlussabsatz</Chip>}
-                    <Chip tone={site.aiNoticeEnabled ? "info" : "warn"} icon={site.aiNoticeEnabled ? "check" : "alert"}>{site.aiNoticeEnabled ? "KI-Hinweis im Beitrag" : "Kein KI-Hinweis"}</Chip>
                     {site.preferredLinks.trim() && <Chip tone="info" icon="check">Wunschlinks</Chip>}
                     {site.labelAiImages && <Chip tone="info" icon="image">KI-Bilder werden gekennzeichnet</Chip>}
                   </div>

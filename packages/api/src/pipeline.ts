@@ -6,7 +6,6 @@ import { fetchSitePosts } from "./lib/wordpress.js";
 import { parsePreferredLinks } from "./lib/links.js";
 import { fetchPrimarySources } from "./lib/sources.js";
 import { recordUsage, withUsageContext } from "./lib/usage.js";
-import { aiNoticeHtml } from "./lib/ainotice.js";
 import { clampWords, fetchCompetitorPages, median, pickCompetitorUrls } from "./lib/competition.js";
 import { checkReferences, type ReferenceCheck } from "./lib/references.js";
 import { slugWithKeyword } from "./lib/slug.js";
@@ -85,21 +84,14 @@ async function analyzeSubmissionRun(deps: PipelineDeps, submissionId: string): P
   }
 }
 
-export function assemblePostHtml(
-  contentHtml: string,
-  disclaimer: string,
-  closingHtml = "",
-  aiNotice = "",
-  now = new Date(),
-): string {
+export function assemblePostHtml(contentHtml: string, disclaimer: string, closingHtml = "", now = new Date()): string {
   const closing = sanitizePostHtml(closingHtml);
   const main = sanitizePostHtml(contentHtml);
   const body = closing ? `${main}\n${closing}` : main;
   const stand = now.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Berlin" });
   const notes = [`Stand: ${stand}.`, disclaimer.trim()].filter(Boolean).join(" ");
   const footer = `<p><em>${escapeHtml(notes)}</em></p>`;
-  // Der KI-Hinweis steht vorn, damit er sofort erkennbar ist.
-  return `${aiNotice ? `${aiNotice}\n` : ""}${body}\n${footer}`;
+  return `${body}\n${footer}`;
 }
 
 function clip(text: string, max: number): string {
@@ -270,7 +262,7 @@ async function generatePostRun(deps: PipelineDeps, postId: string): Promise<void
     // Entwurf sofort sichern: schlaegt der Faktencheck fehl, geht die Arbeit nicht verloren.
     await prisma.post.update({
       where: { id: postId },
-      data: { ...draftFields, status: "FACTCHECKING", contentHtml: assemblePostHtml(draft.contentHtml, post.site.disclaimer, post.site.closingHtml, aiNoticeHtml(post.site)), unverifiedClaims: draft.unverifiedClaims },
+      data: { ...draftFields, status: "FACTCHECKING", contentHtml: assemblePostHtml(draft.contentHtml, post.site.disclaimer, post.site.closingHtml), unverifiedClaims: draft.unverifiedClaims },
     });
 
     const uploaded = await loadAiDocuments(deps, post.topic.submissionId);
@@ -295,7 +287,7 @@ async function generatePostRun(deps: PipelineDeps, postId: string): Promise<void
       const html = applyLinkPolicy(checked, post.site.baseUrl, knownInternal);
       await prisma.post.update({
         where: { id: postId },
-        data: { status: "DRAFT_READY", error: null, contentHtml: assemblePostHtml(html, post.site.disclaimer, post.site.closingHtml, aiNoticeHtml(post.site)), unverifiedClaims: unverified, factCheck: stored as unknown as Prisma.InputJsonValue },
+        data: { status: "DRAFT_READY", error: null, contentHtml: assemblePostHtml(html, post.site.disclaimer, post.site.closingHtml), unverifiedClaims: unverified, factCheck: stored as unknown as Prisma.InputJsonValue },
       });
     } catch (error) {
       const stored: StoredFactCheck = { status: "skipped", summary: "Der Faktencheck konnte nicht durchgeführt werden – der Entwurf ist ungeprüft.", issues: [], references: [], ranAt: new Date().toISOString(), error: errorMessage(error) };

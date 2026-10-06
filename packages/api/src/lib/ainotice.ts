@@ -1,30 +1,19 @@
-import { stripHtml } from "./extract.js";
 import { escapeHtml } from "./html.js";
 
-export const DEFAULT_AI_NOTICE = "Dieser Beitrag wurde mit Unterstützung von KI erstellt und redaktionell geprüft.";
-const LABEL = "KI-Hinweis:";
+export const DEFAULT_IMAGE_NOTICE = "Beitragsbild: KI-generiert.";
 
-export interface AiNoticeSettings {
-  aiNoticeEnabled: boolean;
-  aiNoticeText: string;
+/** Sichtbarer Hinweis im Beitrag, wenn das Beitragsbild KI-generiert ist (Standardwortlaut oder der eingestellte Text). */
+export function imageNoticeHtml(site: { aiNoticeText: string }): string {
+  return `<p><em>${escapeHtml(site.aiNoticeText.trim() || DEFAULT_IMAGE_NOTICE)}</em></p>`;
 }
 
-/** Sichtbarer Hinweis am Anfang des Beitrags; leer, wenn die Website ihn abgeschaltet hat. */
-export function aiNoticeHtml(site: AiNoticeSettings): string {
-  if (!site.aiNoticeEnabled) return "";
-  const text = site.aiNoticeText.trim() || DEFAULT_AI_NOTICE;
-  return `<p><strong>${LABEL}</strong> <em>${escapeHtml(text)}</em></p>`;
+/** Entfernt einen frueher gespeicherten allgemeinen "KI-Hinweis" am Textanfang (nur kurz in einer Zwischenversion im Einsatz). */
+export function stripLegacyNotice(html: string): string {
+  return html.replace(/^\s*<p><strong>KI-Hinweis:<\/strong>[\s\S]*?<\/p>\s*/, "");
 }
 
-/** Steht der KI-Hinweis (in der Standardform oder mit dem eingestellten Wortlaut) schon im Text? */
-export function hasAiNotice(html: string, site: AiNoticeSettings): boolean {
-  const plain = stripHtml(html).replace(/\s+/g, " ");
-  const text = (site.aiNoticeText.trim() || DEFAULT_AI_NOTICE).replace(/\s+/g, " ");
-  return plain.includes(text) || html.includes(`<strong>${LABEL}</strong>`);
-}
-
-/** Stellt sicher, dass der Hinweis im Text steht (vorn); gibt den Text und ob etwas ergaenzt wurde zurueck. */
-export function ensureAiNotice(html: string, site: AiNoticeSettings): { html: string; added: boolean } {
-  if (!site.aiNoticeEnabled || hasAiNotice(html, site)) return { html, added: false };
-  return { html: `${aiNoticeHtml(site)}\n${html}`, added: true };
+/** Setzt den Bildhinweis vorn in den Beitrag (nur fuer den Versand an WordPress; gespeichert wird der Text ohne Hinweis). */
+export function withImageNotice(html: string, notice: string): string {
+  const clean = stripLegacyNotice(html);
+  return notice ? `${notice}\n${clean}` : clean;
 }

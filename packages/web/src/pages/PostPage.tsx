@@ -133,7 +133,7 @@ function ImagePanel({ post, onChanged }: { post: PostDetail; onChanged: () => vo
               <input value={form.altText} onChange={edit("altText")} />
             </label>
             <label>Bildunterschrift<input value={form.caption} onChange={edit("caption")} /></label>
-            {label && <span className="muted">Beim Senden an WordPress wird „Bild: KI-generiert“ an die Unterschrift angehängt und im Bild vermerkt.</span>}
+            {label && <span className="muted">Beim Senden an WordPress wird „Bild: KI-generiert“ an die Unterschrift angehängt, im Bild vermerkt und als sichtbarer Hinweis vorn in den Beitrag gesetzt.</span>}
             <div className="row">
               <button disabled={busy || !dirty} onClick={() => run(() => api.put(`/api/posts/${post.id}/image`, { prompt: form.prompt, altText: form.altText, caption: form.caption }))}>Änderungen speichern</button>
               {!uploadOnly && <button
@@ -460,7 +460,7 @@ function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: bool
           </div>
         </>
       )}
-      {result?.aiNoticeAdded && <div className="ok">Der KI-Hinweis fehlte im Text und wurde am Anfang ergänzt.</div>}
+      {result?.imageNotice && <div className="ok">Sichtbarer Hinweis auf das KI-Bild wurde vorn in den Beitrag gesetzt.</div>}
       {result?.image && result.image.status !== "none" && <div className={result.image.status === "set" ? "ok" : "error"}>{result.image.message}</div>}
       {result && <div className="ok">{result.updated ? "Entwurf in WordPress aktualisiert." : "Entwurf in WordPress angelegt."} Er ist noch nicht veröffentlicht.</div>}
       {error && <div className="error">{error}</div>}

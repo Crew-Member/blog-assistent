@@ -930,44 +930,45 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect(calls.find((c) => c.path === "/wp-json/wp/v2/media/55")?.body?.caption).toBe("Symbolbild");
   });
 
-  it("setzt den KI-Hinweis sichtbar an den Anfang, haelt ihn beim Nachschaerfen und ergaenzt ihn beim Senden an WordPress, falls er fehlt", async () => {
-    const calls = fakeWordPress(standardRoutes());
-    let refinedInput = "";
-    await setup(fakeWith({
-      refine: async (input) => {
-        refinedInput = input.contentHtml;
-        return { contentHtml: `<p>${"Neu ".repeat(60)}</p>`, note: "ok" };
-      },
-    }));
+  it("setzt bei KI-generiertem Beitragsbild einen sichtbaren Hinweis vorn in den WordPress-Beitrag - sonst nicht - und speichert ihn nicht im Entwurf", async () => {
+    const calls = fakeWordPress({ ...standardRoutes(), "POST /wp-json/wp/v2/media": { body: { id: 55 } }, "POST /wp-json/wp/v2/media/55": { body: { id: 55 } } });
+    await setup(new FakeAiService(), new FakeImageProvider());
     const site = await createWpSite();
     const postId = await makePost(site.id);
+    const sentContent = () => String(calls.filter((c) => c.path.startsWith("/wp-json/wp/v2/posts") && c.method === "POST").at(-1)?.body?.content);
 
-    // Standard: Hinweis steht vorn, vor dem Text
-    let html: string = (await app.inject({ method: "GET", url: `/api/posts/${postId}`, headers: { cookie } })).json().contentHtml;
-    expect(html.startsWith("<p><strong>KI-Hinweis:</strong> <em>Dieser Beitrag wurde mit Unterstützung von KI erstellt und redaktionell geprüft.</em></p>")).toBe(true);
+    // ohne Bild: kein Hinweis
+    await jsonPost(`/api/posts/${postId}/wordpress/publish`, { categoryIds: [3], tags: [] });
+    expect(sentContent()).not.toContain("KI-generiert");
 
-    // Nachschaerfen: die KI sieht den Hinweis nicht, er bleibt vorn erhalten
-    await app.inject({ method: "POST", url: `/api/posts/${postId}/refine`, headers: { cookie }, payload: { instruction: "Neu schreiben" } });
-    expect(refinedInput).not.toContain("KI-Hinweis");
-    html = (await app.inject({ method: "GET", url: `/api/posts/${postId}`, headers: { cookie } })).json().contentHtml;
-    expect(html.startsWith("<p><strong>KI-Hinweis:</strong>")).toBe(true);
-    expect(html).toContain("Neu Neu");
-
-    // Versehentlich geloescht -> beim Senden wird er ergaenzt und im Beitrag gespeichert
-    await app.inject({ method: "PUT", url: `/api/posts/${postId}`, headers: { cookie }, payload: { contentHtml: "<p>Nur Text ohne Hinweis.</p>" } });
+    // KI-Bild: Hinweis steht vorn; im gespeicherten Entwurf nicht
+    await jsonPost(`/api/posts/${postId}/image/plan`);
+    await jsonPost(`/api/posts/${postId}/image/generate`);
+    await worker.tick();
+    calls.length = 0;
+    fakeWordPressAppend(calls, { "GET /wp-json/wp/v2/posts/42": { body: { id: 42, status: "draft" } }, "POST /wp-json/wp/v2/posts/42": { body: { id: 42, link: "x", status: "draft" } }, "POST /wp-json/wp/v2/media": { body: { id: 55 } }, "POST /wp-json/wp/v2/media/55": { body: { id: 55 } } });
+    await setup(new FakeAiService(), new FakeImageProvider());
     const pub = await jsonPost(`/api/posts/${postId}/wordpress/publish`, { categoryIds: [3], tags: [] });
-    expect(pub.statusCode).toBe(200);
-    expect(pub.json().aiNoticeAdded).toBe(true);
-    expect(String(calls.find((c) => c.path === "/wp-json/wp/v2/posts" && c.method === "POST")?.body?.content)).toMatch(/^<p><strong>KI-Hinweis:<\/strong>/);
-    expect((await app.inject({ method: "GET", url: `/api/posts/${postId}`, headers: { cookie } })).json().contentHtml).toContain("KI-Hinweis:");
+    expect(pub.json().imageNotice).toBe(true);
+    expect(sentContent().startsWith("<p><em>Beitragsbild: KI-generiert.</em></p>")).toBe(true);
+    expect((await app.inject({ method: "GET", url: `/api/posts/${postId}`, headers: { cookie } })).json().contentHtml).not.toContain("Beitragsbild: KI-generiert");
 
-    // Eigener Wortlaut und Abschalten pro Website
-    await app.inject({ method: "PUT", url: `/api/sites/${site.id}`, headers: { cookie }, payload: { name: "Kanzlei WP", baseUrl: WP_BASE, wpUsername: "daniel", aiNoticeText: "Mit KI erstellt, anwaltlich geprüft." } });
-    const second = await makePost(site.id);
-    expect((await app.inject({ method: "GET", url: `/api/posts/${second}`, headers: { cookie } })).json().contentHtml).toContain("<em>Mit KI erstellt, anwaltlich geprüft.</em>");
-    await app.inject({ method: "PUT", url: `/api/sites/${site.id}`, headers: { cookie }, payload: { name: "Kanzlei WP", baseUrl: WP_BASE, wpUsername: "daniel", aiNoticeEnabled: false } });
-    const third = await makePost(site.id);
-    expect((await app.inject({ method: "GET", url: `/api/posts/${third}`, headers: { cookie } })).json().contentHtml).not.toContain("KI-Hinweis");
+    // eigener Wortlaut
+    await app.inject({ method: "PUT", url: `/api/sites/${site.id}`, headers: { cookie }, payload: { name: "Kanzlei WP", baseUrl: WP_BASE, wpUsername: "daniel", aiNoticeText: "Das Beitragsbild wurde mit KI erzeugt." } });
+    calls.length = 0;
+    fakeWordPressAppend(calls, { "GET /wp-json/wp/v2/posts/42": { body: { id: 42, status: "draft" } }, "POST /wp-json/wp/v2/posts/42": { body: { id: 42, link: "x", status: "draft" } }, "POST /wp-json/wp/v2/media/55": { body: { id: 55 } } });
+    await setup(new FakeAiService(), new FakeImageProvider());
+    await jsonPost(`/api/posts/${postId}/wordpress/publish`, { categoryIds: [3], tags: [] });
+    expect(sentContent().startsWith("<p><em>Das Beitragsbild wurde mit KI erzeugt.</em></p>")).toBe(true);
+
+    // Kennzeichnung abgeschaltet -> kein Hinweis
+    await app.inject({ method: "PUT", url: `/api/sites/${site.id}`, headers: { cookie }, payload: { name: "Kanzlei WP", baseUrl: WP_BASE, wpUsername: "daniel", labelAiImages: false } });
+    calls.length = 0;
+    fakeWordPressAppend(calls, { "GET /wp-json/wp/v2/posts/42": { body: { id: 42, status: "draft" } }, "POST /wp-json/wp/v2/posts/42": { body: { id: 42, link: "x", status: "draft" } }, "POST /wp-json/wp/v2/media/55": { body: { id: 55 } } });
+    await setup(new FakeAiService(), new FakeImageProvider());
+    const off = await jsonPost(`/api/posts/${postId}/wordpress/publish`, { categoryIds: [3], tags: [] });
+    expect(off.json().imageNotice).toBe(false);
+    expect(sentContent()).not.toContain("mit KI erzeugt");
   });
 
   it("legt den Entwurf auch an, wenn das Bild nicht hochgeladen werden darf", async () => {

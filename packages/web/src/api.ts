@@ -40,7 +40,6 @@ export interface Site {
   closingHtml: string;
   preferredLinks: string;
   competitionCheck: boolean;
-  aiNoticeEnabled: boolean;
   aiNoticeText: string;
   labelAiImages: boolean;
   wpUsername: string;
@@ -221,7 +220,8 @@ export interface WpPublishResult {
   updated: boolean;
   seo: { status: "set" | "manual" | "no_plugin"; message: string };
   image: { status: "set" | "none" | "failed"; message: string };
-  aiNoticeAdded?: boolean;
+  /** True, wenn ein sichtbarer Hinweis auf das KI-Bild vorn in den Beitrag gesetzt wurde. */
+  imageNotice?: boolean;
 }
 
 export interface WpTestResult {
