@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Site" ADD COLUMN "aiNoticeEnabled" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN "aiNoticeText" TEXT NOT NULL DEFAULT '';

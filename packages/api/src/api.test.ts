@@ -930,6 +930,46 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect(calls.find((c) => c.path === "/wp-json/wp/v2/media/55")?.body?.caption).toBe("Symbolbild");
   });
 
+  it("setzt den KI-Hinweis sichtbar an den Anfang, haelt ihn beim Nachschaerfen und ergaenzt ihn beim Senden an WordPress, falls er fehlt", async () => {
+    const calls = fakeWordPress(standardRoutes());
+    let refinedInput = "";
+    await setup(fakeWith({
+      refine: async (input) => {
+        refinedInput = input.contentHtml;
+        return { contentHtml: `<p>${"Neu ".repeat(60)}</p>`, note: "ok" };
+      },
+    }));
+    const site = await createWpSite();
+    const postId = await makePost(site.id);
+
+    // Standard: Hinweis steht vorn, vor dem Text
+    let html: string = (await app.inject({ method: "GET", url: `/api/posts/${postId}`, headers: { cookie } })).json().contentHtml;
+    expect(html.startsWith("<p><strong>KI-Hinweis:</strong> <em>Dieser Beitrag wurde mit Unterstützung von KI erstellt und redaktionell geprüft.</em></p>")).toBe(true);
+
+    // Nachschaerfen: die KI sieht den Hinweis nicht, er bleibt vorn erhalten
+    await app.inject({ method: "POST", url: `/api/posts/${postId}/refine`, headers: { cookie }, payload: { instruction: "Neu schreiben" } });
+    expect(refinedInput).not.toContain("KI-Hinweis");
+    html = (await app.inject({ method: "GET", url: `/api/posts/${postId}`, headers: { cookie } })).json().contentHtml;
+    expect(html.startsWith("<p><strong>KI-Hinweis:</strong>")).toBe(true);
+    expect(html).toContain("Neu Neu");
+
+    // Versehentlich geloescht -> beim Senden wird er ergaenzt und im Beitrag gespeichert
+    await app.inject({ method: "PUT", url: `/api/posts/${postId}`, headers: { cookie }, payload: { contentHtml: "<p>Nur Text ohne Hinweis.</p>" } });
+    const pub = await jsonPost(`/api/posts/${postId}/wordpress/publish`, { categoryIds: [3], tags: [] });
+    expect(pub.statusCode).toBe(200);
+    expect(pub.json().aiNoticeAdded).toBe(true);
+    expect(String(calls.find((c) => c.path === "/wp-json/wp/v2/posts" && c.method === "POST")?.body?.content)).toMatch(/^<p><strong>KI-Hinweis:<\/strong>/);
+    expect((await app.inject({ method: "GET", url: `/api/posts/${postId}`, headers: { cookie } })).json().contentHtml).toContain("KI-Hinweis:");
+
+    // Eigener Wortlaut und Abschalten pro Website
+    await app.inject({ method: "PUT", url: `/api/sites/${site.id}`, headers: { cookie }, payload: { name: "Kanzlei WP", baseUrl: WP_BASE, wpUsername: "daniel", aiNoticeText: "Mit KI erstellt, anwaltlich geprüft." } });
+    const second = await makePost(site.id);
+    expect((await app.inject({ method: "GET", url: `/api/posts/${second}`, headers: { cookie } })).json().contentHtml).toContain("<em>Mit KI erstellt, anwaltlich geprüft.</em>");
+    await app.inject({ method: "PUT", url: `/api/sites/${site.id}`, headers: { cookie }, payload: { name: "Kanzlei WP", baseUrl: WP_BASE, wpUsername: "daniel", aiNoticeEnabled: false } });
+    const third = await makePost(site.id);
+    expect((await app.inject({ method: "GET", url: `/api/posts/${third}`, headers: { cookie } })).json().contentHtml).not.toContain("KI-Hinweis");
+  });
+
   it("legt den Entwurf auch an, wenn das Bild nicht hochgeladen werden darf", async () => {
     fakeWordPress({ ...standardRoutes(), "POST /wp-json/wp/v2/media": { status: 403, body: { message: "Sorry" } } });
     await setup(new FakeAiService(), new FakeImageProvider());

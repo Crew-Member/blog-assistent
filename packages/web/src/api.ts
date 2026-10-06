@@ -40,6 +40,8 @@ export interface Site {
   closingHtml: string;
   preferredLinks: string;
   competitionCheck: boolean;
+  aiNoticeEnabled: boolean;
+  aiNoticeText: string;
   labelAiImages: boolean;
   wpUsername: string;
   hasWpPassword: boolean;
@@ -219,6 +221,7 @@ export interface WpPublishResult {
   updated: boolean;
   seo: { status: "set" | "manual" | "no_plugin"; message: string };
   image: { status: "set" | "none" | "failed"; message: string };
+  aiNoticeAdded?: boolean;
 }
 
 export interface WpTestResult {

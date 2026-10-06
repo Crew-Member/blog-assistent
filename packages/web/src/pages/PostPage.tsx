@@ -460,6 +460,7 @@ function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: bool
           </div>
         </>
       )}
+      {result?.aiNoticeAdded && <div className="ok">Der KI-Hinweis fehlte im Text und wurde am Anfang ergänzt.</div>}
       {result?.image && result.image.status !== "none" && <div className={result.image.status === "set" ? "ok" : "error"}>{result.image.message}</div>}
       {result && <div className="ok">{result.updated ? "Entwurf in WordPress aktualisiert." : "Entwurf in WordPress angelegt."} Er ist noch nicht veröffentlicht.</div>}
       {error && <div className="error">{error}</div>}

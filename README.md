@@ -55,6 +55,10 @@ Aus Mails werden Betreff, Absender, Datum und Text gelesen; PDF-, Word- und Text
 
 Vor dem Schreiben sucht die KI per Websuche die stärksten deutschsprachigen Treffer zum Suchbegriff (das erste Keyword des Themas). Das Tool ruft bis zu sechs dieser Seiten selbst ab (nur öffentliche Adressen, Zeitlimit, ohne Plattformen und die eigene Website) und misst Wortzahl und Zwischenüberschriften. Die KI leitet daraus Suchintention, einen Zielumfang und häufig behandelte Aspekte ab; der Schreib-Prompt bekommt sie als Orientierung (der Stilleitfaden hat Vorrang). Die Auswertung steht am Beitrag („Vergleich mit den Top-Ergebnissen“). Pro Website abschaltbar (kostet eine zusätzliche Websuche je Beitrag). Die Treffer stammen aus einer KI-Websuche, nicht aus Googles Ergebnisliste.
 
+### KI-Hinweis (Kennzeichnung)
+
+Jeder Beitrag beginnt standardmäßig mit einem sichtbaren Hinweis („KI-Hinweis: Dieser Beitrag wurde mit Unterstützung von KI erstellt und redaktionell geprüft.“). Wortlaut und Ein/Aus stellst du pro Website ein. Fehlt der Hinweis beim Senden an WordPress (alter Entwurf, versehentlich gelöscht), wird er automatisch vorn ergänzt. Die KI selbst schreibt ihn nicht und sieht ihn beim Nachschärfen nicht. Ob und wie gekennzeichnet werden muss, ist eine rechtliche Frage; der Standardwortlaut ist ein Vorschlag, keine Rechtsberatung. Bilder werden zusätzlich in der Unterschrift und in den Metadaten gekennzeichnet.
+
 ### Kosten
 
 Jeder KI-Aufruf wird mit Tokens und Websuchen protokolliert; die Seite **Kosten** zeigt die Summen je Schritt, Website und Beitrag, am Beitrag steht „Kosten dieses Beitrags“. Die Euro-/Dollarbeträge sind Schätzungen aus den Preisen in der `.env` (`AI_PRICE_INPUT_PER_MTOK`, `AI_PRICE_OUTPUT_PER_MTOK`, `AI_PRICE_SEARCH_PER_1000`, optional `IMAGE_COST_USD`). Bitte mit der aktuellen Preisliste des Anbieters abgleichen; maßgeblich ist die Rechnung. Erfasst wird ab Einführung der Übersicht.

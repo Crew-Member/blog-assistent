@@ -25,6 +25,9 @@ model Site {
   preferredLinks String @default("")
   // Vor dem Schreiben die Top-Ergebnisse zum Suchbegriff auswerten (Umfang, Gliederung). Kostet eine Websuche je Beitrag.
   competitionCheck Boolean @default(true)
+  // Sichtbarer Hinweis "mit KI erstellt" am Anfang jedes Beitrags (Kennzeichnung). Leerer Text = Standardwortlaut.
+  aiNoticeEnabled Boolean @default(true)
+  aiNoticeText    String  @default("")
   // WordPress-Zugang (REST-API mit Anwendungspasswort). Das Passwort liegt nur verschluesselt in der DB.
   // KI-generierte Bilder in der Bildunterschrift kennzeichnen ("Bild: KI-generiert")
   labelAiImages Boolean @default(true)

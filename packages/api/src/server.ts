@@ -1,3 +1,4 @@
+import { aiNoticeHtml, ensureAiNotice } from "./lib/ainotice.js";
 import { STEP_LABELS, useUsageContext } from "./lib/usage.js";
 import { explainAiError } from "./ai/errors.js";
 import { timingSafeEqual } from "node:crypto";
@@ -52,6 +53,8 @@ const siteSchema = z.object({
   closingHtml: z.string().max(4000).default(""),
   preferredLinks: z.string().max(4000).default(""),
   competitionCheck: z.boolean().default(true),
+  aiNoticeEnabled: z.boolean().default(true),
+  aiNoticeText: z.string().trim().max(500).default(""),
   labelAiImages: z.boolean().default(true),
   wpUsername: z.string().trim().max(120).default(""),
   // Leer/fehlend = vorhandenes Passwort behalten
@@ -271,6 +274,13 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     if (post.status !== "DRAFT_READY" || !post.title || !post.contentHtml) throw new HttpError(409, "Nur fertige Entwürfe können an WordPress gesendet werden.");
     const { client, site } = await wpClientFor(post.siteId);
 
+    // Kennzeichnungspflicht: Der KI-Hinweis muss im Beitrag stehen - fehlt er (alter Entwurf, versehentlich geloescht), wird er vorn ergaenzt.
+    const noticed = ensureAiNotice(post.contentHtml, site);
+    if (noticed.added) {
+      post.contentHtml = noticed.html;
+      await prisma.post.update({ where: { id: post.id }, data: { contentHtml: noticed.html } });
+    }
+
     const existingCategories = body.data.newCategories.length ? await client.categories() : [];
     const createdCategoryIds = await client.ensureCategories(body.data.newCategories, existingCategories);
     const categoryIds = [...new Set([...body.data.categoryIds, ...createdCategoryIds])];
@@ -328,7 +338,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
       where: { id: post.id },
       data: { wpPostId: result.id, wpEditUrl: result.editUrl, wpLink: result.link, wpCategoryIds: categoryIds, wpSeo: seo, wpPushedAt: new Date() },
     });
-    return { wpPostId: result.id, editUrl: result.editUrl, link: result.link, seo, updated, image: imageResult };
+    return { wpPostId: result.id, editUrl: result.editUrl, link: result.link, seo, updated, image: imageResult, aiNoticeAdded: noticed.added };
   });
 
   // --- Stilvorlagen ---------------------------------------------------------
@@ -641,6 +651,13 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     useUsageContext({ postId: post.id, siteId: post.siteId });
     const footerStamp = post.contentHtml.match(FOOTER_RE)?.[0] ?? "";
     let current = post.contentHtml.replace(FOOTER_RE, "");
+    // Der KI-Hinweis am Anfang gehoert nicht zum Text, den die KI sieht.
+    const notice = aiNoticeHtml(post.site);
+    let header = "";
+    if (notice && current.trimStart().startsWith(notice)) {
+      current = current.trimStart().slice(notice.length).trimStart();
+      header = `${notice}\n`;
+    }
     // Der feste Schlussabsatz der Website gehoert nicht zum Text, den die KI sieht.
     const closing = sanitizePostHtml(post.site.closingHtml);
     let footer = footerStamp;
@@ -664,7 +681,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     const existing = [...current.matchAll(/href="([^"]+)"/g)].map((m) => (m[1] ?? "").replace(/&amp;/g, "&"));
     const html = applyLinkPolicy(unwrapLinksNotIn(sanitizePostHtml(result.contentHtml), existing), post.site.baseUrl, existing);
     if (html.length < current.length * 0.3) return reply.code(422).send({ error: "Die KI hat den Text stark gekürzt – die Änderung wurde nicht übernommen. Bitte die Anweisung genauer fassen." });
-    await prisma.post.update({ where: { id: post.id }, data: { previousContentHtml: post.contentHtml, contentHtml: `${html}${footer}` } });
+    await prisma.post.update({ where: { id: post.id }, data: { previousContentHtml: post.contentHtml, contentHtml: `${header}${html}${footer}` } });
     return { note: result.note };
   });
 
