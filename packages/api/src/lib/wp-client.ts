@@ -218,6 +218,29 @@ export class WordPressClient {
   }
 
   /**
+   * Ersetzt Titel, Text und Auszug eines bestehenden (auch veroeffentlichten) Beitrags - NUR auf ausdrueckliche Anweisung des Nutzers.
+   * Status, Datum, Adresse (Slug), Kategorien und Schlagwoerter bleiben unveraendert; WordPress legt dabei eine Version des alten Stands an.
+   */
+  async updateExisting(id: number, input: { title: string; content: string; excerpt?: string; featuredMedia?: number }, meta?: RankMathMeta): Promise<WpPostRef> {
+    const current = await this.request<{ id: number; status: string; type?: string }>(`/wp-json/wp/v2/posts/${id}?context=edit&_fields=id,status,type`);
+    if (!["publish", "draft", "private", "pending", "future"].includes(current.status)) {
+      throw new WordPressError(`Der Beitrag in WordPress hat den Status „${current.status}“ und wird nicht ersetzt.`, 409);
+    }
+    return this.ref(
+      await this.request(`/wp-json/wp/v2/posts/${id}`, {
+        method: "POST",
+        body: {
+          title: input.title,
+          content: input.content,
+          ...(input.excerpt ? { excerpt: input.excerpt } : {}),
+          ...(input.featuredMedia ? { featured_media: input.featuredMedia } : {}),
+          ...(meta ? { meta: { rank_math_description: meta.description, rank_math_focus_keyword: meta.focusKeyword } } : {}),
+        },
+      }),
+    );
+  }
+
+  /**
    * Bringt ein Bild in die WordPress-Mediathek: laedt es hoch (oder aktualisiert nur die Beschreibungsfelder, wenn es schon
    * dort liegt) und setzt Alt-Text, Bildunterschrift und Beschreibung. Liefert die Medien-ID.
    */

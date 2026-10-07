@@ -149,6 +149,8 @@ export interface PostDetail {
   /** Gesetzt, wenn der Beitrag eine Überarbeitung eines bestehenden WordPress-Beitrags ist. */
   /** True, wenn die letzte KI-Nachschärfung rückgängig gemacht werden kann. */
   canUndoRefine: boolean;
+  /** Gesetzt, wenn dieser Beitrag den veröffentlichten Originalbeitrag in WordPress ersetzt hat. */
+  wpReplacedAt: string | null;
   revisionOf: { wpPostId: number; title: string; url: string; instructions: string } | null;
   id: string;
   status: PostStatus;
@@ -222,6 +224,8 @@ export interface WpPublishResult {
   image: { status: "set" | "none" | "failed"; message: string };
   /** True, wenn ein sichtbarer Hinweis auf das KI-Bild vorn in den Beitrag gesetzt wurde. */
   imageNotice?: boolean;
+  /** True, wenn der veröffentlichte Originalbeitrag ersetzt wurde. */
+  replaced?: boolean;
 }
 
 export interface WpTestResult {

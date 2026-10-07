@@ -992,6 +992,45 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect(sentContent()).not.toContain("mit KI erzeugt");
   });
 
+  it("ersetzt auf Wunsch den veroeffentlichten Originalbeitrag (Datum/Adresse bleiben) und nennt in der Stand-Zeile das Ursprungsdatum", async () => {
+    const original = { id: 7, status: "publish", title: { rendered: "Alter Beitrag" }, link: `${WP_BASE}/alt/`, date: "2023-05-01T10:00:00", excerpt: { rendered: "" }, content: { rendered: `<p>${"Alter Text. ".repeat(30)}</p>` } };
+    const calls = fakeWordPress({
+      ...standardRoutes(),
+      "GET /wp-json/wp/v2/posts/7": { body: original },
+      "POST /wp-json/wp/v2/posts/7": { body: { id: 7, link: `${WP_BASE}/alt/`, status: "publish" } },
+    });
+    await setup(new FakeAiService());
+    const site = await createWpSite();
+    const rev = await app.inject({ method: "POST", url: `/api/sites/${site.id}/revisions`, headers: { cookie }, payload: { wpPostId: 7, instructions: "Aktualisieren" } });
+    expect(rev.statusCode).toBe(201);
+    const postId = rev.json().id as string;
+    await worker.tick();
+
+    const stored = (await app.inject({ method: "GET", url: `/api/posts/${postId}`, headers: { cookie } })).json();
+    expect(stored.contentHtml).toMatch(/Stand: \d{2}\.\d{2}\.\d{4} \(aktualisiert\)\. Ursprünglich veröffentlicht am 01\.05\.2023\./);
+
+    // ohne Bestaetigung oder bei normalen Beitraegen: abgelehnt
+    expect((await jsonPost(`/api/posts/${postId}/wordpress/publish`, { replaceOriginal: true })).statusCode).toBe(400);
+    const plain = await makePost(site.id);
+    expect((await jsonPost(`/api/posts/${plain}/wordpress/publish`, { replaceOriginal: true, confirmReplace: true })).statusCode).toBe(400);
+    expect(calls.some((c) => c.method === "POST" && c.path === "/wp-json/wp/v2/posts/7")).toBe(false);
+
+    // mit Bestaetigung: Original wird aktualisiert, ohne Status/Datum/Adresse/Kategorien
+    const pub = await jsonPost(`/api/posts/${postId}/wordpress/publish`, { replaceOriginal: true, confirmReplace: true });
+    expect(pub.statusCode).toBe(200);
+    expect(pub.json()).toMatchObject({ wpPostId: 7, updated: true, replaced: true });
+    const update = calls.find((c) => c.method === "POST" && c.path === "/wp-json/wp/v2/posts/7")!;
+    expect(Object.keys(update.body ?? {}).sort()).toEqual(["content", "excerpt", "meta", "title"]);
+    expect(calls.some((c) => c.method === "POST" && c.path === "/wp-json/wp/v2/posts")).toBe(false);
+    const after = (await app.inject({ method: "GET", url: `/api/posts/${postId}`, headers: { cookie } })).json();
+    expect(after.wpPostId).toBe(7);
+    expect(after.wpReplacedAt).toBeTruthy();
+
+    // danach ist der normale Entwurfsweg gesperrt (Hinweis), das erneute Ersetzen geht
+    expect((await jsonPost(`/api/posts/${postId}/wordpress/publish`, {})).statusCode).toBe(409);
+    expect((await jsonPost(`/api/posts/${postId}/wordpress/publish`, { replaceOriginal: true, confirmReplace: true })).statusCode).toBe(200);
+  });
+
   it("legt den Entwurf auch an, wenn das Bild nicht hochgeladen werden darf", async () => {
     fakeWordPress({ ...standardRoutes(), "POST /wp-json/wp/v2/media": { status: 403, body: { message: "Sorry" } } });
     await setup(new FakeAiService(), new FakeImageProvider());

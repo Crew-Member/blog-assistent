@@ -66,6 +66,9 @@ const wpPublishSchema = z.object({
   tags: z.array(z.string().trim().min(1).max(60)).max(10).default([]),
   // Vom Nutzer bestaetigte NEUE Kategorien (Namen) - werden in WordPress angelegt
   newCategories: z.array(z.string().trim().min(1).max(60)).max(3).default([]),
+  // Nur bei Ueberarbeitungen: den veroeffentlichten Originalbeitrag ersetzen (Datum und Adresse bleiben). Erfordert die ausdrueckliche Bestaetigung.
+  replaceOriginal: z.boolean().default(false),
+  confirmReplace: z.boolean().default(false),
 });
 
 const styleSampleSchema = z.object({
@@ -262,6 +265,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
       suggestionError,
       tags: secondary.slice(0, 5),
       existing: post.wpPostId ? { wpPostId: post.wpPostId, editUrl: post.wpEditUrl, link: post.wpLink } : null,
+      replaced: Boolean(post.wpReplacedAt),
     };
   });
 
@@ -279,8 +283,18 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     const needsImageNotice = Boolean(site.labelAiImages && imageForNotice && imageForNotice.status === "READY" && imageForNotice.storageKey && imageForNotice.aiGenerated);
     const contentForWp = withImageNotice(post.contentHtml, needsImageNotice ? imageNoticeHtml(site) : "");
 
-    const existingCategories = body.data.newCategories.length ? await client.categories() : [];
-    const createdCategoryIds = await client.ensureCategories(body.data.newCategories, existingCategories);
+    // Ersetzen des veroeffentlichten Originals: nur bei Ueberarbeitungen, nur mit Bestaetigung, nur das Original dieser Ueberarbeitung.
+    const source = post.revisionSource as { wpPostId?: number } | null;
+    const replace = body.data.replaceOriginal;
+    if (replace) {
+      if (!source?.wpPostId) throw new HttpError(400, "Nur eine Überarbeitung kann den Originalbeitrag ersetzen.");
+      if (!body.data.confirmReplace) throw new HttpError(400, "Bitte das Ersetzen des veröffentlichten Beitrags ausdrücklich bestätigen.");
+    } else if (post.wpReplacedAt) {
+      throw new HttpError(409, "Dieser Beitrag hat den Originalbeitrag in WordPress ersetzt. Bitte erneut „Originalbeitrag ersetzen“ wählen, um ihn weiter zu aktualisieren.");
+    }
+
+    const existingCategories = replace || !body.data.newCategories.length ? [] : await client.categories();
+    const createdCategoryIds = replace ? [] : await client.ensureCategories(body.data.newCategories, existingCategories);
     const categoryIds = [...new Set([...body.data.categoryIds, ...createdCategoryIds])];
 
     const draft: WpDraftInput = {
@@ -289,7 +303,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
       slug: post.slug ?? undefined,
       excerpt: post.excerpt ?? undefined,
       categories: categoryIds,
-      tags: await client.ensureTags(body.data.tags),
+      tags: replace ? [] : await client.ensureTags(body.data.tags),
     };
     const meta = { description: post.metaDescription ?? "", focusKeyword: post.focusKeyword ?? "" };
 
@@ -319,24 +333,30 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
 
     let result;
     let updated = false;
-    if (post.wpPostId) {
-      try {
-        result = await client.updateDraft(post.wpPostId, draft, meta);
-        updated = true;
-      } catch (error) {
-        // Wurde der Entwurf in WordPress geloescht, einen neuen anlegen; sonst (z. B. schon veroeffentlicht) abbrechen.
-        if (!(error instanceof WordPressError && error.status === 404)) throw error;
+    if (replace) {
+      // Status, Datum, Adresse, Kategorien und Schlagwoerter des Originals bleiben unveraendert.
+      result = await client.updateExisting(source!.wpPostId!, { title: post.title, content: contentForWp, excerpt: post.excerpt ?? undefined, featuredMedia: draft.featuredMedia }, meta);
+      updated = true;
+    } else {
+      if (post.wpPostId) {
+        try {
+          result = await client.updateDraft(post.wpPostId, draft, meta);
+          updated = true;
+        } catch (error) {
+          // Wurde der Entwurf in WordPress geloescht, einen neuen anlegen; sonst (z. B. schon veroeffentlicht) abbrechen.
+          if (!(error instanceof WordPressError && error.status === 404)) throw error;
+        }
       }
+      result ??= await client.createDraft(draft, meta);
     }
-    result ??= await client.createDraft(draft, meta);
 
     const namespaces = await client.namespaces().catch(() => [] as string[]);
     const seo = await client.setRankMath(result.id, meta, namespaces);
     await prisma.post.update({
       where: { id: post.id },
-      data: { wpPostId: result.id, wpEditUrl: result.editUrl, wpLink: result.link, wpCategoryIds: categoryIds, wpSeo: seo, wpPushedAt: new Date() },
+      data: { wpPostId: result.id, wpEditUrl: result.editUrl, wpLink: result.link, ...(replace ? {} : { wpCategoryIds: categoryIds }), wpSeo: seo, wpPushedAt: new Date(), wpReplacedAt: replace ? new Date() : null },
     });
-    return { wpPostId: result.id, editUrl: result.editUrl, link: result.link, seo, updated, image: imageResult, imageNotice: needsImageNotice };
+    return { wpPostId: result.id, editUrl: result.editUrl, link: result.link, seo, updated, image: imageResult, imageNotice: needsImageNotice, replaced: replace };
   });
 
   // --- Stilvorlagen ---------------------------------------------------------
@@ -550,7 +570,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
         data: {
           siteId: site.id,
           topicId: topic.id,
-          revisionSource: { wpPostId: original.id, title: original.title, url: original.url, html, instructions: instructions.trim() },
+          revisionSource: { wpPostId: original.id, title: original.title, url: original.url, html, instructions: instructions.trim(), publishedAt: original.date },
         },
       });
     });

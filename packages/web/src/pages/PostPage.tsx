@@ -367,6 +367,22 @@ function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: bool
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [result, setResult] = useState<WpPublishResult>();
+  const [mode, setMode] = useState<"draft" | "replace">(post.wpReplacedAt ? "replace" : "draft");
+  const [confirmed, setConfirmed] = useState(false);
+
+  async function replaceOriginal() {
+    setBusy(true);
+    setError(undefined);
+    try {
+      setResult(await api.post<WpPublishResult>(`/api/posts/${post.id}/wordpress/publish`, { replaceOriginal: true, confirmReplace: confirmed }));
+      setConfirmed(false);
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function load() {
     setBusy(true);
@@ -413,14 +429,41 @@ function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: bool
       <div className="card-title"><Icon name="send" /> WordPress</div>
       {editUrl && (
         <div>
-          Entwurf in WordPress: <a href={editUrl} target="_blank" rel="noreferrer noopener">im Editor öffnen</a>
+          {post.wpReplacedAt ? "Originalbeitrag in WordPress" : "Entwurf in WordPress"}: <a href={editUrl} target="_blank" rel="noreferrer noopener">im Editor öffnen</a>
           {post.wpPushedAt && <span className="muted"> · zuletzt gesendet {new Date(post.wpPushedAt).toLocaleString("de-DE")}</span>}
         </div>
       )}
       {seo && <div className={seo.status === "set" ? "ok" : "error"}>{seo.message}</div>}
       {dirty && <div className="error">Es gibt ungespeicherte Änderungen. Gesendet wird der gespeicherte Stand – bitte erst speichern.</div>}
 
-      {!prep && (
+      {post.revisionOf && !prep && (
+        <div className="stack">
+          <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
+            <input type="radio" name={`mode-${post.id}`} style={{ width: "auto" }} checked={mode === "draft"} onChange={() => setMode("draft")} />
+            <span><strong>Als neuen Entwurf senden</strong> <span className="muted">– das Original bleibt unverändert; der neue Beitrag bekommt beim Veröffentlichen ein neues Datum und eine eigene Adresse</span></span>
+          </label>
+          <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
+            <input type="radio" name={`mode-${post.id}`} style={{ width: "auto" }} checked={mode === "replace"} onChange={() => setMode("replace")} />
+            <span><strong>Originalbeitrag ersetzen</strong> <span className="muted">– Titel, Text, Auszug und SEO-Felder des veröffentlichten Beitrags werden überschrieben; Datum, Adresse, Kategorien und Schlagwörter bleiben. WordPress behält den alten Stand in den Versionen.</span></span>
+          </label>
+          {mode === "replace" && (
+            <div className="stack">
+              <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
+                <input type="checkbox" style={{ width: "auto" }} checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
+                <span>Ja, der veröffentlichte Beitrag „{post.revisionOf.title}“ soll mit diesem Text <strong>überschrieben</strong> werden – er ist sofort live.</span>
+              </label>
+              <div className="row">
+                <button className="danger" disabled={busy || dirty || !confirmed} onClick={replaceOriginal}>{busy ? "Bitte warten …" : "Originalbeitrag jetzt ersetzen"}</button>
+                <a href={post.revisionOf.url} target="_blank" rel="noreferrer noopener" className="muted">Original ansehen</a>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {result?.replaced && <div className="ok">Der veröffentlichte Beitrag wurde ersetzt. Datum und Adresse sind unverändert.</div>}
+
+      {!prep && (!post.revisionOf || mode === "draft") && (
         <div className="row">
           <button disabled={busy || dirty} onClick={load}>{busy ? "Bitte warten …" : editUrl ? "Entwurf in WordPress aktualisieren" : "An WordPress senden (als Entwurf)"}</button>
           {editUrl && <span className="muted">Änderungen, die du in WordPress am Entwurf gemacht hast, werden dabei überschrieben. Bereits veröffentlichte Beiträge werden nie angefasst.</span>}

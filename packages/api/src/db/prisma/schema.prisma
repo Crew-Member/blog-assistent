@@ -209,6 +209,8 @@ model Post {
   wpCategoryIds     Json       @default("[]")
   wpSeo             Json?
   wpPushedAt        DateTime?
+  // Gesetzt, wenn der Beitrag den veroeffentlichten Originalbeitrag ersetzt hat (wpPostId zeigt dann auf das Original).
+  wpReplacedAt      DateTime?
   image             PostImage?
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt

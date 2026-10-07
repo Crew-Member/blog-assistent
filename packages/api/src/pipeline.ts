@@ -84,12 +84,14 @@ async function analyzeSubmissionRun(deps: PipelineDeps, submissionId: string): P
   }
 }
 
-export function assemblePostHtml(contentHtml: string, disclaimer: string, closingHtml = "", now = new Date()): string {
+export function assemblePostHtml(contentHtml: string, disclaimer: string, closingHtml = "", now = new Date(), originalDate?: string): string {
   const closing = sanitizePostHtml(closingHtml);
   const main = sanitizePostHtml(contentHtml);
   const body = closing ? `${main}\n${closing}` : main;
   const stand = now.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Berlin" });
-  const notes = [`Stand: ${stand}.`, disclaimer.trim()].filter(Boolean).join(" ");
+  // Bei Ueberarbeitungen: Datum der Erstveroeffentlichung mit nennen ("Stand:" bleibt der Anfang der Zeile).
+  const original = originalDate && /^\d{4}-\d{2}-\d{2}/.test(originalDate) ? `${originalDate.slice(8, 10)}.${originalDate.slice(5, 7)}.${originalDate.slice(0, 4)}` : "";
+  const notes = [original ? `Stand: ${stand} (aktualisiert). Ursprünglich veröffentlicht am ${original}.` : `Stand: ${stand}.`, disclaimer.trim()].filter(Boolean).join(" ");
   const footer = `<p><em>${escapeHtml(notes)}</em></p>`;
   return `${body}\n${footer}`;
 }
@@ -224,7 +226,7 @@ async function generatePostRun(deps: PipelineDeps, postId: string): Promise<void
     await prisma.post.update({ where: { id: postId }, data: { status: "DRAFTING", researchNotes: research.notes, factCheck: Prisma.DbNull, competition: Prisma.DbNull } });
 
     const styleSamples = post.site.styleSamples.map((s) => ({ title: s.title, text: s.text }));
-    const rev = post.revisionSource as { wpPostId?: number; title?: string; url?: string; html?: string; instructions?: string } | null;
+    const rev = post.revisionSource as { wpPostId?: number; title?: string; url?: string; html?: string; instructions?: string; publishedAt?: string } | null;
     const revision = rev ? { title: rev.title ?? "", url: rev.url ?? "", html: sanitizePostHtml(rev.html ?? ""), instructions: rev.instructions ?? "" } : undefined;
     // Interne Links: vorhandene Beitraege der Website (best effort - ohne Liste gibt es einfach keine internen Links).
     let relatedPosts: { title: string; url: string; excerpt: string }[] = [];
@@ -277,7 +279,7 @@ async function generatePostRun(deps: PipelineDeps, postId: string): Promise<void
     // Entwurf sofort sichern: schlaegt der Faktencheck fehl, geht die Arbeit nicht verloren.
     await prisma.post.update({
       where: { id: postId },
-      data: { ...draftFields, status: "FACTCHECKING", contentHtml: assemblePostHtml(draft.contentHtml, post.site.disclaimer, post.site.closingHtml), unverifiedClaims: draft.unverifiedClaims },
+      data: { ...draftFields, status: "FACTCHECKING", contentHtml: assemblePostHtml(draft.contentHtml, post.site.disclaimer, post.site.closingHtml, new Date(), rev?.publishedAt), unverifiedClaims: draft.unverifiedClaims },
     });
 
     const uploaded = await loadAiDocuments(deps, post.topic.submissionId);
@@ -302,7 +304,7 @@ async function generatePostRun(deps: PipelineDeps, postId: string): Promise<void
       const html = applyLinkPolicy(checked, post.site.baseUrl, knownInternal, linkOptions);
       await prisma.post.update({
         where: { id: postId },
-        data: { status: "DRAFT_READY", error: null, contentHtml: assemblePostHtml(html, post.site.disclaimer, post.site.closingHtml), unverifiedClaims: unverified, factCheck: stored as unknown as Prisma.InputJsonValue },
+        data: { status: "DRAFT_READY", error: null, contentHtml: assemblePostHtml(html, post.site.disclaimer, post.site.closingHtml, new Date(), rev?.publishedAt), unverifiedClaims: unverified, factCheck: stored as unknown as Prisma.InputJsonValue },
       });
     } catch (error) {
       const stored: StoredFactCheck = { status: "skipped", summary: "Der Faktencheck konnte nicht durchgeführt werden – der Entwurf ist ungeprüft.", issues: [], references: [], ranAt: new Date().toISOString(), error: errorMessage(error) };
