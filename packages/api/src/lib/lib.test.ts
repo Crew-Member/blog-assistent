@@ -205,3 +205,33 @@ describe("costOf", () => {
     expect(costOf({ ...base, step: "image_generate", fixedCostUsd: 0.04 }, prices)).toBe(0.04);
   });
 });
+
+describe("applyLinkPolicy: allgemeine Quellen als Auffueller", () => {
+  const a = (url: string, text: string) => `<a href="${url}">${text}</a>`;
+  it("erlaubt Infoportale/Presse nur aus der Recherche, nur bis mindestens 3 externe Links, nie Wettbewerber oder Netzwerke", async () => {
+    const { applyLinkPolicy } = await import("./html.js");
+    const general = ["https://portal.example/a", "https://presse.example/b", "https://blog.example/c", "https://rival.example/d", "https://www.linkedin.com/x"];
+    const options = { generalAllowed: general, blockedHosts: ["rival.example"] };
+
+    // Ohne Primaerquelle: drei allgemeine Quellen duerfen auffuellen; die vierte nicht, Wettbewerber und Netzwerk nie, Erfundenes nie
+    const none = [a("https://portal.example/a", "P"), a("https://rival.example/d", "R"), a("https://presse.example/b", "Pr"), a("https://www.linkedin.com/x", "L"), a("https://blog.example/c", "B"), a("https://erfunden.example/z", "E"), a("https://x.example/q", "Q")].join(" ");
+    const out1 = applyLinkPolicy(none, "https://kirmse.eu", [], options);
+    expect(out1.match(/<a /g)).toHaveLength(3);
+    for (const keep of ["portal.example", "presse.example", "blog.example"]) expect(out1).toContain(keep);
+    for (const gone of ["rival.example", "linkedin", "erfunden", "x.example"]) expect(out1).not.toContain(gone);
+
+    // Zwei Primaerquellen: nur noch ein allgemeiner Link als Auffueller
+    const two = [a("https://www.gesetze-im-internet.de/dsgvo/", "G"), a("https://curia.europa.eu/x", "E"), a("https://portal.example/a", "P"), a("https://presse.example/b", "Pr")].join(" ");
+    const out2 = applyLinkPolicy(two, "https://kirmse.eu", [], options);
+    expect(out2.match(/<a /g)).toHaveLength(3);
+    expect(out2).toContain("portal.example");
+    expect(out2).not.toContain("presse.example");
+
+    // Drei Primaerquellen: keine allgemeinen mehr
+    const three = [a("https://www.gesetze-im-internet.de/a", "1"), a("https://curia.europa.eu/b", "2"), a("https://eur-lex.europa.eu/c", "3"), a("https://portal.example/a", "P")].join(" ");
+    expect(applyLinkPolicy(three, "https://kirmse.eu", [], options)).not.toContain("portal.example");
+
+    // Ohne generalAllowed (altes Verhalten): keine allgemeinen Links
+    expect(applyLinkPolicy(none, "https://kirmse.eu", [])).not.toContain("<a ");
+  });
+});

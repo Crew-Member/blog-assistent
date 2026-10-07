@@ -55,6 +55,10 @@ Aus Mails werden Betreff, Absender, Datum und Text gelesen; PDF-, Word- und Text
 
 Vor dem Schreiben sucht die KI per Websuche die stärksten deutschsprachigen Treffer zum Suchbegriff (das erste Keyword des Themas). Das Tool ruft bis zu sechs dieser Seiten selbst ab (nur öffentliche Adressen, Zeitlimit, ohne Plattformen und die eigene Website) und misst Wortzahl und Zwischenüberschriften. Die KI leitet daraus Suchintention, einen Zielumfang und häufig behandelte Aspekte ab; der Schreib-Prompt bekommt sie als Orientierung (der Stilleitfaden hat Vorrang). Die Auswertung steht am Beitrag („Vergleich mit den Top-Ergebnissen“). Pro Website abschaltbar (kostet eine zusätzliche Websuche je Beitrag). Die Treffer stammen aus einer KI-Websuche, nicht aus Googles Ergebnisliste.
 
+### Links im Beitrag
+
+Ziel sind 3 bis 5 ausgehende Links, höchstens 2 interne. Bevorzugt werden Primärquellen (Gerichte, Gesetze und Rechtsprechungsdatenbanken, Datenschutzbehörden, beck-online, Wolters Kluwer). Fehlen sie, dürfen allgemeine Infoportale, Presse und Fachblogs auffüllen – aber nur Adressen, die die Recherche tatsächlich gefunden hat (keine erfundenen URLs), nie die im Wettbewerbsvergleich ausgewerteten Konkurrenzseiten und nie soziale Netzwerke oder Shops. Alles andere verliert den Link (der Text bleibt). Interne Links nur auf bekannte Seiten der Website.
+
 ### Kennzeichnung KI-generierter Beitragsbilder
 
 Ist das Beitragsbild KI-generiert (oder beim Upload als KI-generiert markiert) und die Kennzeichnung bei der Website eingeschaltet (Standard), geschieht beim Senden an WordPress dreierlei: die Bildunterschrift bekommt „Bild: KI-generiert“, die Bilddatei einen Metadaten-Vermerk und der Beitrag einen **sichtbaren Hinweis vorn im Text** („Beitragsbild: KI-generiert.“, Wortlaut pro Website einstellbar). Der Hinweis wird nur beim Versand eingefügt und nicht im Entwurf gespeichert; wird das Bild durch ein eigenes Foto ersetzt, entfällt er. Beiträge ohne KI-Bild bekommen keinen Hinweis. Ob und wie gekennzeichnet werden muss, ist eine rechtliche Frage; der Standardwortlaut ist ein Vorschlag.

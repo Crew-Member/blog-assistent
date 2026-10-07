@@ -147,6 +147,14 @@ export function evaluateFactCheck(
   };
 }
 
+function hostOfUrl(url: string): string[] {
+  try {
+    return [new URL(url).hostname.toLowerCase().replace(/^www\./, "")];
+  } catch {
+    return [];
+  }
+}
+
 export interface StoredCompetition {
   keyword: string;
   intent: string;
@@ -234,10 +242,12 @@ async function generatePostRun(deps: PipelineDeps, postId: string): Promise<void
     relatedPosts = [...preferred, ...relatedPosts.filter((p) => !preferred.some((x) => x.url === p.url))];
     // Optional: Vergleich mit den Top-Ergebnissen (Umfang, Gliederung). Fehler hier stoppen den Beitrag nie.
     let competition: CompetitionGuidance | undefined;
+    let competitorHosts: string[] = [];
     if (post.site.competitionCheck) {
       const result = await runCompetition(deps, site, topic, post.site.baseUrl).catch(() => undefined);
       if (result) {
         competition = result.guidance;
+        competitorHosts = result.stored.pages.flatMap((p) => hostOfUrl(p.url));
         await prisma.post.update({ where: { id: postId }, data: { competition: result.stored as unknown as Prisma.InputJsonValue } });
       }
     }
@@ -246,7 +256,12 @@ async function generatePostRun(deps: PipelineDeps, postId: string): Promise<void
     const originalLinks = [...(revision?.html ?? "").matchAll(/href="([^"]+)"/g)].map((m) => (m[1] ?? "").replace(/&amp;/g, "&"));
     const internalLinks = [...relatedPosts.map((p) => ({ title: p.title, url: p.url })), ...originalLinks.map((url) => ({ title: "", url }))];
     const knownInternal = internalLinks.map((l) => l.url);
-    draft.contentHtml = applyLinkPolicy(draft.contentHtml, post.site.baseUrl, knownInternal);
+    // Allgemeine Quellen (Infoportale, Presse, Blogs) nur aus der Recherche bzw. dem Originalbeitrag und nie von verglichenen Wettbewerbern.
+    const linkOptions = {
+      generalAllowed: [...research.sources.map((s) => s.url), ...draft.sources.map((s) => s.url), ...originalLinks],
+      blockedHosts: competitorHosts,
+    };
+    draft.contentHtml = applyLinkPolicy(draft.contentHtml, post.site.baseUrl, knownInternal, linkOptions);
     if (draft.changeSummary.trim()) {
       await prisma.post.update({ where: { id: postId }, data: { researchNotes: `Änderungen gegenüber dem Original:\n${draft.changeSummary.trim()}\n\n${research.notes}` } });
     }
@@ -284,7 +299,7 @@ async function generatePostRun(deps: PipelineDeps, postId: string): Promise<void
       const check = await ai.factCheck({ site, topic, research, draft, documents, internalLinks });
       const { html: checked, stored: base, unverified } = evaluateFactCheck(draft, check, evidence);
       const stored: StoredFactCheck = { ...base, ...(sourcesChecked.length ? { sourcesChecked } : {}) };
-      const html = applyLinkPolicy(checked, post.site.baseUrl, knownInternal);
+      const html = applyLinkPolicy(checked, post.site.baseUrl, knownInternal, linkOptions);
       await prisma.post.update({
         where: { id: postId },
         data: { status: "DRAFT_READY", error: null, contentHtml: assemblePostHtml(html, post.site.disclaimer, post.site.closingHtml), unverifiedClaims: unverified, factCheck: stored as unknown as Prisma.InputJsonValue },

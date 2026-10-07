@@ -670,7 +670,15 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     }
     // Es duerfen nur Links bleiben, die schon im Text standen (und die Linkregeln erfuellen).
     const existing = [...current.matchAll(/href="([^"]+)"/g)].map((m) => (m[1] ?? "").replace(/&amp;/g, "&"));
-    const html = applyLinkPolicy(unwrapLinksNotIn(sanitizePostHtml(result.contentHtml), existing), post.site.baseUrl, existing);
+    const stored = post.competition as { pages?: { url: string }[] } | null;
+    const competitorHosts = (stored?.pages ?? []).flatMap((p) => {
+      try {
+        return [new URL(p.url).hostname.toLowerCase().replace(/^www\./, "")];
+      } catch {
+        return [];
+      }
+    });
+    const html = applyLinkPolicy(unwrapLinksNotIn(sanitizePostHtml(result.contentHtml), existing), post.site.baseUrl, existing, { generalAllowed: existing, blockedHosts: competitorHosts });
     if (html.length < current.length * 0.3) return reply.code(422).send({ error: "Die KI hat den Text stark gekürzt – die Änderung wurde nicht übernommen. Bitte die Anweisung genauer fassen." });
     await prisma.post.update({ where: { id: post.id }, data: { previousContentHtml: post.contentHtml, contentHtml: `${html}${footer}` } });
     return { note: result.note };

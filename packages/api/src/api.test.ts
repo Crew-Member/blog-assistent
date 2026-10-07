@@ -598,6 +598,27 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     }
   });
 
+  it("setzt mehrere ausgehende Links: Primaerquellen zuerst, fehlende mit allgemeinen Quellen aus der Recherche aufgefuellt, nie Wettbewerber", async () => {
+    const article = `<html><body><article><p>${"Wort ".repeat(400)}</p></article></body></html>`;
+    wpFetcher = (async (url: string) => (url.includes("/competitor") ? new Response(article, { headers: { "content-type": "text/html" } }) : new Response("[]"))) as typeof fetch;
+    const fake = new FakeAiService();
+    await setup(fakeWith({
+      findCompetitors: async () => ({ notes: "n", results: [{ title: "a", url: "https://93.184.216.34/competitor1/a" }, { title: "b", url: "https://93.184.216.35/competitor2/b" }] }),
+      research: async () => ({ notes: "Notizen", sources: [{ title: "Gesetz", url: "https://www.gesetze-im-internet.de/dsgvo/" }, { title: "Portal", url: "https://portal.example/info" }, { title: "Presse", url: "https://presse.example/meldung" }, { title: "Rivale", url: "https://93.184.216.34/competitor1/a" }] }),
+      draft: async (input) => ({
+        ...(await fake.draft(input)),
+        contentHtml: '<p><a href="https://www.gesetze-im-internet.de/dsgvo/">Gesetz</a> <a href="https://portal.example/info">Portal</a> <a href="https://presse.example/meldung">Presse</a> <a href="https://93.184.216.34/competitor1/a">Rivale</a> <a href="https://erfunden.example/x">Erfunden</a></p>',
+      }),
+    }));
+    const postId = await makePost(await createSite());
+    const html: string = (await app.inject({ method: "GET", url: `/api/posts/${postId}`, headers: { cookie } })).json().contentHtml;
+    expect(html).toContain("gesetze-im-internet.de");
+    expect(html).toContain("portal.example");
+    expect(html).toContain("presse.example");
+    expect(html).not.toContain("competitor1");
+    expect(html).not.toContain("erfunden.example");
+  });
+
   it("gibt die gewuenschte Anzahl an den WordPress-Import weiter", async () => {
     const urls: string[] = [];
     wpFetcher = (async (url: string) => {
