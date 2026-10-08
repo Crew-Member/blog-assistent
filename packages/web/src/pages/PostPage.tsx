@@ -369,7 +369,7 @@ function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: bool
   const [result, setResult] = useState<WpPublishResult>();
   const [mode, setMode] = useState<"draft" | "replace">(post.wpReplacedAt ? "replace" : "draft");
   const [confirmed, setConfirmed] = useState(false);
-  const [builderMsg, setBuilderMsg] = useState<string | undefined>(post.revisionOf?.builder ? `Dieses Original wurde mit ${post.revisionOf.builder} gebaut. Die Website zeigt dann den Inhalt des Seitenbaukastens, nicht den Beitragstext – das Ersetzen ändert die Seite womöglich nicht sichtbar (und der WordPress-Editor kann Fehler melden). Empfohlen: als neuen Entwurf senden und den Text in ${post.revisionOf.builder} einfügen.` : undefined);
+  const [builderMsg, setBuilderMsg] = useState<string | undefined>(post.revisionOf?.builder ? `Dieses Original wurde mit ${post.revisionOf.builder} gebaut. Die Website zeigt dann den Inhalt des Seitenbaukastens statt des Beitragstextes. Nach dem Ersetzen im Beitrag in WordPress „Mit WordPress bearbeiten“ wählen (Elementor-Button) und die Umstellung bestätigen – dann erscheint der neue Text (das ${post.revisionOf.builder}-Layout dieses Beitrags entfällt, und den Beitrag danach nicht erneut mit ${post.revisionOf.builder} öffnen). Alternative: als neuen Entwurf senden und den Text in ${post.revisionOf.builder} einfügen.` : undefined);
   const [builderOk, setBuilderOk] = useState(false);
   const [keepDate, setKeepDate] = useState(true);
 

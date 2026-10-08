@@ -306,7 +306,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
       // Seitenbaukaesten liefern auf der Website ihren eigenen Inhalt aus - das Ersetzen des Beitragstextes aendert dort oft nichts.
       const builder = detectPageBuilder(await client.renderedContent(source!.wpPostId!).catch(() => ""));
       if (builder) {
-        throw new HttpError(409, `BUILDER:${builder}: Dieser Beitrag wurde mit ${builder} gebaut. Die Website zeigt dann den Inhalt des Seitenbaukastens, nicht den Beitragstext – das Ersetzen ändert die Seite womöglich nicht sichtbar (und der WordPress-Editor kann Fehler melden). Empfohlen: als neuen Entwurf senden und den Text in ${builder} einfügen.`);
+        throw new HttpError(409, `BUILDER:${builder}: Dieser Beitrag wurde mit ${builder} gebaut. Die Website zeigt dann den Inhalt des Seitenbaukastens statt des Beitragstextes. Nach dem Ersetzen im Beitrag in WordPress „Mit WordPress bearbeiten“ wählen (Elementor-Button) und die Umstellung bestätigen – dann erscheint der neue Text (das ${builder}-Layout dieses Beitrags entfällt, und der Beitrag nicht erneut mit ${builder} öffnen). Alternative: als neuen Entwurf senden und den Text in ${builder} einfügen.`);
       }
     }
 
