@@ -1104,6 +1104,26 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect(calls.some((c) => c.method === "POST" && c.path === "/wp-json/wp/v2/posts/7")).toBe(true);
   });
 
+  it("uebernimmt auf Wunsch das Datum des Originals in den neuen Entwurf einer Ueberarbeitung", async () => {
+    const original = { id: 7, status: "publish", title: { rendered: "Alter Beitrag" }, link: `${WP_BASE}/alt/`, date: "2023-05-01T10:00:00", excerpt: { rendered: "" }, content: { rendered: `<p>${"Alter Text. ".repeat(30)}</p>` } };
+    const calls = fakeWordPress({ ...standardRoutes(), "GET /wp-json/wp/v2/posts/7": { body: original } });
+    await setup(new FakeAiService());
+    const site = await createWpSite();
+    const postId = (await app.inject({ method: "POST", url: `/api/sites/${site.id}/revisions`, headers: { cookie }, payload: { wpPostId: 7 } })).json().id as string;
+    await worker.tick();
+    const sent = () => calls.filter((c) => c.method === "POST" && c.path === "/wp-json/wp/v2/posts").at(-1)?.body;
+
+    await jsonPost(`/api/posts/${postId}/wordpress/publish`, { categoryIds: [3], tags: [] });
+    expect(sent()).not.toHaveProperty("date");
+
+    calls.length = 0;
+    fakeWordPressAppend(calls, { "GET /wp-json/wp/v2/posts/7": { body: original }, "GET /wp-json/wp/v2/posts/42": { body: { id: 42, status: "draft" } }, "POST /wp-json/wp/v2/posts/42": { body: { id: 42, link: "x", status: "draft" } } });
+    await setup(new FakeAiService());
+    await jsonPost(`/api/posts/${postId}/wordpress/publish`, { categoryIds: [3], tags: [], keepOriginalDate: true });
+    const update = calls.find((c) => c.method === "POST" && c.path === "/wp-json/wp/v2/posts/42")!;
+    expect(update.body).toMatchObject({ date: "2023-05-01T10:00:00", status: "draft" });
+  });
+
   it("legt den Entwurf auch an, wenn das Bild nicht hochgeladen werden darf", async () => {
     fakeWordPress({ ...standardRoutes(), "POST /wp-json/wp/v2/media": { status: 403, body: { message: "Sorry" } } });
     await setup(new FakeAiService(), new FakeImageProvider());

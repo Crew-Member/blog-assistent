@@ -371,6 +371,7 @@ function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: bool
   const [confirmed, setConfirmed] = useState(false);
   const [builderMsg, setBuilderMsg] = useState<string | undefined>(post.revisionOf?.builder ? `Dieses Original wurde mit ${post.revisionOf.builder} gebaut. Die Website zeigt dann den Inhalt des Seitenbaukastens, nicht den Beitragstext – das Ersetzen ändert die Seite womöglich nicht sichtbar (und der WordPress-Editor kann Fehler melden). Empfohlen: als neuen Entwurf senden und den Text in ${post.revisionOf.builder} einfügen.` : undefined);
   const [builderOk, setBuilderOk] = useState(false);
+  const [keepDate, setKeepDate] = useState(true);
 
   async function replaceOriginal() {
     setBusy(true);
@@ -414,6 +415,7 @@ function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: bool
         categoryIds: selected,
         newCategories: newSelected,
         tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
+        keepOriginalDate: Boolean(post.revisionOf) && keepDate,
       });
       setResult(r);
       setPrep(undefined);
@@ -473,6 +475,13 @@ function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: bool
             </div>
           )}
         </div>
+      )}
+
+      {post.revisionOf && mode === "draft" && !prep && (
+        <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
+          <input type="checkbox" style={{ width: "auto" }} checked={keepDate} onChange={(e) => setKeepDate(e.target.checked)} />
+          <span>Datum des Originals übernehmen <span className="muted">– der neue Entwurf erhält das ursprüngliche Veröffentlichungsdatum. Die Adresse bekommt WordPress neu; soll sie der alten entsprechen, ändere im alten Beitrag die Adresse (oder lösche ihn) und setze sie im neuen auf die frühere.</span></span>
+        </label>
       )}
 
       {result?.replaced && <div className="ok">Der veröffentlichte Beitrag wurde ersetzt. Datum und Adresse sind unverändert.</div>}

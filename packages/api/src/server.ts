@@ -72,6 +72,8 @@ const wpPublishSchema = z.object({
   confirmReplace: z.boolean().default(false),
   // Nur wenn das Original mit einem Seitenbaukasten (Elementor u. a.) gebaut ist: bestaetigt, dass trotzdem ersetzt werden soll.
   confirmBuilder: z.boolean().default(false),
+  // Nur bei Ueberarbeitungen, die als NEUER Entwurf gesendet werden: das Datum des Originals uebernehmen.
+  keepOriginalDate: z.boolean().default(false),
 });
 
 const styleSampleSchema = z.object({
@@ -319,6 +321,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
       excerpt: post.excerpt ?? undefined,
       categories: categoryIds,
       tags: replace ? [] : await client.ensureTags(body.data.tags),
+      ...(!replace && body.data.keepOriginalDate && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test((post.revisionSource as { publishedAt?: string } | null)?.publishedAt ?? "") ? { date: (post.revisionSource as { publishedAt: string }).publishedAt } : {}),
     };
     const meta = { description: post.metaDescription ?? "", focusKeyword: post.focusKeyword ?? "" };
 

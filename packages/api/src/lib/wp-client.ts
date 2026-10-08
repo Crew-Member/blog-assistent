@@ -28,6 +28,8 @@ export interface WpDraftInput {
   categories: number[];
   tags: number[];
   featuredMedia?: number;
+  /** Datum des Beitrags (lokale WordPress-Zeit, ISO ohne Zeitzone), z. B. das Datum des Originals bei Ueberarbeitungen. */
+  date?: string;
 }
 
 export interface WpPostRef {
@@ -202,6 +204,7 @@ export class WordPressClient {
       status: "draft",
       ...(input.slug ? { slug: input.slug } : {}),
       ...(input.excerpt ? { excerpt: input.excerpt } : {}),
+      ...(input.date ? { date: input.date } : {}),
       categories: input.categories,
       tags: input.tags,
       ...(input.featuredMedia ? { featured_media: input.featuredMedia } : {}),
