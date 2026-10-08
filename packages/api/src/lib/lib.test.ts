@@ -235,3 +235,28 @@ describe("applyLinkPolicy: allgemeine Quellen als Auffueller", () => {
     expect(applyLinkPolicy(none, "https://kirmse.eu", [])).not.toContain("<a ");
   });
 });
+
+describe("Selbstverweise bei Ueberarbeitungen", () => {
+  it("urlKey ignoriert Protokoll, www, Schraegstrich und Anker", async () => {
+    const { urlKey } = await import("./html.js");
+    expect(urlKey("http://www.Kirmse.eu/alt/#x")).toBe(urlKey("https://kirmse.eu/alt"));
+    expect(urlKey("https://kirmse.eu/?p=7")).not.toBe(urlKey("https://kirmse.eu/"));
+  });
+
+  it("verlinkt nie auf den Originalbeitrag - auch nicht in abweichender Schreibweise - und kennt www als eigene Website", async () => {
+    const { applyLinkPolicy, unwrapBlockedLinks } = await import("./html.js");
+    const html = [
+      '<a href="https://kirmse.eu/alt/">Original</a>',
+      '<a href="http://www.kirmse.eu/alt">Original www</a>',
+      '<a href="https://kirmse.eu/?p=7">Kurzlink</a>',
+      '<a href="https://www.kirmse.eu/anderer/">Anderer</a>',
+      '<a href="https://www.kirmse.eu/erfunden/">Erfunden</a>',
+    ].join(" ");
+    const blocked = ["https://kirmse.eu/alt/", "https://kirmse.eu/?p=7"];
+    const out = applyLinkPolicy(html, "https://kirmse.eu", ["https://kirmse.eu/anderer/"], { generalAllowed: ["https://kirmse.eu/alt/", "http://www.kirmse.eu/alt"], blockedUrls: blocked });
+    expect(out).toContain("kirmse.eu/anderer");
+    for (const gone of ["/alt", "?p=7", "erfunden"]) expect(out).not.toContain(gone);
+    expect(unwrapBlockedLinks(html, blocked)).not.toContain("?p=7");
+    expect(unwrapBlockedLinks(html, blocked)).toContain("Original www"); // Text bleibt
+  });
+});

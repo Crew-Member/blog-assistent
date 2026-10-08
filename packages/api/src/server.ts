@@ -14,7 +14,8 @@ import type { AiService } from "./ai/types.js";
 import type { Config } from "./config.js";
 import type { FileStorage } from "./lib/storage.js";
 import { detectKind, extractDocument, stripHtml } from "./lib/extract.js";
-import { applyLinkPolicy, sanitizePostHtml, unwrapLinksNotIn } from "./lib/html.js";
+import { applyLinkPolicy, sanitizePostHtml, unwrapBlockedLinks, unwrapLinksNotIn } from "./lib/html.js";
+import { selfUrls } from "./pipeline.js";
 import { keywordInText, seoChecks } from "./lib/seo.js";
 import { slugify } from "./lib/slug.js";
 import { decryptSecret, encryptSecret } from "./lib/secrets.js";
@@ -281,7 +282,11 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     // Er wird nur beim Versand eingefuegt und nicht im Entwurf gespeichert - so verschwindet er, wenn das Bild getauscht wird.
     const imageForNotice = await prisma.postImage.findUnique({ where: { postId: post.id } });
     const needsImageNotice = Boolean(site.labelAiImages && imageForNotice && imageForNotice.status === "READY" && imageForNotice.storageKey && imageForNotice.aiGenerated);
-    const contentForWp = withImageNotice(post.contentHtml, needsImageNotice ? imageNoticeHtml(site) : "");
+    // Eine Ueberarbeitung darf nie auf den Originalbeitrag verlinken, den sie ersetzt bzw. ergaenzt (auch nicht in aelteren Entwuerfen).
+    const revisionSource = post.revisionSource as { url?: string; wpPostId?: number } | null;
+    const cleanedContent = revisionSource ? unwrapBlockedLinks(post.contentHtml, selfUrls(site.baseUrl, revisionSource)) : post.contentHtml;
+    if (cleanedContent !== post.contentHtml) await prisma.post.update({ where: { id: post.id }, data: { contentHtml: cleanedContent } });
+    const contentForWp = withImageNotice(cleanedContent, needsImageNotice ? imageNoticeHtml(site) : "");
 
     // Ersetzen des veroeffentlichten Originals: nur bei Ueberarbeitungen, nur mit Bestaetigung, nur das Original dieser Ueberarbeitung.
     const source = post.revisionSource as { wpPostId?: number } | null;
@@ -698,7 +703,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
         return [];
       }
     });
-    const html = applyLinkPolicy(unwrapLinksNotIn(sanitizePostHtml(result.contentHtml), existing), post.site.baseUrl, existing, { generalAllowed: existing, blockedHosts: competitorHosts });
+    const html = applyLinkPolicy(unwrapLinksNotIn(sanitizePostHtml(result.contentHtml), existing), post.site.baseUrl, existing, { generalAllowed: existing, blockedHosts: competitorHosts, blockedUrls: selfUrls(post.site.baseUrl, post.revisionSource as { url?: string; wpPostId?: number } | null) });
     if (html.length < current.length * 0.3) return reply.code(422).send({ error: "Die KI hat den Text stark gekürzt – die Änderung wurde nicht übernommen. Bitte die Anweisung genauer fassen." });
     await prisma.post.update({ where: { id: post.id }, data: { previousContentHtml: post.contentHtml, contentHtml: `${html}${footer}` } });
     return { note: result.note };

@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { explainAiError } from "./ai/errors.js";
 import type { AiDocument, AiService, CompetitionGuidance, DraftResult, FactCheckResult, ResearchResult, SiteProfile, TopicProposal } from "./ai/types.js";
-import { escapeHtml, sanitizePostHtml, applyLinkPolicy } from "./lib/html.js";
+import { escapeHtml, sanitizePostHtml, applyLinkPolicy, urlKey } from "./lib/html.js";
 import { fetchSitePosts } from "./lib/wordpress.js";
 import { parsePreferredLinks } from "./lib/links.js";
 import { fetchPrimarySources } from "./lib/sources.js";
@@ -149,6 +149,18 @@ export function evaluateFactCheck(
   };
 }
 
+/** Adressen des Originalbeitrags einer Ueberarbeitung (Permalink und ?p=ID), auf die nicht verlinkt werden darf. */
+export function selfUrls(baseUrl: string, rev: { url?: string; wpPostId?: number } | null | undefined): string[] {
+  if (!rev) return [];
+  const urls = rev.url ? [rev.url] : [];
+  try {
+    if (rev.wpPostId) urls.push(`${new URL(baseUrl).origin}/?p=${rev.wpPostId}`);
+  } catch {
+    /* keine gueltige Basisadresse */
+  }
+  return urls;
+}
+
 function hostOfUrl(url: string): string[] {
   try {
     return [new URL(url).hostname.toLowerCase().replace(/^www\./, "")];
@@ -233,7 +245,7 @@ async function generatePostRun(deps: PipelineDeps, postId: string): Promise<void
     if (post.site.baseUrl) {
       try {
         relatedPosts = (await fetchSitePosts(post.site.baseUrl, { count: 30 }, deps.fetcher as never))
-          .filter((p) => p.url && p.url !== revision?.url)
+          .filter((p) => p.url && !(revision?.url && urlKey(p.url) === urlKey(revision.url)))
           .map((p) => ({ title: p.title, url: p.url, excerpt: p.excerpt }));
       } catch {
         relatedPosts = [];
@@ -262,6 +274,8 @@ async function generatePostRun(deps: PipelineDeps, postId: string): Promise<void
     const linkOptions = {
       generalAllowed: [...research.sources.map((s) => s.url), ...draft.sources.map((s) => s.url), ...originalLinks],
       blockedHosts: competitorHosts,
+      // Der Originalbeitrag wird durch die Ueberarbeitung ersetzt bzw. ergaenzt: nie auf ihn selbst verlinken.
+      blockedUrls: selfUrls(post.site.baseUrl, rev),
     };
     draft.contentHtml = applyLinkPolicy(draft.contentHtml, post.site.baseUrl, knownInternal, linkOptions);
     if (draft.changeSummary.trim()) {

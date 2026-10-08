@@ -619,6 +619,36 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect(html).not.toContain("erfunden.example");
   });
 
+  it("verlinkt in einer Ueberarbeitung nicht auf den Originalbeitrag selbst, auch nicht beim Senden an WordPress", async () => {
+    const original = { id: 7, status: "publish", title: { rendered: "Alter Beitrag" }, link: `${WP_BASE}/alt/`, date: "2023-05-01T10:00:00", excerpt: { rendered: "" }, content: { rendered: `<p>${"Alter Text. ".repeat(30)} <a href="${WP_BASE}/alt/">selbst</a></p>` } };
+    const calls = fakeWordPress({ ...standardRoutes(), "GET /wp-json/wp/v2/posts/7": { body: original }, "POST /wp-json/wp/v2/posts": { body: { id: 50, link: `${WP_BASE}/neu/`, status: "draft" } } });
+    const fake = new FakeAiService();
+    let related: string[] = [];
+    await setup(fakeWith({
+      // die Websuche findet auch den Originalbeitrag selbst (in anderer Schreibweise: http, www)
+      research: async () => ({ notes: "n", sources: [{ title: "Original", url: "http://www.93.184.216.34/alt" }, { title: "Original2", url: `${WP_BASE}/alt/` }] }),
+      draft: async (input) => {
+        related = (input.relatedPosts ?? []).map((p) => p.url);
+        return { ...(await fake.draft(input)), contentHtml: `<p>Text <a href="${WP_BASE}/alt/">alt</a> <a href="${WP_BASE}/?p=7">kurz</a></p>` };
+      },
+    }));
+    const site = await createWpSite();
+    const rev = await app.inject({ method: "POST", url: `/api/sites/${site.id}/revisions`, headers: { cookie }, payload: { wpPostId: 7 } });
+    await worker.tick();
+    const postId = rev.json().id as string;
+    const html: string = (await app.inject({ method: "GET", url: `/api/posts/${postId}`, headers: { cookie } })).json().contentHtml;
+    expect(html).not.toContain("/alt");
+    expect(html).not.toContain("?p=7");
+    expect(related).not.toContain(`${WP_BASE}/alt/`);
+
+    // Aelterer Entwurf mit Selbstverweis: wird beim Senden bereinigt (neuer Entwurf)
+    await app.inject({ method: "PUT", url: `/api/posts/${postId}`, headers: { cookie }, payload: { contentHtml: `<p>Text <a href="${WP_BASE}/alt/">alt</a></p>` } });
+    await jsonPost(`/api/posts/${postId}/wordpress/publish`, { categoryIds: [3], tags: [] });
+    const sent = String(calls.filter((c) => c.method === "POST" && c.path === "/wp-json/wp/v2/posts").at(-1)?.body?.content);
+    expect(sent).not.toContain("/alt/");
+    expect(sent).toContain("alt");
+  });
+
   it("gibt die gewuenschte Anzahl an den WordPress-Import weiter", async () => {
     const urls: string[] = [];
     wpFetcher = (async (url: string) => {

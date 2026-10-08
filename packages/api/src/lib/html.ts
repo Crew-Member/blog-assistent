@@ -46,6 +46,23 @@ export function unwrapUnknownInternalLinks(html: string, siteOrigin: string, all
   });
 }
 
+/** Vergleichsschluessel einer Adresse: ohne Protokoll, "www." und abschliessenden Schraegstrich, Kleinschreibung (Anker entfernt, Query bleibt). */
+export function urlKey(raw: string): string {
+  try {
+    const u = new URL(raw.trim());
+    return `${u.hostname.toLowerCase().replace(/^www\./, "")}${u.pathname.replace(/\/+$/, "")}${u.search}`.toLowerCase();
+  } catch {
+    return raw.trim().toLowerCase();
+  }
+}
+
+/** Entfernt Links auf bestimmte Adressen (z. B. den ersetzten Originalbeitrag); der Linktext bleibt. */
+export function unwrapBlockedLinks(html: string, blockedUrls: Iterable<string>): string {
+  const blocked = new Set([...blockedUrls].map(urlKey));
+  if (blocked.size === 0) return html;
+  return html.replace(/<a\s[^>]*?href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (whole, href: string, inner: string) => (blocked.has(urlKey(href.replace(/&amp;/g, "&"))) ? inner : whole));
+}
+
 export const MAX_EXTERNAL_LINKS = 5;
 export const MAX_INTERNAL_LINKS = 2;
 /** Ziel: mindestens so viele ausgehende Links; fehlen Primaerquellen, duerfen allgemeine Quellen auffuellen. */
@@ -62,6 +79,8 @@ export interface LinkPolicyOptions {
   generalAllowed?: Iterable<string>;
   /** Domains, auf die nicht verlinkt wird (z. B. verglichene Wettbewerber-Seiten). */
   blockedHosts?: Iterable<string>;
+  /** Adressen, auf die nie verlinkt wird (z. B. der Originalbeitrag, den die Ueberarbeitung ersetzt). */
+  blockedUrls?: Iterable<string>;
 }
 
 const hostName = (url: URL) => url.hostname.toLowerCase().replace(/^www\./, "");
@@ -78,9 +97,10 @@ export function applyLinkPolicy(html: string, siteOrigin: string, internalAllowe
   } catch {
     origin = "";
   }
-  const known = new Set([...internalAllowed].map(normUrl));
+  const known = new Set([...internalAllowed].map(urlKey));
   const general = new Set([...(options.generalAllowed ?? [])].map(normUrl));
   const blocked = new Set([...(options.blockedHosts ?? [])].map((h) => h.toLowerCase().replace(/^www\./, "")));
+  const blockedUrls = new Set([...(options.blockedUrls ?? [])].map(urlKey));
   const anchor = /<a\s[^>]*?href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
 
   const parse = (href: string): URL | undefined => {
@@ -90,7 +110,8 @@ export function applyLinkPolicy(html: string, siteOrigin: string, internalAllowe
       return undefined;
     }
   };
-  const isInternal = (url: URL) => Boolean(origin) && url.origin.toLowerCase() === origin;
+  const ownHost = origin ? hostName(new URL(origin)) : "";
+  const isInternal = (url: URL) => Boolean(ownHost) && hostName(url) === ownHost;
   const isPrimary = (url: URL) => /^https?:$/.test(url.protocol) && !blocked.has(hostName(url)) && isTrustedSource(url.toString());
   const isGeneral = (url: URL) =>
     /^https?:$/.test(url.protocol) && general.has(normUrl(url.toString())) && !blocked.has(hostName(url)) && !NO_LINK_HOSTS.some((h) => hostName(url).includes(h));
@@ -112,9 +133,9 @@ export function applyLinkPolicy(html: string, siteOrigin: string, internalAllowe
     const url = parse(href);
     if (!url) return inner;
     const key = normUrl(url.toString());
-    if (seen.has(key)) return inner;
+    if (seen.has(key) || blockedUrls.has(urlKey(url.toString()))) return inner;
     if (isInternal(url)) {
-      if (!known.has(key) || internal >= MAX_INTERNAL_LINKS) return inner;
+      if (!known.has(urlKey(url.toString())) || internal >= MAX_INTERNAL_LINKS) return inner;
       internal++;
     } else if (isPrimary(url)) {
       if (external >= MAX_EXTERNAL_LINKS) return inner;

@@ -100,6 +100,7 @@ Du ueberarbeitest einen BESTEHENDEN, bereits veroeffentlichten Beitrag der Websi
 - Behalte Aufbau, Ton, Ansprache und Kernaussagen des Originals bei, soweit sie richtig und aktuell sind. Schreibe nicht ohne Not um; uebernimm gute Formulierungen.
 - Aktualisiere, was durch die Recherchenotizen belegt ueberholt ist (neue Rechtsprechung, Gesetzesaenderungen, geaenderte Fristen/Betraege), und setze die Wuensche des Nutzers um. Veraltetes ohne Beleg fuer die neue Lage nicht stillschweigend aendern, sondern in unverifiedClaims aufnehmen.
 - Fakten, die nur im Originalbeitrag stehen und in der Recherche weder bestaetigt noch widerlegt werden, darfst du uebernehmen, wenn sie unverdaechtig sind; markiere zweifelhafte in unverifiedClaims.
+- Verlinke den bestehenden Beitrag selbst NICHT (er wird durch deine Fassung ersetzt oder ergaenzt), auch nicht dessen alte Adresse; Links im Originaltext, die auf ihn selbst zeigen, entfernst du.
 - title, metaDescription, slug, focusKeyword gelten fuer die ueberarbeitete Fassung; das Fokus-Keyword des Originals darf beibehalten werden, wenn es passt.
 - changeSummary: 3 bis 8 kurze Stichpunkte (Zeilen mit "- "), was gegenueber dem Original geaendert, ergaenzt oder gestrichen wurde und warum.
 
