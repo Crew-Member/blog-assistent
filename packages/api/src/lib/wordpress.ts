@@ -164,3 +164,12 @@ export async function fetchAllSitePosts(baseUrl: string, maxPages = 10, fetcher:
   }
   return all;
 }
+
+/** Erkennt Seitenbaukaesten im ausgelieferten HTML eines Beitrags. */
+export function detectPageBuilder(html: string): string | undefined {
+  if (/elementor/i.test(html)) return "Elementor";
+  if (/\bet_pb_|et-boc/i.test(html)) return "Divi";
+  if (/\bvc_row|wpb_wrapper/i.test(html)) return "WPBakery";
+  if (/\bfl-builder/i.test(html)) return "Beaver Builder";
+  return undefined;
+}

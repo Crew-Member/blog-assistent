@@ -369,16 +369,21 @@ function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: bool
   const [result, setResult] = useState<WpPublishResult>();
   const [mode, setMode] = useState<"draft" | "replace">(post.wpReplacedAt ? "replace" : "draft");
   const [confirmed, setConfirmed] = useState(false);
+  const [builderMsg, setBuilderMsg] = useState<string | undefined>(post.revisionOf?.builder ? `Dieses Original wurde mit ${post.revisionOf.builder} gebaut. Die Website zeigt dann den Inhalt des Seitenbaukastens, nicht den Beitragstext – das Ersetzen ändert die Seite womöglich nicht sichtbar (und der WordPress-Editor kann Fehler melden). Empfohlen: als neuen Entwurf senden und den Text in ${post.revisionOf.builder} einfügen.` : undefined);
+  const [builderOk, setBuilderOk] = useState(false);
 
   async function replaceOriginal() {
     setBusy(true);
     setError(undefined);
     try {
-      setResult(await api.post<WpPublishResult>(`/api/posts/${post.id}/wordpress/publish`, { replaceOriginal: true, confirmReplace: confirmed }));
+      setResult(await api.post<WpPublishResult>(`/api/posts/${post.id}/wordpress/publish`, { replaceOriginal: true, confirmReplace: confirmed, confirmBuilder: builderOk }));
       setConfirmed(false);
       onDone();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      const m = /^BUILDER:[^:]*:\s*(.*)$/s.exec(message);
+      if (m) setBuilderMsg(m[1]);
+      else setError(message);
     } finally {
       setBusy(false);
     }
@@ -448,12 +453,21 @@ function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: bool
           </label>
           {mode === "replace" && (
             <div className="stack">
+              {builderMsg && (
+                <div className="notice">
+                  <Icon name="alert" size={16} /> {builderMsg}
+                  <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit", marginTop: 8 }}>
+                    <input type="checkbox" style={{ width: "auto" }} checked={builderOk} onChange={(e) => setBuilderOk(e.target.checked)} />
+                    <span>Trotzdem ersetzen</span>
+                  </label>
+                </div>
+              )}
               <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
                 <input type="checkbox" style={{ width: "auto" }} checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
                 <span>Ja, der veröffentlichte Beitrag „{post.revisionOf.title}“ soll mit diesem Text <strong>überschrieben</strong> werden – er ist sofort live.</span>
               </label>
               <div className="row">
-                <button className="danger" disabled={busy || dirty || !confirmed} onClick={replaceOriginal}>{busy ? "Bitte warten …" : "Originalbeitrag jetzt ersetzen"}</button>
+                <button className="danger" disabled={busy || dirty || !confirmed || (Boolean(builderMsg) && !builderOk)} onClick={replaceOriginal}>{busy ? "Bitte warten …" : "Originalbeitrag jetzt ersetzen"}</button>
                 <a href={post.revisionOf.url} target="_blank" rel="noreferrer noopener" className="muted">Original ansehen</a>
               </div>
             </div>

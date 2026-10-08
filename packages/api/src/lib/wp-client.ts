@@ -223,6 +223,12 @@ export class WordPressClient {
     return this.ref(await this.request(`/wp-json/wp/v2/posts/${id}?_fields=id,link,status`, { method: "POST", body: this.payload(input, meta) }));
   }
 
+  /** Ausgelieferter HTML-Inhalt eines Beitrags (um z. B. Seitenbaukasten zu erkennen). */
+  async renderedContent(id: number): Promise<string> {
+    const post = await this.request<{ content?: { rendered?: string } }>(`/wp-json/wp/v2/posts/${id}?_fields=content`);
+    return post?.content?.rendered ?? "";
+  }
+
   /**
    * Ersetzt Titel, Text und Auszug eines bestehenden (auch veroeffentlichten) Beitrags - NUR auf ausdrueckliche Anweisung des Nutzers.
    * Status, Datum, Adresse (Slug), Kategorien und Schlagwoerter bleiben unveraendert; WordPress legt dabei eine Version des alten Stands an.

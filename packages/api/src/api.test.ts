@@ -1080,6 +1080,30 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect((await jsonPost(`/api/posts/${postId}/wordpress/publish`, { replaceOriginal: true, confirmReplace: true })).statusCode).toBe(200);
   });
 
+  it("warnt beim Ersetzen eines mit Elementor gebauten Originals und ersetzt nur nach zusaetzlicher Bestaetigung", async () => {
+    const original = { id: 7, status: "publish", title: { rendered: "Alter Beitrag" }, link: `${WP_BASE}/alt/`, date: "2023-05-01T10:00:00", excerpt: { rendered: "" }, content: { rendered: `<div class="elementor elementor-7"><div class="elementor-widget-text-editor"><p>${"Alter Text. ".repeat(30)}</p></div></div>` } };
+    const calls = fakeWordPress({
+      ...standardRoutes(),
+      "GET /wp-json/wp/v2/posts/7": { body: original },
+      "POST /wp-json/wp/v2/posts/7": { body: { id: 7, link: `${WP_BASE}/alt/`, status: "publish" } },
+    });
+    await setup(new FakeAiService());
+    const site = await createWpSite();
+    const rev = await app.inject({ method: "POST", url: `/api/sites/${site.id}/revisions`, headers: { cookie }, payload: { wpPostId: 7 } });
+    const postId = rev.json().id as string;
+    await worker.tick();
+    expect((await app.inject({ method: "GET", url: `/api/posts/${postId}`, headers: { cookie } })).json().revisionOf.builder).toBe("Elementor");
+
+    const blocked = await jsonPost(`/api/posts/${postId}/wordpress/publish`, { replaceOriginal: true, confirmReplace: true });
+    expect(blocked.statusCode).toBe(409);
+    expect(blocked.json().error).toMatch(/^BUILDER:Elementor:/);
+    expect(calls.some((c) => c.method === "POST" && c.path === "/wp-json/wp/v2/posts/7")).toBe(false);
+
+    const ok = await jsonPost(`/api/posts/${postId}/wordpress/publish`, { replaceOriginal: true, confirmReplace: true, confirmBuilder: true });
+    expect(ok.statusCode).toBe(200);
+    expect(calls.some((c) => c.method === "POST" && c.path === "/wp-json/wp/v2/posts/7")).toBe(true);
+  });
+
   it("legt den Entwurf auch an, wenn das Bild nicht hochgeladen werden darf", async () => {
     fakeWordPress({ ...standardRoutes(), "POST /wp-json/wp/v2/media": { status: 403, body: { message: "Sorry" } } });
     await setup(new FakeAiService(), new FakeImageProvider());

@@ -19,7 +19,7 @@ import { selfUrls } from "./pipeline.js";
 import { keywordInText, seoChecks } from "./lib/seo.js";
 import { slugify } from "./lib/slug.js";
 import { decryptSecret, encryptSecret } from "./lib/secrets.js";
-import { fetchSitePost, fetchSitePosts, fetchWordPressPosts } from "./lib/wordpress.js";
+import { detectPageBuilder, fetchSitePost, fetchSitePosts, fetchWordPressPosts } from "./lib/wordpress.js";
 import { WordPressClient, WordPressError, type WpDraftInput } from "./lib/wp-client.js";
 import { markAsAiGenerated, sniffImageType } from "./lib/png.js";
 import type { ImageProvider } from "./image/provider.js";
@@ -70,6 +70,8 @@ const wpPublishSchema = z.object({
   // Nur bei Ueberarbeitungen: den veroeffentlichten Originalbeitrag ersetzen (Datum und Adresse bleiben). Erfordert die ausdrueckliche Bestaetigung.
   replaceOriginal: z.boolean().default(false),
   confirmReplace: z.boolean().default(false),
+  // Nur wenn das Original mit einem Seitenbaukasten (Elementor u. a.) gebaut ist: bestaetigt, dass trotzdem ersetzt werden soll.
+  confirmBuilder: z.boolean().default(false),
 });
 
 const styleSampleSchema = z.object({
@@ -296,6 +298,14 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
       if (!body.data.confirmReplace) throw new HttpError(400, "Bitte das Ersetzen des veröffentlichten Beitrags ausdrücklich bestätigen.");
     } else if (post.wpReplacedAt) {
       throw new HttpError(409, "Dieser Beitrag hat den Originalbeitrag in WordPress ersetzt. Bitte erneut „Originalbeitrag ersetzen“ wählen, um ihn weiter zu aktualisieren.");
+    }
+
+    if (replace && !body.data.confirmBuilder) {
+      // Seitenbaukaesten liefern auf der Website ihren eigenen Inhalt aus - das Ersetzen des Beitragstextes aendert dort oft nichts.
+      const builder = detectPageBuilder(await client.renderedContent(source!.wpPostId!).catch(() => ""));
+      if (builder) {
+        throw new HttpError(409, `BUILDER:${builder}: Dieser Beitrag wurde mit ${builder} gebaut. Die Website zeigt dann den Inhalt des Seitenbaukastens, nicht den Beitragstext – das Ersetzen ändert die Seite womöglich nicht sichtbar (und der WordPress-Editor kann Fehler melden). Empfohlen: als neuen Entwurf senden und den Text in ${builder} einfügen.`);
+      }
     }
 
     const existingCategories = replace || !body.data.newCategories.length ? [] : await client.categories();
@@ -559,6 +569,8 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     }
     const html = sanitizePostHtml(original.html);
     const text = stripHtml(original.html);
+    // Mit einem Seitenbaukasten gebaute Beitraege zeigen auf der Website den Inhalt des Baukastens, nicht den Beitragstext aus der REST-API.
+    const builder = detectPageBuilder(original.html);
     return prisma.$transaction(async (tx) => {
       const submission = await tx.submission.create({ data: { siteId: site.id, note: `Überarbeitung: ${original.title}`.slice(0, 300), status: "ANALYZED" } });
       const topic = await tx.topic.create({
@@ -575,7 +587,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
         data: {
           siteId: site.id,
           topicId: topic.id,
-          revisionSource: { wpPostId: original.id, title: original.title, url: original.url, html, instructions: instructions.trim(), publishedAt: original.date },
+          revisionSource: { wpPostId: original.id, title: original.title, url: original.url, html, instructions: instructions.trim(), publishedAt: original.date, ...(builder ? { builder } : {}) },
         },
       });
     });
@@ -800,8 +812,8 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
       ? seoChecks({ title: post.title ?? "", slug: post.slug ?? "", metaDescription: post.metaDescription ?? "", focusKeyword: post.focusKeyword ?? "", contentHtml: post.contentHtml ?? "" })
       : [];
     const { image, revisionSource, previousContentHtml, ...rest } = post;
-    const rev = revisionSource as { wpPostId?: number; title?: string; url?: string; instructions?: string } | null;
-    const revisionOf = rev ? { wpPostId: rev.wpPostId ?? 0, title: rev.title ?? "", url: rev.url ?? "", instructions: rev.instructions ?? "" } : null;
+    const rev = revisionSource as { wpPostId?: number; title?: string; url?: string; instructions?: string; builder?: string } | null;
+    const revisionOf = rev ? { wpPostId: rev.wpPostId ?? 0, title: rev.title ?? "", url: rev.url ?? "", instructions: rev.instructions ?? "", builder: rev.builder ?? null } : null;
     return { ...rest, revisionOf, canUndoRefine: Boolean(previousContentHtml), image: image ? publicImage(image) : null, seoChecks: seo };
   });
 
