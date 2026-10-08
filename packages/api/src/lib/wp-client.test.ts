@@ -103,6 +103,28 @@ describe("WordPressClient", () => {
     expect(await client.ensureTags(["Löschkonzept"])).toEqual([12]);
   });
 
+  it("liest Antworten, denen Elementor einen <style>-Block voranstellt, und fragt beim Schreiben nur die noetigen Felder ab", async () => {
+    const urls: string[] = [];
+    const css = '<style id="elementor-post-28899">.elementor-widget-text-editor{font-family:var(--e-global)}</style>\n';
+    const fetcher = (async (url: string, init?: RequestInit) => {
+      urls.push(`${init?.method ?? "GET"} ${url}`);
+      if ((init?.method ?? "GET") === "GET") return new Response(css + JSON.stringify({ id: 7, status: "publish", type: "post" }));
+      return new Response(css + JSON.stringify({ id: 7, link: "https://93.184.216.34/alt/", status: "publish" }));
+    }) as typeof fetch;
+    const client = new WordPressClient(BASE, "daniel", "abcd efgh ijkl", fetcher);
+    const ref = await client.updateExisting(7, { title: "T", content: "<p>x</p>" });
+    expect(ref).toMatchObject({ id: 7, status: "publish" });
+    expect(urls.at(-1)).toContain("/wp-json/wp/v2/posts/7?_fields=id,link,status");
+    expect((await client.createDraft({ title: "T", content: "<p>x</p>", categories: [], tags: [] })).id).toBe(7);
+    expect(urls.at(-1)).toContain("/wp-json/wp/v2/posts?_fields=id,link,status");
+  });
+
+  it("nennt bei Nicht-JSON den Antworttyp und den Anfang der Antwort", async () => {
+    const fetcher = (async () => new Response("<html>Firewall: Zugriff blockiert</html>", { headers: { "content-type": "text/html" } })) as typeof fetch;
+    const client = new WordPressClient(BASE, "daniel", "abcd efgh ijkl", fetcher);
+    await expect(client.me()).rejects.toThrow(/Typ text\/html.*Firewall/);
+  });
+
   it("verwendet vorhandene Schlagwoerter und legt fehlende an", async () => {
     const { client, calls } = wp({
       "GET /wp-json/wp/v2/tags": [{ body: [{ id: 5, name: "DSGVO" }] }, { body: [] }],

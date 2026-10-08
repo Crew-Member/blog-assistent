@@ -1,4 +1,5 @@
 import { assertPublicHttpUrl } from "./netguard.js";
+import { parseJsonLoosely } from "./wordpress.js";
 
 export class WordPressError extends Error {
   constructor(
@@ -106,9 +107,14 @@ export class WordPressClient {
     if (text.length > MAX_BODY) throw new WordPressError("Antwort von WordPress ist zu groß.");
     let data: unknown;
     try {
-      data = text ? JSON.parse(text) : undefined;
+      // Auch mit vorangestellten <style>/<script>-Bloecken (Elementor u. a.) oder Fremdtext lesen.
+      data = text ? parseJsonLoosely(text) : undefined;
     } catch {
-      if (res.ok) throw new WordPressError("WordPress liefert keine gültige REST-Antwort (Permalinks, Sicherheits-Plugin oder Firewall?).", res.status);
+      if (res.ok) {
+        const type = res.headers.get("content-type") ?? "unbekannt";
+        const head = text.replace(/\s+/g, " ").trim().slice(0, 80);
+        throw new WordPressError(`WordPress liefert keine gültige REST-Antwort (Permalinks, Sicherheits-Plugin oder Firewall?) – Typ ${type}, Anfang: „${head}“`, res.status);
+      }
     }
     if (!res.ok) {
       const body = data as { code?: string; data?: { term_id?: number } } | undefined;
@@ -205,7 +211,7 @@ export class WordPressClient {
   }
 
   async createDraft(input: WpDraftInput, meta?: RankMathMeta): Promise<WpPostRef> {
-    return this.ref(await this.request("/wp-json/wp/v2/posts", { method: "POST", body: this.payload(input, meta) }));
+    return this.ref(await this.request("/wp-json/wp/v2/posts?_fields=id,link,status", { method: "POST", body: this.payload(input, meta) }));
   }
 
   /** Aktualisiert einen vorhandenen Entwurf - veroeffentlichte oder geplante Beitraege werden nie ueberschrieben. */
@@ -214,7 +220,7 @@ export class WordPressClient {
     if (current.status !== "draft" && current.status !== "auto-draft") {
       throw new WordPressError(`Der Beitrag in WordPress hat den Status „${current.status}“ und wird nicht überschrieben. Änderungen bitte direkt in WordPress vornehmen.`, 409);
     }
-    return this.ref(await this.request(`/wp-json/wp/v2/posts/${id}`, { method: "POST", body: this.payload(input, meta) }));
+    return this.ref(await this.request(`/wp-json/wp/v2/posts/${id}?_fields=id,link,status`, { method: "POST", body: this.payload(input, meta) }));
   }
 
   /**
@@ -227,7 +233,7 @@ export class WordPressClient {
       throw new WordPressError(`Der Beitrag in WordPress hat den Status „${current.status}“ und wird nicht ersetzt.`, 409);
     }
     return this.ref(
-      await this.request(`/wp-json/wp/v2/posts/${id}`, {
+      await this.request(`/wp-json/wp/v2/posts/${id}?_fields=id,link,status`, {
         method: "POST",
         body: {
           title: input.title,
