@@ -5,6 +5,7 @@ import { escapeHtml, sanitizePostHtml, applyLinkPolicy, urlKey } from "./lib/htm
 import { fetchSitePosts } from "./lib/wordpress.js";
 import { parsePreferredLinks } from "./lib/links.js";
 import { fetchPrimarySources } from "./lib/sources.js";
+import { autoLinkRulings } from "./lib/rulings.js";
 import { recordUsage, withUsageContext } from "./lib/usage.js";
 import { clampWords, fetchCompetitorPages, median, pickCompetitorUrls } from "./lib/competition.js";
 import { checkReferences, type ReferenceCheck } from "./lib/references.js";
@@ -277,7 +278,9 @@ async function generatePostRun(deps: PipelineDeps, postId: string): Promise<void
       // Der Originalbeitrag wird durch die Ueberarbeitung ersetzt bzw. ergaenzt: nie auf ihn selbst verlinken.
       blockedUrls: selfUrls(post.site.baseUrl, rev),
     };
-    draft.contentHtml = applyLinkPolicy(draft.contentHtml, post.site.baseUrl, knownInternal, linkOptions);
+    // Zitierte Entscheidungen verlinken (bevorzugt auf die Gerichtswebsite), soweit die Recherche eine Quelle dazu gefunden hat.
+    const rulingSources = [...research.sources, ...draft.sources.map((s) => ({ url: s.url, title: s.title, note: s.note }))];
+    draft.contentHtml = applyLinkPolicy(autoLinkRulings(draft.contentHtml, rulingSources), post.site.baseUrl, knownInternal, linkOptions);
     if (draft.changeSummary.trim()) {
       await prisma.post.update({ where: { id: postId }, data: { researchNotes: `Änderungen gegenüber dem Original:\n${draft.changeSummary.trim()}\n\n${research.notes}` } });
     }
@@ -315,7 +318,7 @@ async function generatePostRun(deps: PipelineDeps, postId: string): Promise<void
       const check = await ai.factCheck({ site, topic, research, draft, documents, internalLinks });
       const { html: checked, stored: base, unverified } = evaluateFactCheck(draft, check, evidence);
       const stored: StoredFactCheck = { ...base, ...(sourcesChecked.length ? { sourcesChecked } : {}) };
-      const html = applyLinkPolicy(checked, post.site.baseUrl, knownInternal, linkOptions);
+      const html = applyLinkPolicy(autoLinkRulings(checked, rulingSources), post.site.baseUrl, knownInternal, linkOptions);
       await prisma.post.update({
         where: { id: postId },
         data: { status: "DRAFT_READY", error: null, contentHtml: assemblePostHtml(html, post.site.disclaimer, post.site.closingHtml, new Date(), rev?.publishedAt), unverifiedClaims: unverified, factCheck: stored as unknown as Prisma.InputJsonValue },

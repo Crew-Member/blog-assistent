@@ -61,7 +61,7 @@ Standardmäßig wird eine Überarbeitung als **neuer Entwurf** an WordPress gese
 
 ### Links im Beitrag
 
-Ziel sind 3 bis 5 ausgehende Links, höchstens 2 interne. Bevorzugt werden Primärquellen (Gerichte, Gesetze und Rechtsprechungsdatenbanken, Datenschutzbehörden, beck-online, Wolters Kluwer). Fehlen sie, dürfen allgemeine Infoportale, Presse und Fachblogs auffüllen – aber nur Adressen, die die Recherche tatsächlich gefunden hat (keine erfundenen URLs), nie die im Wettbewerbsvergleich ausgewerteten Konkurrenzseiten und nie soziale Netzwerke oder Shops. Alles andere verliert den Link (der Text bleibt). Interne Links nur auf bekannte Seiten der Website.
+**Zitierte Urteile werden verlinkt**, sobald die Recherche eine Adresse dazu gefunden hat: bevorzugt auf die Website des Gerichts (BGH, BAG, BVerfG, EuGH, Landesjustiz), sonst rechtsprechung-im-internet.de bzw. eine Rechtsprechungsdatenbank. Das Tool ergänzt solche Links selbst, wenn das Aktenzeichen im Text steht und eine passende Quelle in der Recherche vorkommt (erste Fundstelle, nie in bestehenden Links). Dazu kommen 3 bis 5 weitere ausgehende Links (höchstens 8 externe insgesamt), höchstens 2 interne. Bevorzugt werden Primärquellen (Gerichte, Gesetze und Rechtsprechungsdatenbanken, Datenschutzbehörden, beck-online, Wolters Kluwer). Fehlen sie, dürfen allgemeine Infoportale, Presse und Fachblogs auffüllen – aber nur Adressen, die die Recherche tatsächlich gefunden hat (keine erfundenen URLs), nie die im Wettbewerbsvergleich ausgewerteten Konkurrenzseiten und nie soziale Netzwerke oder Shops. Alles andere verliert den Link (der Text bleibt). Interne Links nur auf bekannte Seiten der Website.
 
 ### Kennzeichnung KI-generierter Beitragsbilder
 

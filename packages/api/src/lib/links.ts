@@ -88,3 +88,31 @@ export function parsePreferredLinks(text: string): { title: string; url: string 
   }
   return result;
 }
+
+const COURT_HOSTS = [
+  "bundesgerichtshof.de", "bundesarbeitsgericht.de", "bundesverfassungsgericht.de", "bverfg.de", "bverwg.de", "bundessozialgericht.de",
+  "bundesfinanzhof.de", "bundespatentgericht.de", "curia.europa.eu", "hudoc.echr.coe.int", "echr.coe.int",
+];
+
+/** Website eines Gerichts (Bundesgerichte, EuGH/EGMR, Landesjustiz, Instanzgerichte). */
+export function isCourtSource(url: string): boolean {
+  let host: string;
+  try {
+    host = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return false;
+  }
+  return COURT_HOSTS.some((h) => host === h || host.endsWith(`.${h}`)) || /^justiz\.[a-z-]+\.de$/.test(host) || /^(olg|lg|ag|vg|ovg|bag|bgh|bsg|lag|lsg|fg|kg)[-.]/.test(host) || host.endsWith(".justiz.de");
+}
+
+/** Rangfolge fuer Entscheidungslinks: 0 = Gericht selbst, 1 = amtliche Rechtsprechungsdatenbank, 2 = sonstige vertrauenswuerdige Quelle. */
+export function rulingSourceRank(url: string): number {
+  if (isCourtSource(url)) return 0;
+  try {
+    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+    if (host === "rechtsprechung-im-internet.de" || host === "eur-lex.europa.eu") return 1;
+  } catch {
+    /* ignorieren */
+  }
+  return 2;
+}

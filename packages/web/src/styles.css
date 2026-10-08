@@ -13,7 +13,7 @@
   --on-brand: #ffffff;
   --success: #17794a; --success-soft: #e2f4ea;
   --warn: #8a5a00; --warn-soft: #fff3d1;
-  --danger: #b3261e; --danger-soft: #fde7e5;
+  --danger: #b3261e; --danger-soft: #fde7e5; --on-danger: #ffffff; --danger-strong: #8c1d18;
   --info: #1d5fb4; --info-soft: #e5f0fd;
   --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
   --shadow: 0 1px 3px rgba(16, 24, 40, 0.06), 0 6px 16px rgba(16, 24, 40, 0.06);
@@ -37,7 +37,7 @@
     --on-brand: #0d1220;
     --success: #5fd49a; --success-soft: #12301f;
     --warn: #f1c15a; --warn-soft: #3a2f10;
-    --danger: #ff8d85; --danger-soft: #3b1816;
+    --danger: #ff8d85; --danger-soft: #3b1816; --on-danger: #2b0b09; --danger-strong: #ffa8a1;
     --info: #86b8ff; --info-soft: #14284a;
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 8px 20px rgba(0, 0, 0, 0.25);
@@ -115,6 +115,9 @@ button:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
 button.secondary { background: var(--surface); color: var(--text); border-color: var(--line-strong); }
 button.secondary:hover:not(:disabled) { background: var(--surface-2); border-color: var(--brand); color: var(--brand-strong); }
 button.danger { color: var(--danger); }
+/* Hauptknopf mit Warnwirkung (z. B. Originalbeitrag ersetzen): kraeftiger Hintergrund, gut lesbare Schrift */
+button.danger:not(.secondary):not(.link) { background: var(--danger); color: var(--on-danger); border-color: var(--danger); }
+button.danger:not(.secondary):not(.link):hover:not(:disabled) { background: var(--danger-strong); color: var(--on-danger); }
 button.secondary.danger:hover:not(:disabled) { background: var(--danger-soft); border-color: var(--danger); color: var(--danger); }
 button.link { background: none; box-shadow: none; color: var(--brand); padding: 2px 6px; font-weight: 500; border: 0; }
 button.link:hover:not(:disabled) { background: none; text-decoration: underline; }

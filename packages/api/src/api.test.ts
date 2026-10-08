@@ -649,6 +649,25 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect(sent).toContain("alt");
   });
 
+  it("verlinkt zitierte Urteile automatisch auf die Gerichtswebsite, wenn die Recherche sie gefunden hat", async () => {
+    const fake = new FakeAiService();
+    await setup(fakeWith({
+      research: async () => ({
+        notes: "n",
+        sources: [
+          { title: "Urteil des II. Zivilsenats II ZR 123/21", url: "https://www.bundesgerichtshof.de/entscheidung/II-ZR-123-21" },
+          { title: "Entscheidung", url: "https://www.haufe.de/ii-zr-123-21" },
+        ],
+      }),
+      draft: async (input) => ({ ...(await fake.draft(input)), contentHtml: "<p>Der BGH hat im Urteil II ZR 123/21 entschieden. Siehe auch 1 BvR 77/19.</p>", sources: [] }),
+    }));
+    const postId = await makePost(await createSite());
+    const html: string = (await app.inject({ method: "GET", url: `/api/posts/${postId}`, headers: { cookie } })).json().contentHtml;
+    expect(html).toMatch(/<a href="https:\/\/www\.bundesgerichtshof\.de\/entscheidung\/II-ZR-123-21"[^>]*>II ZR 123\/21<\/a>/);
+    expect(html).toContain("1 BvR 77/19");
+    expect(html).not.toContain("haufe.de");
+  });
+
   it("gibt die gewuenschte Anzahl an den WordPress-Import weiter", async () => {
     const urls: string[] = [];
     wpFetcher = (async (url: string) => {

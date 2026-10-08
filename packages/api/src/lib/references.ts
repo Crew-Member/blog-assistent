@@ -61,3 +61,10 @@ export function checkReferences(articleHtml: string, evidence: string[]): Refere
     found: corpusKeys.has(`${ref.kind}:${ref.key}`) || (ref.kind !== "datum" && corpusText.includes(compact(ref.text))),
   }));
 }
+
+/** Alle Aktenzeichen (deutsche Gerichte und EuGH/EuG) mit Position in einem Text. */
+export function findAktenzeichen(text: string): { text: string; index: number }[] {
+  const found: { text: string; index: number }[] = [];
+  for (const re of [AKTENZEICHEN, EUGH]) for (const m of text.matchAll(re)) found.push({ text: m[0], index: m.index ?? 0 });
+  return found.sort((a, b) => a.index - b.index);
+}

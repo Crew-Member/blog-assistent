@@ -63,7 +63,7 @@ export function unwrapBlockedLinks(html: string, blockedUrls: Iterable<string>):
   return html.replace(/<a\s[^>]*?href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (whole, href: string, inner: string) => (blocked.has(urlKey(href.replace(/&amp;/g, "&"))) ? inner : whole));
 }
 
-export const MAX_EXTERNAL_LINKS = 5;
+export const MAX_EXTERNAL_LINKS = 8;
 export const MAX_INTERNAL_LINKS = 2;
 /** Ziel: mindestens so viele ausgehende Links; fehlen Primaerquellen, duerfen allgemeine Quellen auffuellen. */
 export const MIN_EXTERNAL_LINKS = 3;

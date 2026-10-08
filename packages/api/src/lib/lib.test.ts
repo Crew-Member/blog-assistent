@@ -260,3 +260,21 @@ describe("Selbstverweise bei Ueberarbeitungen", () => {
     expect(unwrapBlockedLinks(html, blocked)).toContain("Original www"); // Text bleibt
   });
 });
+
+describe("autoLinkRulings", () => {
+  it("verlinkt zitierte Aktenzeichen auf die Gerichtswebsite (vor Datenbanken), nur beim ersten Vorkommen und nie in bestehenden Links", async () => {
+    const { autoLinkRulings } = await import("./rulings.js");
+    const html = "<p>Der BGH (Az. II ZR 123/21) entschied. Später nannte der BGH II ZR 123/21 erneut; der <a href=\"https://x.example/y\">EuGH C-807/21</a> sah es ähnlich. Nicht belegt: 1 BvR 99/20.</p>";
+    const out = autoLinkRulings(html, [
+      { url: "https://www.rechtsprechung-im-internet.de/jportal/?doc=II-ZR-123-21", title: "II ZR 123/21" },
+      { url: "https://www.bundesgerichtshof.de/SharedDocs/Pressemitteilungen/DE/2022/II-ZR-123-21.html", title: "Pressemitteilung" },
+      { url: "https://www.haufe.de/recht/ii-zr-123-21", title: "II ZR 123/21 Haufe" },
+      { url: "https://curia.europa.eu/juris/liste.jsf?num=C-807/21", title: "EuGH C-807/21" },
+    ]);
+    expect(out).toContain('<a href="https://www.bundesgerichtshof.de/SharedDocs/Pressemitteilungen/DE/2022/II-ZR-123-21.html">II ZR 123/21</a>');
+    expect(out.match(/II ZR 123\/21/g)).toHaveLength(2); // zweites Vorkommen bleibt Text
+    expect(out.match(/<a /g)).toHaveLength(2); // BGH-Link + vorhandener EuGH-Link (nicht doppelt verlinkt)
+    expect(out).not.toContain("haufe.de");
+    expect(out).toContain("1 BvR 99/20.</p>"); // ohne Quelle bleibt es Text
+  });
+});
