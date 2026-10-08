@@ -55,11 +55,13 @@ Aus Mails werden Betreff, Absender, Datum und Text gelesen; PDF-, Word- und Text
 
 Vor dem Schreiben sucht die KI per Websuche die stärksten deutschsprachigen Treffer zum Suchbegriff (das erste Keyword des Themas). Das Tool ruft bis zu sechs dieser Seiten selbst ab (nur öffentliche Adressen, Zeitlimit, ohne Plattformen und die eigene Website) und misst Wortzahl und Zwischenüberschriften. Die KI leitet daraus Suchintention, einen Zielumfang und häufig behandelte Aspekte ab; der Schreib-Prompt bekommt sie als Orientierung (der Stilleitfaden hat Vorrang). Die Auswertung steht am Beitrag („Vergleich mit den Top-Ergebnissen“). Pro Website abschaltbar (kostet eine zusätzliche Websuche je Beitrag). Die Treffer stammen aus einer KI-Websuche, nicht aus Googles Ergebnisliste.
 
-### Überarbeitungen: neuer Entwurf oder Original ersetzen
+### Überarbeitungen in WordPress übernehmen
 
-Standardmäßig wird eine Überarbeitung als **neuer Entwurf** an WordPress gesendet (das Original bleibt unberührt, der neue Beitrag bekommt beim Veröffentlichen Datum und Adresse neu). Alternativ gibt es bei Überarbeitungen **„Originalbeitrag ersetzen“**: Titel, Text, Auszug und SEO-Felder des veröffentlichten Beitrags werden überschrieben; Datum, Adresse, Kategorien, Schlagwörter und Status bleiben, WordPress legt eine Version des alten Stands an. Das geschieht nur nach ausdrücklicher Bestätigung und nur beim Original dieser Überarbeitung. Die „Stand“-Zeile nennt dann das Datum der Erstveröffentlichung („Stand: … (aktualisiert). Ursprünglich veröffentlicht am …“).
+Bei einer Überarbeitung gibt es einen Hauptknopf **„Beitrag in WordPress aktualisieren“**:
 
-**Beiträge mit Seitenbaukasten (Elementor, Divi, WPBakery, Beaver Builder):** Dort zeigt die Website den Inhalt des Baukastens, nicht den Beitragstext aus der REST-Schnittstelle. Das Tool erkennt das und warnt vor „Originalbeitrag ersetzen“. Funktionierender Ablauf bei Elementor: nach dem Ersetzen im Beitrag in WordPress **„Mit WordPress bearbeiten“** wählen und die Umstellung bestätigen – danach zeigt die Seite den neuen Text (Datum und Adresse bleiben; das Elementor-Layout dieses Beitrags entfällt, der Beitrag sollte nicht erneut mit Elementor geöffnet werden). Alternative: „neuer Entwurf“ (optional mit dem Datum des Originals) und den Text in den Baukasten einfügen.
+- **Normaler Beitrag:** Nach einer Rückfrage wird der veröffentlichte Beitrag mit dem neuen Text überschrieben (Titel, Text, Auszug, SEO-Felder, Beitragsbild). Datum, Adresse, Kategorien, Schlagwörter und Status bleiben; WordPress behält den alten Stand in den Versionen. Die „Stand“-Zeile nennt das Datum der Erstveröffentlichung.
+- **Beitrag mit Seitenbaukasten (Elementor, Divi, WPBakery, Beaver Builder):** Dort zeigt die Website den Inhalt des Baukastens, nicht den Beitragstext. Das Tool erkennt das und zeigt stattdessen die Schritte *Text kopieren → Beitrag im Baukasten öffnen → im Textblock einfügen und speichern*. Der kopierte Text entspricht dem, was an WordPress ginge (inklusive Hinweis auf ein KI-Bild).
+- Unter „Weitere Möglichkeiten“: **als neuen Entwurf senden** (Original bleibt unberührt, optional mit dem Datum des Originals) und – bei Baukasten-Beiträgen – den Beitragstext trotzdem ersetzen.
 
 ### Links im Beitrag
 

@@ -274,6 +274,29 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     };
   });
 
+  /**
+   * Der Text, wie er an WordPress geht: Ist das Beitragsbild KI-generiert, steht ein sichtbarer Hinweis vorn (zusaetzlich zur Bildunterschrift);
+   * er wird nur beim Versand eingefuegt und nicht im Entwurf gespeichert. Eine Ueberarbeitung verlinkt nie auf den Originalbeitrag selbst.
+   */
+  async function wpContentFor(post: { id: string; contentHtml: string | null; revisionSource: unknown }, site: { baseUrl: string; labelAiImages: boolean; aiNoticeText: string }) {
+    const html = post.contentHtml ?? "";
+    const image = await prisma.postImage.findUnique({ where: { postId: post.id } });
+    const imageNotice = Boolean(site.labelAiImages && image && image.status === "READY" && image.storageKey && image.aiGenerated);
+    const revisionSource = post.revisionSource as { url?: string; wpPostId?: number } | null;
+    const cleaned = revisionSource ? unwrapBlockedLinks(html, selfUrls(site.baseUrl, revisionSource)) : html;
+    if (cleaned !== html) await prisma.post.update({ where: { id: post.id }, data: { contentHtml: cleaned } });
+    return { content: withImageNotice(cleaned, imageNotice ? imageNoticeHtml(site) : ""), imageNotice };
+  }
+
+  // Fertiger Text zum Einfuegen in einen Seitenbaukasten (Elementor u. a.): exakt das, was an WordPress gehen wuerde.
+  app.get<{ Params: { id: string } }>("/api/posts/:id/wordpress/content", async (request) => {
+    const post = await prisma.post.findUnique({ where: { id: request.params.id }, include: { site: true } });
+    if (!post) throw new HttpError(404, "Beitrag nicht gefunden");
+    if (post.status !== "DRAFT_READY" || !post.contentHtml) throw new HttpError(409, "Der Entwurf ist noch nicht fertig.");
+    const { content, imageNotice } = await wpContentFor(post, post.site);
+    return { title: post.title ?? "", html: content, text: stripHtml(content), imageNotice };
+  });
+
   app.post<{ Params: { id: string } }>("/api/posts/:id/wordpress/publish", async (request) => {
     const body = wpPublishSchema.safeParse(request.body ?? {});
     if (!body.success) throw new HttpError(400, "Ungültige Auswahl von Kategorien oder Schlagwörtern");
@@ -282,15 +305,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     if (post.status !== "DRAFT_READY" || !post.title || !post.contentHtml) throw new HttpError(409, "Nur fertige Entwürfe können an WordPress gesendet werden.");
     const { client, site } = await wpClientFor(post.siteId);
 
-    // Kennzeichnung: Ist das Beitragsbild KI-generiert, steht ein sichtbarer Hinweis vorn im Beitrag (zusaetzlich zur Bildunterschrift).
-    // Er wird nur beim Versand eingefuegt und nicht im Entwurf gespeichert - so verschwindet er, wenn das Bild getauscht wird.
-    const imageForNotice = await prisma.postImage.findUnique({ where: { postId: post.id } });
-    const needsImageNotice = Boolean(site.labelAiImages && imageForNotice && imageForNotice.status === "READY" && imageForNotice.storageKey && imageForNotice.aiGenerated);
-    // Eine Ueberarbeitung darf nie auf den Originalbeitrag verlinken, den sie ersetzt bzw. ergaenzt (auch nicht in aelteren Entwuerfen).
-    const revisionSource = post.revisionSource as { url?: string; wpPostId?: number } | null;
-    const cleanedContent = revisionSource ? unwrapBlockedLinks(post.contentHtml, selfUrls(site.baseUrl, revisionSource)) : post.contentHtml;
-    if (cleanedContent !== post.contentHtml) await prisma.post.update({ where: { id: post.id }, data: { contentHtml: cleanedContent } });
-    const contentForWp = withImageNotice(cleanedContent, needsImageNotice ? imageNoticeHtml(site) : "");
+    const { content: contentForWp, imageNotice: needsImageNotice } = await wpContentFor(post, site);
 
     // Ersetzen des veroeffentlichten Originals: nur bei Ueberarbeitungen, nur mit Bestaetigung, nur das Original dieser Ueberarbeitung.
     const source = post.revisionSource as { wpPostId?: number } | null;
@@ -306,7 +321,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
       // Seitenbaukaesten liefern auf der Website ihren eigenen Inhalt aus - das Ersetzen des Beitragstextes aendert dort oft nichts.
       const builder = detectPageBuilder(await client.renderedContent(source!.wpPostId!).catch(() => ""));
       if (builder) {
-        throw new HttpError(409, `BUILDER:${builder}: Dieser Beitrag wurde mit ${builder} gebaut. Die Website zeigt dann den Inhalt des Seitenbaukastens statt des Beitragstextes. Nach dem Ersetzen im Beitrag in WordPress „Mit WordPress bearbeiten“ wählen (Elementor-Button) und die Umstellung bestätigen – dann erscheint der neue Text (das ${builder}-Layout dieses Beitrags entfällt, und der Beitrag nicht erneut mit ${builder} öffnen). Alternative: als neuen Entwurf senden und den Text in ${builder} einfügen.`);
+        throw new HttpError(409, `BUILDER:${builder}: Dieser Beitrag wurde mit ${builder} gebaut.`);
       }
     }
 

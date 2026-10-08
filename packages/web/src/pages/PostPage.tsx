@@ -367,28 +367,51 @@ function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: bool
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [result, setResult] = useState<WpPublishResult>();
-  const [mode, setMode] = useState<"draft" | "replace">(post.wpReplacedAt ? "replace" : "draft");
-  const [confirmed, setConfirmed] = useState(false);
-  const [builderMsg, setBuilderMsg] = useState<string | undefined>(post.revisionOf?.builder ? `Dieses Original wurde mit ${post.revisionOf.builder} gebaut. Die Website zeigt dann den Inhalt des Seitenbaukastens statt des Beitragstextes. Nach dem Ersetzen im Beitrag in WordPress „Mit WordPress bearbeiten“ wählen (Elementor-Button) und die Umstellung bestätigen – dann erscheint der neue Text (das ${post.revisionOf.builder}-Layout dieses Beitrags entfällt, und den Beitrag danach nicht erneut mit ${post.revisionOf.builder} öffnen). Alternative: als neuen Entwurf senden und den Text in ${post.revisionOf.builder} einfügen.` : undefined);
-  const [builderOk, setBuilderOk] = useState(false);
+  const [builder, setBuilder] = useState<string | undefined>(post.revisionOf?.builder ?? undefined);
+  const [draftFlow, setDraftFlow] = useState(false);
   const [keepDate, setKeepDate] = useState(true);
+  const [copied, setCopied] = useState(false);
 
-  async function replaceOriginal() {
+  /** Veroeffentlichten Originalbeitrag ersetzen (Datum und Adresse bleiben). Bei Seitenbaukasten-Beitraegen nur mit force. */
+  async function replaceOriginal(force = false) {
+    const warning = force
+      ? `Der Beitrag „${post.revisionOf?.title}“ wird mit dem Text überschrieben, aber die Seite zeigt weiter den Inhalt des Seitenbaukastens. Trotzdem ersetzen?`
+      : `Den veröffentlichten Beitrag „${post.revisionOf?.title}“ jetzt mit dem neuen Text überschreiben? Er ist sofort live; WordPress behält den alten Stand in den Versionen.`;
+    if (!confirm(warning)) return;
     setBusy(true);
     setError(undefined);
     try {
-      setResult(await api.post<WpPublishResult>(`/api/posts/${post.id}/wordpress/publish`, { replaceOriginal: true, confirmReplace: confirmed, confirmBuilder: builderOk }));
-      setConfirmed(false);
+      setResult(await api.post<WpPublishResult>(`/api/posts/${post.id}/wordpress/publish`, { replaceOriginal: true, confirmReplace: true, confirmBuilder: force }));
       onDone();
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      const m = /^BUILDER:[^:]*:\s*(.*)$/s.exec(message);
-      if (m) setBuilderMsg(m[1]);
+      const m = /^BUILDER:([^:]*):/.exec(message);
+      if (m) setBuilder(m[1] || "Seitenbaukasten");
       else setError(message);
     } finally {
       setBusy(false);
     }
   }
+
+  async function copyForBuilder() {
+    setError(undefined);
+    try {
+      const c = await api.get<{ html: string; text: string }>(`/api/posts/${post.id}/wordpress/content`);
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ "text/html": new Blob([c.html], { type: "text/html" }), "text/plain": new Blob([c.text], { type: "text/plain" }) })]);
+      } catch {
+        await navigator.clipboard.writeText(c.html);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 3000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  const builderUrl = post.revisionOf
+    ? `${post.site.baseUrl.replace(/\/+$/, "")}/wp-admin/post.php?post=${post.revisionOf.wpPostId}&action=${builder === "Elementor" ? "elementor" : "edit"}`
+    : "";
 
   async function load() {
     setBusy(true);
@@ -443,50 +466,56 @@ function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: bool
       {seo && <div className={seo.status === "set" ? "ok" : "error"}>{seo.message}</div>}
       {dirty && <div className="error">Es gibt ungespeicherte Änderungen. Gesendet wird der gespeicherte Stand – bitte erst speichern.</div>}
 
-      {post.revisionOf && !prep && (
+      {post.revisionOf && !draftFlow && !prep && (
         <div className="stack">
-          <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
-            <input type="radio" name={`mode-${post.id}`} style={{ width: "auto" }} checked={mode === "draft"} onChange={() => setMode("draft")} />
-            <span><strong>Als neuen Entwurf senden</strong> <span className="muted">– das Original bleibt unverändert; der neue Beitrag bekommt beim Veröffentlichen ein neues Datum und eine eigene Adresse</span></span>
-          </label>
-          <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
-            <input type="radio" name={`mode-${post.id}`} style={{ width: "auto" }} checked={mode === "replace"} onChange={() => setMode("replace")} />
-            <span><strong>Originalbeitrag ersetzen</strong> <span className="muted">– Titel, Text, Auszug und SEO-Felder des veröffentlichten Beitrags werden überschrieben; Datum, Adresse, Kategorien und Schlagwörter bleiben. WordPress behält den alten Stand in den Versionen.</span></span>
-          </label>
-          {mode === "replace" && (
-            <div className="stack">
-              {builderMsg && (
-                <div className="notice">
-                  <Icon name="alert" size={16} /> {builderMsg}
-                  <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit", marginTop: 8 }}>
-                    <input type="checkbox" style={{ width: "auto" }} checked={builderOk} onChange={(e) => setBuilderOk(e.target.checked)} />
-                    <span>Trotzdem ersetzen</span>
-                  </label>
-                </div>
-              )}
-              <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
-                <input type="checkbox" style={{ width: "auto" }} checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
-                <span>Ja, der veröffentlichte Beitrag „{post.revisionOf.title}“ soll mit diesem Text <strong>überschrieben</strong> werden – er ist sofort live.</span>
-              </label>
+          {!builder && (
+            <>
+              <span>Überarbeitung von „{post.revisionOf.title}“: Der veröffentlichte Beitrag wird mit diesem Text aktualisiert. Datum und Adresse bleiben, WordPress behält den alten Stand in den Versionen.</span>
               <div className="row">
-                <button className="danger" disabled={busy || dirty || !confirmed || (Boolean(builderMsg) && !builderOk)} onClick={replaceOriginal}>{busy ? "Bitte warten …" : "Originalbeitrag jetzt ersetzen"}</button>
+                <button disabled={busy || dirty} onClick={() => void replaceOriginal(false)}>{busy ? "Bitte warten …" : "Beitrag in WordPress aktualisieren"}</button>
                 <a href={post.revisionOf.url} target="_blank" rel="noreferrer noopener" className="muted">Original ansehen</a>
               </div>
+            </>
+          )}
+          {builder && (
+            <div className="notice">
+              <strong><Icon name="alert" size={16} /> Dieser Beitrag wurde mit {builder} gebaut.</strong>
+              <div style={{ marginTop: 6 }}>Die Website zeigt den Inhalt aus {builder}, nicht den Beitragstext – ein Ersetzen über das Tool würde auf der Seite nichts ändern. So geht es:</div>
+              <ol style={{ margin: "6px 0 10px 18px", padding: 0 }}>
+                <li>Text kopieren</li>
+                <li>Beitrag in {builder} öffnen</li>
+                <li>Den Text im Textblock einfügen und speichern (das Layout bleibt)</li>
+              </ol>
+              <div className="row">
+                <button disabled={busy || dirty} onClick={() => void copyForBuilder()}><Icon name="copy" size={16} /> {copied ? "Kopiert" : "Text kopieren"}</button>
+                <a className="chip chip-info" href={builderUrl} target="_blank" rel="noreferrer noopener" style={{ padding: "8px 14px" }}>In {builder} öffnen <Icon name="external" size={14} /></a>
+              </div>
+              {post.image?.aiGenerated && post.site.labelAiImages && <div className="muted" style={{ marginTop: 6 }}>Der Hinweis auf das KI-Bild ist im kopierten Text enthalten. Das Beitragsbild setzt du in WordPress selbst.</div>}
             </div>
           )}
+          <details>
+            <summary>Weitere Möglichkeiten</summary>
+            <div className="stack" style={{ marginTop: 8 }}>
+              <div><button className="secondary" onClick={() => setDraftFlow(true)}>Stattdessen als neuen Entwurf senden</button> <span className="muted">– das Original bleibt unverändert, der neue Beitrag bekommt eine eigene Adresse</span></div>
+              {builder && <div><button className="secondary danger" disabled={busy || dirty} onClick={() => void replaceOriginal(true)}>Beitragstext trotzdem ersetzen</button> <span className="muted">– die Seite ändert sich dabei meist nicht sichtbar</span></div>}
+            </div>
+          </details>
         </div>
       )}
 
-      {post.revisionOf && mode === "draft" && !prep && (
-        <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
-          <input type="checkbox" style={{ width: "auto" }} checked={keepDate} onChange={(e) => setKeepDate(e.target.checked)} />
-          <span>Datum des Originals übernehmen <span className="muted">– der neue Entwurf erhält das ursprüngliche Veröffentlichungsdatum. Die Adresse bekommt WordPress neu; soll sie der alten entsprechen, ändere im alten Beitrag die Adresse (oder lösche ihn) und setze sie im neuen auf die frühere.</span></span>
-        </label>
+      {post.revisionOf && draftFlow && !prep && (
+        <div className="stack">
+          <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
+            <input type="checkbox" style={{ width: "auto" }} checked={keepDate} onChange={(e) => setKeepDate(e.target.checked)} />
+            <span>Datum des Originals übernehmen <span className="muted">– der neue Entwurf erhält das ursprüngliche Veröffentlichungsdatum. Die Adresse bekommt WordPress neu.</span></span>
+          </label>
+          <div><button className="link" onClick={() => setDraftFlow(false)}>← zurück zum Aktualisieren des Originals</button></div>
+        </div>
       )}
 
-      {result?.replaced && <div className="ok">Der veröffentlichte Beitrag wurde ersetzt. Datum und Adresse sind unverändert.</div>}
+      {result?.replaced && <div className="ok">Der veröffentlichte Beitrag wurde aktualisiert. Datum und Adresse sind unverändert.</div>}
 
-      {!prep && (!post.revisionOf || mode === "draft") && (
+      {!prep && (!post.revisionOf || draftFlow) && (
         <div className="row">
           <button disabled={busy || dirty} onClick={load}>{busy ? "Bitte warten …" : editUrl ? "Entwurf in WordPress aktualisieren" : "An WordPress senden (als Entwurf)"}</button>
           {editUrl && <span className="muted">Änderungen, die du in WordPress am Entwurf gemacht hast, werden dabei überschrieben. Bereits veröffentlichte Beiträge werden nie angefasst.</span>}

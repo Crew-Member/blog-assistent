@@ -1124,6 +1124,29 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect(update.body).toMatchObject({ date: "2023-05-01T10:00:00", status: "draft" });
   });
 
+  it("liefert den fertigen Text zum Einfuegen in einen Seitenbaukasten (ohne Selbstverweis, mit KI-Bildhinweis)", async () => {
+    const original = { id: 7, status: "publish", title: { rendered: "Alter Beitrag" }, link: `${WP_BASE}/alt/`, date: "2023-05-01T10:00:00", excerpt: { rendered: "" }, content: { rendered: `<div class="elementor"><p>${"Alter Text. ".repeat(30)}</p></div>` } };
+    fakeWordPress({ ...standardRoutes(), "GET /wp-json/wp/v2/posts/7": { body: original }, "POST /wp-json/wp/v2/media": { body: { id: 55 } }, "POST /wp-json/wp/v2/media/55": { body: { id: 55 } } });
+    await setup(new FakeAiService(), new FakeImageProvider());
+    const site = await createWpSite();
+    const postId = (await app.inject({ method: "POST", url: `/api/sites/${site.id}/revisions`, headers: { cookie }, payload: { wpPostId: 7 } })).json().id as string;
+    await worker.tick();
+    await jsonPost(`/api/posts/${postId}/image/plan`);
+    await jsonPost(`/api/posts/${postId}/image/generate`);
+    await worker.tick();
+    await app.inject({ method: "PUT", url: `/api/posts/${postId}`, headers: { cookie }, payload: { contentHtml: `<p>Neuer Text <a href="${WP_BASE}/alt/">selbst</a></p>` } });
+
+    const res = await app.inject({ method: "GET", url: `/api/posts/${postId}/wordpress/content`, headers: { cookie } });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.imageNotice).toBe(true);
+    expect(body.html.startsWith("<p><em>Beitragsbild: KI-generiert.</em></p>")).toBe(true);
+    expect(body.html).toContain("Neuer Text");
+    expect(body.html).not.toContain("/alt/");
+    expect(body.text).toContain("Beitragsbild: KI-generiert.");
+    expect((await app.inject({ method: "GET", url: "/api/posts/nope/wordpress/content", headers: { cookie } })).statusCode).toBe(404);
+  });
+
   it("legt den Entwurf auch an, wenn das Bild nicht hochgeladen werden darf", async () => {
     fakeWordPress({ ...standardRoutes(), "POST /wp-json/wp/v2/media": { status: 403, body: { message: "Sorry" } } });
     await setup(new FakeAiService(), new FakeImageProvider());
