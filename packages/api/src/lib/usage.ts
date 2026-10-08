@@ -15,6 +15,8 @@ export interface UsageEntry {
   cacheReadTokens: number;
   cacheWriteTokens: number;
   webSearches: number;
+  /** Lief mit dem guenstigeren Modell (AI_MODEL_LIGHT/AI_MODEL_RESEARCH): dann gelten die Light-Preise. */
+  light?: boolean;
   /** Nur bei Bildern (feste Kosten je Bild laut Konfiguration); sonst wird aus den Tokens gerechnet. */
   fixedCostUsd?: number;
 }
@@ -26,6 +28,9 @@ export interface Prices {
   outputPerMTok: number;
   /** USD je 1000 Websuchen */
   searchPer1000: number;
+  /** Preise des guenstigeren Modells (USD je 1 Mio. Tokens); ohne Angabe gelten die Hauptpreise. */
+  lightInputPerMTok?: number;
+  lightOutputPerMTok?: number;
 }
 
 export const STEP_LABELS: Record<string, string> = {
@@ -47,8 +52,10 @@ export const STEP_LABELS: Record<string, string> = {
 
 export function costOf(entry: UsageEntry, prices: Prices): number {
   if (entry.fixedCostUsd !== undefined) return entry.fixedCostUsd;
-  const input = (entry.inputTokens + entry.cacheReadTokens * 0.1 + entry.cacheWriteTokens * 1.25) * prices.inputPerMTok;
-  const output = entry.outputTokens * prices.outputPerMTok;
+  const inPrice = entry.light && prices.lightInputPerMTok !== undefined ? prices.lightInputPerMTok : prices.inputPerMTok;
+  const outPrice = entry.light && prices.lightOutputPerMTok !== undefined ? prices.lightOutputPerMTok : prices.outputPerMTok;
+  const input = (entry.inputTokens + entry.cacheReadTokens * 0.1 + entry.cacheWriteTokens * 1.25) * inPrice;
+  const output = entry.outputTokens * outPrice;
   return (input + output) / 1_000_000 + (entry.webSearches * prices.searchPer1000) / 1000;
 }
 

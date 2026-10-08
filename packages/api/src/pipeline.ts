@@ -235,7 +235,7 @@ async function generatePostRun(deps: PipelineDeps, postId: string): Promise<void
       keywords: asStringArray(post.topic.keywords),
     };
 
-    const research: ResearchResult = await ai.research({ site, topic });
+    const research: ResearchResult = await ai.research({ site, topic, narrow: Boolean(post.revisionSource) });
     await prisma.post.update({ where: { id: postId }, data: { status: "DRAFTING", researchNotes: research.notes, factCheck: Prisma.DbNull, competition: Prisma.DbNull } });
 
     const styleSamples = post.site.styleSamples.map((s) => ({ title: s.title, text: s.text }));
@@ -258,7 +258,8 @@ async function generatePostRun(deps: PipelineDeps, postId: string): Promise<void
     // Optional: Vergleich mit den Top-Ergebnissen (Umfang, Gliederung). Fehler hier stoppen den Beitrag nie.
     let competition: CompetitionGuidance | undefined;
     let competitorHosts: string[] = [];
-    if (post.site.competitionCheck) {
+    // Der Wettbewerbsvergleich lohnt sich bei neuen Beitraegen; bei Ueberarbeitungen sparen wir die zusaetzliche Websuche.
+    if (post.site.competitionCheck && !post.revisionSource) {
       const result = await runCompetition(deps, site, topic, post.site.baseUrl).catch(() => undefined);
       if (result) {
         competition = result.guidance;

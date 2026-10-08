@@ -75,6 +75,10 @@ Ist das Beitragsbild KI-generiert (oder beim Upload als KI-generiert markiert) u
 
 Jeder KI-Aufruf wird mit Tokens und Websuchen protokolliert; die Seite **Kosten** zeigt die Summen je Schritt, Website und Beitrag, am Beitrag steht „Kosten dieses Beitrags“. Die Euro-/Dollarbeträge sind Schätzungen aus den Preisen in der `.env` (`AI_PRICE_INPUT_PER_MTOK`, `AI_PRICE_OUTPUT_PER_MTOK`, `AI_PRICE_SEARCH_PER_1000`, optional `IMAGE_COST_USD`). Bitte mit der aktuellen Preisliste des Anbieters abgleichen; maßgeblich ist die Rechnung. Erfasst wird ab Einführung der Übersicht.
 
+### Kosten senken
+
+Die größten Posten sind meist die Websuchen (Recherche, Wettbewerbsvergleich) und der lange Text mit Faktencheck. Stellschrauben in der `.env`: `AI_MODEL_LIGHT` (günstigeres Modell für Wettbewerb, Bildvorschlag, Titel, Kategorien, Stil, Radar; läuft zusätzlich mit niedriger Denktiefe `AI_EFFORT_LIGHT`), `AI_MODEL_RESEARCH` (günstigeres Modell nur für die Recherche), `RESEARCH_MAX_SEARCHES` (weniger Suchen je Schritt), `AI_EFFORT` (Denktiefe des Hauptmodells). Bei **Überarbeitungen** läuft die Recherche automatisch mit höchstens 4 Suchen und ohne Wettbewerbsvergleich; für den Faktencheck werden höchstens 4 Primärquellen mit begrenzter Länge abgerufen. Pro Website lässt sich der Wettbewerbsvergleich abschalten, der Aktualisierungsradar ebenso. Die Seite **Kosten** zeigt je Schritt, was ein Beitrag kostet.
+
 ### Wie der Faktencheck arbeitet
 
 1. Ein zweiter Claude-Durchlauf bekommt den Entwurf, die Recherchenotizen, die Eckdaten und die Originalunterlagen (PDFs/Mails) und prüft jede Tatsachenbehauptung. Als belegt gilt nur, was dort steht.

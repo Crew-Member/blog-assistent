@@ -25,7 +25,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const ai = createAiService(config);
 const images = createImageProvider(config);
 const app = buildServer({ config, prisma, storage, ai, images, webDir: path.resolve(here, "../../web/dist") });
-setUsageSink(createUsageSink(prisma, { inputPerMTok: config.AI_PRICE_INPUT_PER_MTOK, outputPerMTok: config.AI_PRICE_OUTPUT_PER_MTOK, searchPer1000: config.AI_PRICE_SEARCH_PER_1000 }));
+setUsageSink(createUsageSink(prisma, { inputPerMTok: config.AI_PRICE_INPUT_PER_MTOK, outputPerMTok: config.AI_PRICE_OUTPUT_PER_MTOK, searchPer1000: config.AI_PRICE_SEARCH_PER_1000, lightInputPerMTok: config.AI_PRICE_LIGHT_INPUT_PER_MTOK, lightOutputPerMTok: config.AI_PRICE_LIGHT_OUTPUT_PER_MTOK }));
 const worker = new Worker({ prisma, ai, storage, images, imageCostUsd: config.IMAGE_COST_USD });
 
 const shutdown = async () => {

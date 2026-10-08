@@ -171,7 +171,8 @@ export type ImagePlan = z.infer<typeof imagePlanSchema>;
 /** Abstraktion ueber die KI-Schritte, damit Pipeline und Tests ohne echte API laufen koennen. */
 export interface AiService {
   analyze(input: { site: SiteProfile; note: string; documents: AiDocument[] }): Promise<TopicProposal[]>;
-  research(input: { site: SiteProfile; topic: TopicProposal }): Promise<ResearchResult>;
+  /** narrow: weniger Suchen (z. B. bei Ueberarbeitungen). */
+  research(input: { site: SiteProfile; topic: TopicProposal; narrow?: boolean }): Promise<ResearchResult>;
   draft(input: DraftInput): Promise<DraftResult>;
   /** Ueberarbeitet den Text eines fertigen Entwurfs nach Anweisung des Nutzers, ohne neue Fakten einzufuehren. */
   refine(input: { site: SiteProfile; title: string; focusKeyword: string; contentHtml: string; instruction: string }): Promise<RefineResult>;

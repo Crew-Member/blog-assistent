@@ -46,7 +46,16 @@ export interface ClaudeOptions {
   model: string;
   effort: Effort;
   maxSearches: number;
+  /** Guenstigeres Modell fuer einfache Schritte (Wettbewerb, Bildvorschlag, Titel, Kategorien, Stil, Radar). Ohne Angabe: wie model. */
+  lightModel?: string;
+  /** Eigenes Modell fuer die Recherche. Ohne Angabe: wie model. */
+  researchModel?: string;
+  /** Denktiefe der einfachen Schritte. Ohne Angabe: wie effort. */
+  lightEffort?: Effort;
 }
+
+/** Schritte, die ohne Qualitaetsverlust mit einem kleineren Modell und weniger Denktiefe laufen koennen. */
+const LIGHT_STEPS = new Set(["competition_search", "competition", "image_plan", "titles", "categories", "style", "radar_search", "radar"]);
 
 const MAX_CONTINUATIONS = 5;
 
@@ -255,7 +264,19 @@ export class ClaudeAiService implements AiService {
     });
   }
 
+  /** Modell, Denktiefe und Preisstufe je Schritt. */
+  private tier(system: string): { model: string; effort: Effort; light: boolean } {
+    const step = stepOf(system);
+    if (step === "research" && this.options.researchModel) return { model: this.options.researchModel, effort: this.options.effort, light: this.options.researchModel !== this.options.model };
+    if (LIGHT_STEPS.has(step)) {
+      const model = this.options.lightModel ?? this.options.model;
+      return { model, effort: this.options.lightEffort ?? this.options.effort, light: model !== this.options.model };
+    }
+    return { model: this.options.model, effort: this.options.effort, light: false };
+  }
+
   private track(system: string, message: Anthropic.Message): void {
+    const tier = this.tier(system);
     const u = message.usage as unknown as {
       input_tokens?: number;
       output_tokens?: number;
@@ -265,7 +286,8 @@ export class ClaudeAiService implements AiService {
     };
     recordUsage({
       step: stepOf(system),
-      model: this.options.model,
+      model: tier.model,
+      light: tier.light,
       inputTokens: u?.input_tokens ?? 0,
       outputTokens: u?.output_tokens ?? 0,
       cacheReadTokens: u?.cache_read_input_tokens ?? 0,
@@ -280,13 +302,14 @@ export class ClaudeAiService implements AiService {
     schema: Record<string, unknown>,
     parse: (value: unknown) => T,
   ): Promise<T> {
+    const tier = this.tier(system);
     const message = await this.client.messages
       .stream({
-        model: this.options.model,
+        model: tier.model,
         max_tokens: 32000,
         system,
         thinking: { type: "adaptive" },
-        output_config: { effort: this.options.effort, format: { type: "json_schema", schema } },
+        output_config: { effort: tier.effort, format: { type: "json_schema", schema } },
         messages: [{ role: "user", content }],
       })
       .finalMessage();
@@ -319,7 +342,8 @@ export class ClaudeAiService implements AiService {
   }
 
   /** Websuche-Schleife (inkl. pause_turn); liefert die Notizen der KI und alle gefundenen Quellen. */
-  private async searchNotes(system: string, userText: string): Promise<ResearchResult> {
+  private async searchNotes(system: string, userText: string, maxSearches = this.options.maxSearches): Promise<ResearchResult> {
+    const tier = this.tier(system);
     const messages: Anthropic.MessageParam[] = [{ role: "user", content: userText }];
     const sources = new Map<string, ResearchSource>();
     let notes = "";
@@ -327,12 +351,12 @@ export class ClaudeAiService implements AiService {
     for (let round = 0; round <= MAX_CONTINUATIONS; round++) {
       const message = await this.client.messages
         .stream({
-          model: this.options.model,
+          model: tier.model,
           max_tokens: 32000,
           system,
           thinking: { type: "adaptive" },
-          output_config: { effort: this.options.effort },
-          tools: [{ type: "web_search_20260209", name: "web_search", max_uses: this.options.maxSearches }],
+          output_config: { effort: tier.effort },
+          tools: [{ type: "web_search_20260209", name: "web_search", max_uses: maxSearches }],
           messages,
         })
         .finalMessage();
@@ -358,8 +382,10 @@ export class ClaudeAiService implements AiService {
     return { notes, sources: [...sources.values()] };
   }
 
-  async research(input: { site: SiteProfile; topic: TopicProposal }): Promise<ResearchResult> {
-    return this.searchNotes(RESEARCH_SYSTEM, `${siteBlock(input.site)}\n\n${topicBlock(input.topic)}\n\nRecherchiere zu diesem Thema und liefere die Recherchenotizen.`);
+  async research(input: { site: SiteProfile; topic: TopicProposal; narrow?: boolean }): Promise<ResearchResult> {
+    // Bei Ueberarbeitungen reichen wenige gezielte Suchen: Es geht um neue Entwicklungen, nicht um das ganze Thema.
+    const max = input.narrow ? Math.min(4, this.options.maxSearches) : this.options.maxSearches;
+    return this.searchNotes(RESEARCH_SYSTEM, `${siteBlock(input.site)}\n\n${topicBlock(input.topic)}\n\nRecherchiere zu diesem Thema und liefere die Recherchenotizen.`, max);
   }
 
   async findCompetitors(input: { site: SiteProfile; keyword: string }): Promise<{ notes: string; results: { title: string; url: string }[] }> {

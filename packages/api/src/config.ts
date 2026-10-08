@@ -17,6 +17,12 @@ const schema = z.object({
   // Bewusst eigener Name: Eine zufaellig gesetzte Windows-Variable ANTHROPIC_BASE_URL wuerde sonst alle Anfragen umleiten.
   AI_BASE_URL: z.string().url().default("https://api.anthropic.com"),
   AI_MODEL: z.string().default("claude-opus-5-5"),
+  // Kosten senken: guenstigeres Modell fuer einfache Schritte (Wettbewerb, Bildvorschlag, Titel, Kategorien, Stil, Radar) und optional fuer die Recherche.
+  AI_MODEL_LIGHT: z.string().trim().optional().transform((v) => v || undefined),
+  AI_MODEL_RESEARCH: z.string().trim().optional().transform((v) => v || undefined),
+  AI_EFFORT_LIGHT: z.enum(["low", "medium", "high", "xhigh", "max"]).default("low"),
+  AI_PRICE_LIGHT_INPUT_PER_MTOK: z.coerce.number().min(0).default(3),
+  AI_PRICE_LIGHT_OUTPUT_PER_MTOK: z.coerce.number().min(0).default(15),
   AI_EFFORT: z.enum(["low", "medium", "high", "xhigh", "max"]).default("medium"),
   RESEARCH_MAX_SEARCHES: z.coerce.number().int().min(1).max(30).default(8),
   // Bildgenerierung (optional). "none": nur Prompts, Stockfoto-Links und Upload.

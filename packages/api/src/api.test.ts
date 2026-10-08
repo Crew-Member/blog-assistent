@@ -668,6 +668,30 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect(html).not.toContain("haufe.de");
   });
 
+  it("spart bei Ueberarbeitungen Kosten: engere Recherche und kein Wettbewerbsvergleich", async () => {
+    const original = { id: 7, status: "publish", title: { rendered: "Alter Beitrag" }, link: `${WP_BASE}/alt/`, date: "2023-05-01T10:00:00", excerpt: { rendered: "" }, content: { rendered: `<p>${"Alter Text. ".repeat(30)}</p>` } };
+    fakeWordPress({ ...standardRoutes(), "GET /wp-json/wp/v2/posts/7": { body: original } });
+    const fake = new FakeAiService();
+    const narrow: (boolean | undefined)[] = [];
+    let competitionCalls = 0;
+    await setup(fakeWith({
+      research: async (input) => {
+        narrow.push(input.narrow);
+        return fake.research(input);
+      },
+      findCompetitors: async () => {
+        competitionCalls++;
+        return { notes: "", results: [] };
+      },
+    }));
+    const site = await createWpSite();
+    await app.inject({ method: "POST", url: `/api/sites/${site.id}/revisions`, headers: { cookie }, payload: { wpPostId: 7 } });
+    await worker.tick();
+    await makePost(site.id); // neuer Beitrag derselben Website
+    expect(narrow).toEqual([true, false]);
+    expect(competitionCalls).toBe(1); // nur der neue Beitrag
+  });
+
   it("gibt die gewuenschte Anzahl an den WordPress-Import weiter", async () => {
     const urls: string[] = [];
     wpFetcher = (async (url: string) => {

@@ -17,8 +17,8 @@ export interface PrimarySource {
 type Fetcher = (url: string, init: { redirect: "manual"; signal: AbortSignal; headers: Record<string, string> }) => Promise<Response>;
 
 const MAX_BYTES = 4 * 1024 * 1024;
-const MAX_PDF_BYTES = 3 * 1024 * 1024;
-const MAX_TEXT_CHARS = 80_000;
+const MAX_PDF_BYTES = 2 * 1024 * 1024;
+const MAX_TEXT_CHARS = 30_000;
 const MAX_HOPS = 3;
 
 function isFreeSource(url: string): boolean {
@@ -86,7 +86,7 @@ async function fetchOne(start: string, fetcher: Fetcher): Promise<PrimarySource>
  * ab, damit der Faktencheck Aktenzeichen, Daten und Wortlaut direkt gegen die Quelle prüfen kann.
  * Nie fatal: Fehler werden je Quelle gemeldet.
  */
-export async function fetchPrimarySources(urls: string[], fetcher: Fetcher = fetch as unknown as Fetcher, max = 6): Promise<PrimarySource[]> {
+export async function fetchPrimarySources(urls: string[], fetcher: Fetcher = fetch as unknown as Fetcher, max = 4): Promise<PrimarySource[]> {
   const unique = [...new Set(urls.map((u) => u.trim().replace(/#.*$/, "")).filter(Boolean))];
   const candidates = unique.filter(isFreeSource).slice(0, max);
   return Promise.all(candidates.map((u) => fetchOne(u, fetcher)));

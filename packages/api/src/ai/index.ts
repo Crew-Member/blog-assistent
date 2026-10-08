@@ -12,5 +12,8 @@ export function createAiService(config: Config): AiService {
     model: config.AI_MODEL,
     effort: config.AI_EFFORT,
     maxSearches: config.RESEARCH_MAX_SEARCHES,
+    lightModel: config.AI_MODEL_LIGHT,
+    researchModel: config.AI_MODEL_RESEARCH,
+    lightEffort: config.AI_EFFORT_LIGHT,
   });
 }

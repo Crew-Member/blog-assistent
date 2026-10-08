@@ -203,6 +203,11 @@ describe("costOf", () => {
     expect(costOf({ ...base, cacheWriteTokens: 1_000_000 }, prices)).toBeCloseTo(6.25, 6);
     expect(costOf({ ...base, webSearches: 8 }, prices)).toBeCloseTo(0.08, 6);
     expect(costOf({ ...base, step: "image_generate", fixedCostUsd: 0.04 }, prices)).toBe(0.04);
+    // guenstigeres Modell: eigene Preise, ohne Angabe die Hauptpreise
+    const light = { ...prices, lightInputPerMTok: 1, lightOutputPerMTok: 5 };
+    expect(costOf({ ...base, light: true, inputTokens: 1_000_000, outputTokens: 100_000 }, light)).toBeCloseTo(1.5, 6);
+    expect(costOf({ ...base, light: true, inputTokens: 1_000_000 }, prices)).toBeCloseTo(5, 6);
+    expect(costOf({ ...base, light: false, inputTokens: 1_000_000 }, light)).toBeCloseTo(5, 6);
   });
 });
 

@@ -96,3 +96,27 @@ describe("explainAiError", () => {
     expect(explainAiError(new Error("irgendwas"))).toBe("irgendwas");
   });
 });
+
+describe("ClaudeAiService: Modellwahl je Schritt (Kosten)", () => {
+  function tiered() {
+    const captured: { body: Record<string, any> }[] = [];
+    const fetchStub = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      captured.push({ body: JSON.parse(String(init?.body ?? "{}")) });
+      return new Response(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "stop" } }), { status: 400, headers: { "content-type": "application/json" } });
+    }) as typeof fetch;
+    const ai = new ClaudeAiService({ apiKey: "sk-ant-test", model: "claude-opus-5-5", effort: "medium", maxSearches: 8, lightModel: "claude-sonnet-5-5", lightEffort: "low", researchModel: "claude-sonnet-5-5", fetch: fetchStub });
+    return { ai, captured };
+  }
+
+  it("nutzt fuer einfache Schritte und die Recherche das guenstigere Modell, fuer Entwurf und Faktencheck das Hauptmodell", async () => {
+    const { ai, captured } = tiered();
+    await ai.suggestTitles({ site, title: "T", focusKeyword: "k", excerpt: "e", text: "t" }).catch(() => undefined);
+    await ai.research({ site, topic: { title: "T", angle: "a", summary: "s", keyFacts: [], keywords: [] }, narrow: true }).catch(() => undefined);
+    await ai.draft({ site, topic: { title: "T", angle: "a", summary: "s", keyFacts: [], keywords: [] }, research: { notes: "n", sources: [] }, styleSamples: [] }).catch(() => undefined);
+    const [titles, research, draft] = captured.map((c) => c.body);
+    expect(titles).toMatchObject({ model: "claude-sonnet-5-5", output_config: { effort: "low" } });
+    expect(research).toMatchObject({ model: "claude-sonnet-5-5", output_config: { effort: "medium" } });
+    expect(research?.tools?.[0]?.max_uses).toBe(4); // engere Recherche bei Ueberarbeitungen
+    expect(draft).toMatchObject({ model: "claude-opus-5-5", output_config: { effort: "medium" } });
+  });
+});
