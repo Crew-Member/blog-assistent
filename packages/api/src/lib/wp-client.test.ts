@@ -66,6 +66,13 @@ describe("WordPressClient", () => {
     expect(calls[0]?.body?.meta).toEqual({ rank_math_description: "Meta", rank_math_focus_keyword: "DSGVO" });
   });
 
+  it("setzt die Hauptkategorie als Rank-Math-Meta", async () => {
+    const { client, calls } = wp({ "POST /wp-json/wp/v2/posts": { body: { id: 42, link: `${BASE}/?p=42`, status: "draft" } } });
+    await client.createDraft({ ...draftInput, categories: [9, 3] }, { description: "Meta", focusKeyword: "DSGVO", primaryCategory: 9 });
+    expect(calls[0]?.body).toMatchObject({ categories: [9, 3] });
+    expect(calls[0]?.body?.meta).toEqual({ rank_math_description: "Meta", rank_math_focus_keyword: "DSGVO", rank_math_primary_category: "9" });
+  });
+
   it("folgt keinen Weiterleitungen (Zugangsdaten bleiben bei der eigenen Adresse)", async () => {
     const { client, calls } = wp({ "GET /wp-json/wp/v2/users/me": { status: 301, headers: { location: "https://fremd.example/wp-json/wp/v2/users/me" } } });
     await expect(client.me()).rejects.toThrow(/leitet weiter/);

@@ -65,6 +65,8 @@ const siteSchema = z.object({
 const wpPublishSchema = z.object({
   categoryIds: z.array(z.number().int().positive()).max(10).default([]),
   tags: z.array(z.string().trim().min(1).max(60)).max(10).default([]),
+  // Hauptkategorie (muss unter categoryIds sein): wird in Rank Math als primaere Kategorie gesetzt und steht an erster Stelle.
+  primaryCategoryId: z.number().int().positive().optional(),
   // Vom Nutzer bestaetigte NEUE Kategorien (Namen) - werden in WordPress angelegt
   newCategories: z.array(z.string().trim().min(1).max(60)).max(3).default([]),
   // Nur bei Ueberarbeitungen: den veroeffentlichten Originalbeitrag ersetzen (Datum und Adresse bleiben). Erfordert die ausdrueckliche Bestaetigung.
@@ -327,7 +329,8 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
 
     const existingCategories = replace || !body.data.newCategories.length ? [] : await client.categories();
     const createdCategoryIds = replace ? [] : await client.ensureCategories(body.data.newCategories, existingCategories);
-    const categoryIds = [...new Set([...body.data.categoryIds, ...createdCategoryIds])];
+    const primaryId = body.data.primaryCategoryId && body.data.categoryIds.includes(body.data.primaryCategoryId) ? body.data.primaryCategoryId : undefined;
+    const categoryIds = [...new Set([...(primaryId ? [primaryId] : []), ...body.data.categoryIds, ...createdCategoryIds])];
 
     const draft: WpDraftInput = {
       title: post.title,
@@ -338,7 +341,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
       tags: replace ? [] : await client.ensureTags(body.data.tags),
       ...(!replace && body.data.keepOriginalDate && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test((post.revisionSource as { publishedAt?: string } | null)?.publishedAt ?? "") ? { date: (post.revisionSource as { publishedAt: string }).publishedAt } : {}),
     };
-    const meta = { description: post.metaDescription ?? "", focusKeyword: post.focusKeyword ?? "" };
+    const meta = { description: post.metaDescription ?? "", focusKeyword: post.focusKeyword ?? "", ...(!replace && primaryId ? { primaryCategory: primaryId } : {}) };
 
     // Beitragsbild: Fehler hier verhindern den Entwurf nicht, werden aber gemeldet.
     let imageResult: { status: "set" | "none" | "failed"; message: string } = { status: "none", message: "Kein Beitragsbild vorhanden." };

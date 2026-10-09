@@ -42,6 +42,17 @@ export interface WpPostRef {
 export interface RankMathMeta {
   description: string;
   focusKeyword: string;
+  /** Hauptkategorie (Rank Math "primary category"); Themes blenden sie z. B. im Beitragsbild ein. */
+  primaryCategory?: number;
+}
+
+/** Rank-Math-Metafelder fuer die REST-Schnittstellen. */
+function rankMathFields(meta: RankMathMeta): Record<string, string> {
+  return {
+    rank_math_description: meta.description,
+    rank_math_focus_keyword: meta.focusKeyword,
+    ...(meta.primaryCategory ? { rank_math_primary_category: String(meta.primaryCategory) } : {}),
+  };
 }
 
 export type SeoOutcome = { status: "set" | "manual" | "no_plugin"; message: string };
@@ -209,7 +220,7 @@ export class WordPressClient {
       tags: input.tags,
       ...(input.featuredMedia ? { featured_media: input.featuredMedia } : {}),
       // Rank-Math-Felder: nur wirksam, falls die Installation sie fuer die REST-API freigibt; sonst wird das stillschweigend ignoriert.
-      ...(meta ? { meta: { rank_math_description: meta.description, rank_math_focus_keyword: meta.focusKeyword } } : {}),
+      ...(meta ? { meta: rankMathFields(meta) } : {}),
     };
   }
 
@@ -249,7 +260,7 @@ export class WordPressClient {
           content: input.content,
           ...(input.excerpt ? { excerpt: input.excerpt } : {}),
           ...(input.featuredMedia ? { featured_media: input.featuredMedia } : {}),
-          ...(meta ? { meta: { rank_math_description: meta.description, rank_math_focus_keyword: meta.focusKeyword } } : {}),
+          ...(meta ? { meta: rankMathFields(meta) } : {}),
         },
       }),
     );
@@ -291,7 +302,7 @@ export class WordPressClient {
     try {
       const res = await this.request<{ success?: boolean } | undefined>("/wp-json/rankmath/v1/updateMeta", {
         method: "POST",
-        body: { objectID: postId, objectType: "post", meta: { rank_math_description: meta.description, rank_math_focus_keyword: meta.focusKeyword } },
+        body: { objectID: postId, objectType: "post", meta: rankMathFields(meta) },
       });
       if (res && res.success === false) throw new WordPressError("Rank Math hat die Änderung abgelehnt.");
       return { status: "set", message: "Meta-Description und Fokus-Keyword wurden an Rank Math übergeben. Bitte im Editor kurz prüfen." };

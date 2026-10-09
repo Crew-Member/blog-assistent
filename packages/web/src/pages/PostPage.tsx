@@ -362,6 +362,7 @@ function UsageNote({ postId, status }: { postId: string; status: string }) {
 function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: boolean; onDone: () => void }) {
   const [prep, setPrep] = useState<WpPrepare>();
   const [selected, setSelected] = useState<number[]>([]);
+  const [primary, setPrimary] = useState<number>();
   const [newSelected, setNewSelected] = useState<string[]>([]);
   const [tags, setTags] = useState("");
   const [busy, setBusy] = useState(false);
@@ -421,6 +422,7 @@ function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: bool
       const p = await api.post<WpPrepare>(`/api/posts/${post.id}/wordpress/prepare`);
       setPrep(p);
       setSelected(p.suggested);
+      setPrimary(p.suggested[0]);
       setNewSelected([]);
       setTags(p.tags.join(", "));
     } catch (e) {
@@ -436,6 +438,7 @@ function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: bool
     try {
       const r = await api.post<WpPublishResult>(`/api/posts/${post.id}/wordpress/publish`, {
         categoryIds: selected,
+        ...(primary && selected.includes(primary) ? { primaryCategoryId: primary } : {}),
         newCategories: newSelected,
         tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
         keepOriginalDate: Boolean(post.revisionOf) && keepDate,
@@ -526,12 +529,17 @@ function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: bool
         <>
           {prep.suggestionError && <div className="error">{prep.suggestionError}</div>}
           <div>
-            <strong>Kategorien</strong> <span className="muted">– Vorschlag der KI vorausgewählt, bitte prüfen</span>
+            <strong>Kategorien</strong> <span className="muted">– Vorschlag der KI vorausgewählt, bitte prüfen.{" "}{selected.length > 1 ? "Bei mehreren Kategorien bitte die Hauptkategorie wählen – sie wird z. B. im Beitragsbild eingeblendet." : ""}</span>
             <div className="stack" style={{ gap: 4, marginTop: 6, maxHeight: 220, overflow: "auto" }}>
               {prep.categories.map((c) => (
                 <label key={c.id} className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
-                  <input type="checkbox" style={{ width: "auto" }} checked={selected.includes(c.id)} onChange={() => setSelected(toggle(selected, c.id))} />
+                  <input type="checkbox" style={{ width: "auto" }} checked={selected.includes(c.id)} onChange={() => { const next = toggle(selected, c.id); setSelected(next); if (!next.includes(primary ?? -1)) setPrimary(next[0]); }} />
                   {c.parent ? "– " : ""}{c.name} <span className="muted">({c.count})</span>
+                  {selected.length > 1 && selected.includes(c.id) && (
+                    <label className="row" style={{ flexDirection: "row", gap: 4, flex: "0 0 auto", marginLeft: "auto", color: "inherit" }}>
+                      <input type="radio" name="primary-cat" style={{ width: "auto" }} checked={primary === c.id} onChange={() => setPrimary(c.id)} /> Haupt
+                    </label>
+                  )}
                   {prep.suggested.includes(c.id) && <span className="tag">KI-Vorschlag</span>}
                 </label>
               ))}
