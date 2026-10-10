@@ -39,6 +39,7 @@ export interface Site {
   disclaimer: string;
   closingHtml: string;
   preferredLinks: string;
+  portfolio: string;
   competitionCheck: boolean;
   aiNoticeText: string;
   labelAiImages: boolean;
@@ -257,6 +258,27 @@ export interface RadarState {
   lastError: string;
   stats: { checked: number; current: number; dismissed: number };
   findings: RadarFinding[];
+}
+
+export interface TopicIdea {
+  id: string;
+  title: string;
+  keyword: string;
+  area: string;
+  urgency: "high" | "medium" | "low";
+  whyNow: string;
+  angle: string;
+  sources: { title: string; url: string }[];
+  postId: string | null;
+}
+
+export interface ScoutState {
+  enabled: boolean;
+  lastRunAt: string | null;
+  runRequested: boolean;
+  lastError: string;
+  dismissed: number;
+  ideas: TopicIdea[];
 }
 
 export interface TitleSuggestion {

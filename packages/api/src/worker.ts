@@ -1,5 +1,6 @@
 import { analyzeSubmission, generateImage, generatePost, type PipelineDeps } from "./pipeline.js";
 import { RADAR_INTERVAL_DAYS, runRadar } from "./radar.js";
+import { SCOUT_INTERVAL_DAYS, runScout } from "./scout.js";
 
 /**
  * Einfacher Hintergrund-Worker: holt Auftraege aus der DB (Status UPLOADED bzw. QUEUED) und arbeitet sie nacheinander ab.
@@ -67,6 +68,11 @@ export class Worker {
           await runRadar(this.deps, radarSiteId);
           continue;
         }
+        const scoutSiteId = await this.claimScout();
+        if (scoutSiteId) {
+          await runScout(this.deps, scoutSiteId);
+          continue;
+        }
         return;
       }
     } finally {
@@ -90,6 +96,17 @@ export class Worker {
     if (!next) return undefined;
     // Zeitstempel sofort setzen: Auch bei Fehlern oder Absturz kommt der naechste Lauf erst nach dem Intervall (keine Endlosschleife, keine Mehrfachkosten).
     const { count } = await prisma.site.updateMany({ where: { id: next.id, ...where }, data: { radarRunRequested: false, radarLastRunAt: new Date() } });
+    return count === 1 ? next.id : undefined;
+  }
+
+  private async claimScout(): Promise<string | undefined> {
+    const { prisma } = this.deps;
+    const due = new Date(Date.now() - SCOUT_INTERVAL_DAYS * 86_400_000);
+    const where = { scoutEnabled: true, OR: [{ scoutRunRequested: true }, { scoutLastRunAt: null }, { scoutLastRunAt: { lt: due } }] };
+    const next = await prisma.site.findFirst({ where, select: { id: true } });
+    if (!next) return undefined;
+    // Zeitstempel sofort setzen (wie beim Radar): keine Endlosschleife, keine Mehrfachkosten.
+    const { count } = await prisma.site.updateMany({ where: { id: next.id, ...where }, data: { scoutRunRequested: false, scoutLastRunAt: new Date() } });
     return count === 1 ? next.id : undefined;
   }
 

@@ -55,6 +55,10 @@ Aus Mails werden Betreff, Absender, Datum und Text gelesen; PDF-, Word- und Text
 
 Vor dem Schreiben sucht die KI per Websuche die stärksten deutschsprachigen Treffer zum Suchbegriff (das erste Keyword des Themas). Das Tool ruft bis zu sechs dieser Seiten selbst ab (nur öffentliche Adressen, Zeitlimit, ohne Plattformen und die eigene Website) und misst Wortzahl und Zwischenüberschriften. Die KI leitet daraus Suchintention, einen Zielumfang und häufig behandelte Aspekte ab; der Schreib-Prompt bekommt sie als Orientierung (der Stilleitfaden hat Vorrang). Die Auswertung steht am Beitrag („Vergleich mit den Top-Ergebnissen“). Pro Website abschaltbar (kostet eine zusätzliche Websuche je Beitrag). Die Treffer stammen aus einer KI-Websuche, nicht aus Googles Ergebnisliste.
 
+### Themenideen (Themen-Scout)
+
+Unter „Themenideen“ lässt sich je Website der Themen-Scout einschalten (Standard: aus). Er sucht wöchentlich (oder per „Jetzt nach Themen suchen“) mit der Websuche nach aktuell relevanten Themen aus deinem **Themenportfolio**: neue Urteile, Gesetzesänderungen, Fristen, Verlautbarungen der Aufsichtsbehörden, Berichterstattung. Grundlage sind das Textfeld „Themenportfolio“ bei der Website und die Kategorien der Website (mit Anzahl der Beiträge); vorhandene Beiträge und abgelehnte Ideen werden ausgelassen. Jede Idee hat Dringlichkeit, Begründung („Warum jetzt“), Nutzen, Suchbegriff und Quellen. „Beitrag dazu erstellen“ startet den Beitrag mit diesen Angaben als Ausgangsmaterial. Echte Suchvolumina kennt der Scout nicht (nur Aktualität und Berichterstattung); eine Anbindung an einen Daten-Dienst wie DataForSEO ist als spätere Ausbaustufe vorgesehen. Kosten: eine Websuche mit dem leichten Modell je Lauf.
+
 ### Überarbeitungen in WordPress übernehmen
 
 Bei einer Überarbeitung gibt es einen Hauptknopf **„Beitrag in WordPress aktualisieren“**:

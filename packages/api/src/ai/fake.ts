@@ -1,4 +1,4 @@
-import type { CompetitionInsights, CompetitorPage, FreshnessResult, TitleSuggestions, RefineResult, DraftInput, AiDocument, CategoryOption, CategorySuggestion, ImagePlan, AiService, DraftResult, FactCheckResult, ResearchResult, SiteProfile, StyleDerivation, StyleSampleInput, TopicProposal } from "./types.js";
+import type { CompetitionInsights, CompetitorPage, FreshnessResult, ScoutResult, TitleSuggestions, RefineResult, DraftInput, AiDocument, CategoryOption, CategorySuggestion, ImagePlan, AiService, DraftResult, FactCheckResult, ResearchResult, SiteProfile, StyleDerivation, StyleSampleInput, TopicProposal } from "./types.js";
 
 /** Platzhalter-Implementierung ohne API-Aufrufe - fuer Tests und zum Ausprobieren der Oberflaeche. */
 export class FakeAiService implements AiService {
@@ -51,6 +51,22 @@ export class FakeAiService implements AiService {
 
   async analyzeCompetition(input: { pages: CompetitorPage[] }): Promise<CompetitionInsights> {
     return { intent: "Platzhalter", recommendedMinWords: 600, recommendedMaxWords: 1000, rationale: `Platzhalter aus ${input.pages.length} Seite(n).`, missingTopics: [], structureHints: [] };
+  }
+
+  async scoutTopics(input: { portfolio: string }): Promise<ScoutResult> {
+    return {
+      ideas: [
+        {
+          title: "Platzhalter-Themenidee",
+          keyword: "platzhalter thema",
+          area: input.portfolio.split("\n")[0]?.slice(0, 60) || "Datenschutzrecht",
+          urgency: "medium",
+          whyNow: "Platzhalter (AI_PROVIDER=fake).",
+          angle: "Platzhalter-Nutzen für die Leser.",
+          sources: [],
+        },
+      ],
+    };
   }
 
   async checkFreshness(input: { post: { title: string } }): Promise<FreshnessResult> {

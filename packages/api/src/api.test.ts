@@ -500,6 +500,62 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect(checked).toHaveLength(2);
   });
 
+  it("Themen-Scout: standardmaessig aus, nutzt Portfolio und Kategorien, schlaegt Themen vor und macht daraus Beitraege", async () => {
+    wpFetcher = (async (url: string) => {
+      const u = new URL(url);
+      if (u.pathname === "/wp-json/wp/v2/categories") return new Response(JSON.stringify([{ name: "Arbeitsrecht", count: 2 }, { name: "Datenschutzrecht", count: 9 }]));
+      if (u.pathname === "/wp-json/wp/v2/posts") return new Response(JSON.stringify([{ id: 1, title: { rendered: "Schon behandelt" }, link: "https://93.184.216.34/a/", date: "2024-01-01T10:00:00", excerpt: { rendered: "" } }]));
+      return new Response("[]");
+    }) as typeof fetch;
+    const seen: { portfolio: string; existingTitles: string[]; rejectedTitles: string[] }[] = [];
+    await setup(fakeWith({
+      scoutTopics: async (input) => {
+        seen.push({ portfolio: input.portfolio, existingTitles: input.existingTitles, rejectedTitles: input.rejectedTitles });
+        return {
+          ideas: [
+            { title: "Niedrig", keyword: "k2", area: "Arbeitsrecht", urgency: "low", whyNow: "w2", angle: "a2", sources: [{ title: "Quelle", url: "javascript:alert(1)" }] },
+            { title: "Dringend", keyword: "k1", area: "Datenschutzrecht", urgency: "high", whyNow: "Frist am 1.1.", angle: "a1", sources: [{ title: "BGH", url: "https://www.bundesgerichtshof.de/x" }] },
+          ],
+        };
+      },
+    }));
+    const siteId = (await app.inject({ method: "POST", url: "/api/sites", headers: { cookie }, payload: { name: "S", baseUrl: "https://93.184.216.34", portfolio: "KI-Recht (KI-Verordnung)" } })).json().id as string;
+
+    await worker.tick();
+    expect(seen).toHaveLength(0);
+    expect((await app.inject({ method: "POST", url: `/api/sites/${siteId}/scout/run`, headers: { cookie } })).statusCode).toBe(409);
+
+    expect((await app.inject({ method: "PUT", url: `/api/sites/${siteId}/scout`, headers: { cookie }, payload: { enabled: true } })).statusCode).toBe(200);
+    await worker.tick();
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.portfolio).toContain("KI-Recht (KI-Verordnung)");
+    expect(seen[0]?.portfolio).toContain("Datenschutzrecht (9), Arbeitsrecht (2)");
+    expect(seen[0]?.existingTitles).toEqual(["Schon behandelt"]);
+
+    const state = (await app.inject({ method: "GET", url: `/api/sites/${siteId}/scout`, headers: { cookie } })).json();
+    expect(state.ideas.map((i: { title: string }) => i.title)).toEqual(["Dringend", "Niedrig"]);
+    expect(state.ideas[1].sources).toEqual([]); // nur http(s)-Quellen
+
+    // Kein erneuter Lauf innerhalb des Intervalls
+    await worker.tick();
+    expect(seen).toHaveLength(1);
+
+    // Beitrag aus einer Idee
+    const created = await app.inject({ method: "POST", url: `/api/scout/ideas/${state.ideas[0].id}/post`, headers: { cookie } });
+    expect(created.statusCode).toBe(201);
+    expect((await app.inject({ method: "POST", url: `/api/scout/ideas/${state.ideas[0].id}/post`, headers: { cookie } })).statusCode).toBe(409);
+
+    // Ablehnen; beim naechsten Lauf kennt die KI die abgelehnte Idee, uebernommene bleiben stehen
+    await app.inject({ method: "POST", url: `/api/scout/ideas/${state.ideas[1].id}/dismiss`, headers: { cookie } });
+    await app.inject({ method: "POST", url: `/api/sites/${siteId}/scout/run`, headers: { cookie } });
+    await worker.tick();
+    expect(seen).toHaveLength(2);
+    expect(seen[1]?.rejectedTitles).toEqual(["Niedrig"]);
+    const after = (await app.inject({ method: "GET", url: `/api/sites/${siteId}/scout`, headers: { cookie } })).json();
+    expect(after.dismissed).toBe(1);
+    expect(after.ideas.filter((i: { postId: string | null }) => i.postId)).toHaveLength(1);
+  });
+
   it("gibt dem Bildvorschlag Sprache und zuletzt verwendete Bildideen mit", async () => {
     const seen: { language?: string; recent?: string[] }[] = [];
     const fake = new FakeAiService();

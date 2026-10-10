@@ -48,6 +48,8 @@ export const STEP_LABELS: Record<string, string> = {
   style: "Stil ableiten",
   radar_search: "Radar: Suche",
   radar: "Radar: Bewertung",
+  scout_search: "Themen-Scout: Suche",
+  scout: "Themen-Scout: Auswahl",
 };
 
 export function costOf(entry: UsageEntry, prices: Prices): number {

@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { recordUsage } from "../lib/usage.js";
-import { COMPETITOR_SEARCH_SYSTEM, COMPETITION_SYSTEM, competitionBlock, RADAR_JUDGE_SYSTEM, RADAR_SEARCH_SYSTEM, TITLES_SYSTEM, REFINE_SYSTEM, internalLinksBlock, REVISE_SYSTEM, relatedPostsBlock, revisionBlock, ANALYZE_SYSTEM, CATEGORY_SYSTEM, DRAFT_SYSTEM, IMAGE_PLAN_SYSTEM, FACTCHECK_SYSTEM, RESEARCH_SYSTEM, STYLE_SYSTEM, siteBlock, styleSamplesBlock, topicBlock } from "./prompts.js";
+import { COMPETITOR_SEARCH_SYSTEM, COMPETITION_SYSTEM, competitionBlock, RADAR_JUDGE_SYSTEM, RADAR_SEARCH_SYSTEM, SCOUT_JUDGE_SYSTEM, SCOUT_SEARCH_SYSTEM, TITLES_SYSTEM, REFINE_SYSTEM, internalLinksBlock, REVISE_SYSTEM, relatedPostsBlock, revisionBlock, ANALYZE_SYSTEM, CATEGORY_SYSTEM, DRAFT_SYSTEM, IMAGE_PLAN_SYSTEM, FACTCHECK_SYSTEM, RESEARCH_SYSTEM, STYLE_SYSTEM, siteBlock, styleSamplesBlock, topicBlock } from "./prompts.js";
 import {
   analyzeResultSchema,
   categorySuggestionSchema,
@@ -8,6 +8,7 @@ import {
   factCheckResultSchema,
   imagePlanSchema,
   freshnessResultSchema,
+  scoutResultSchema,
   competitionInsightsSchema,
   titleSuggestionsSchema,
   refineResultSchema,
@@ -21,6 +22,7 @@ import {
   type FactCheckResult,
   type ImagePlan,
   type FreshnessResult,
+  type ScoutResult,
   type CompetitionInsights,
   type CompetitorPage,
   type TitleSuggestions,
@@ -55,7 +57,7 @@ export interface ClaudeOptions {
 }
 
 /** Schritte, die ohne Qualitaetsverlust mit einem kleineren Modell und weniger Denktiefe laufen koennen. */
-const LIGHT_STEPS = new Set(["competition_search", "competition", "image_plan", "titles", "categories", "style", "radar_search", "radar"]);
+const LIGHT_STEPS = new Set(["competition_search", "competition", "image_plan", "titles", "categories", "style", "radar_search", "radar", "scout_search", "scout"]);
 
 const MAX_CONTINUATIONS = 5;
 
@@ -129,6 +131,34 @@ const FRESHNESS_SCHEMA = {
     },
   },
   required: ["verdict", "summary", "reasons", "sources"],
+  additionalProperties: false,
+} as const;
+
+const SCOUT_SCHEMA = {
+  type: "object",
+  properties: {
+    ideas: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          keyword: { type: "string" },
+          area: { type: "string" },
+          urgency: { type: "string", enum: ["high", "medium", "low"] },
+          whyNow: { type: "string" },
+          angle: { type: "string" },
+          sources: {
+            type: "array",
+            items: { type: "object", properties: { title: { type: "string" }, url: { type: "string" } }, required: ["title", "url"], additionalProperties: false },
+          },
+        },
+        required: ["title", "keyword", "area", "urgency", "whyNow", "angle", "sources"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["ideas"],
   additionalProperties: false,
 } as const;
 
@@ -244,7 +274,7 @@ function stepOf(system: string): string {
   const table: [string, string][] = [
     [ANALYZE_SYSTEM, "analyze"], [RESEARCH_SYSTEM, "research"], [COMPETITOR_SEARCH_SYSTEM, "competition_search"], [COMPETITION_SYSTEM, "competition"],
     [DRAFT_SYSTEM, "draft"], [REVISE_SYSTEM, "draft"], [FACTCHECK_SYSTEM, "factcheck"], [REFINE_SYSTEM, "refine"], [TITLES_SYSTEM, "titles"],
-    [IMAGE_PLAN_SYSTEM, "image_plan"], [CATEGORY_SYSTEM, "categories"], [STYLE_SYSTEM, "style"], [RADAR_SEARCH_SYSTEM, "radar_search"], [RADAR_JUDGE_SYSTEM, "radar"],
+    [IMAGE_PLAN_SYSTEM, "image_plan"], [CATEGORY_SYSTEM, "categories"], [STYLE_SYSTEM, "style"], [RADAR_SEARCH_SYSTEM, "radar_search"], [RADAR_JUDGE_SYSTEM, "radar"], [SCOUT_SEARCH_SYSTEM, "scout_search"], [SCOUT_JUDGE_SYSTEM, "scout"],
   ];
   return table.find(([prompt]) => prompt === system)?.[1] ?? "other";
 }
@@ -399,6 +429,28 @@ export class ClaudeAiService implements AiService {
       { type: "text", text: [siteBlock(input.site), `Suchbegriff: ${input.keyword}`, topicBlock(input.topic), `Notizen zur Suche:\n${input.notes}`, `Abgerufene Top-Seiten:\n${pages}`, "Werte die Seiten jetzt aus."].join("\n\n") },
     ];
     return this.structured(COMPETITION_SYSTEM, content, COMPETITION_SCHEMA, (v) => competitionInsightsSchema.parse(v));
+  }
+
+  async scoutTopics(input: { site: SiteProfile; portfolio: string; existingTitles: string[]; rejectedTitles: string[]; today: string }): Promise<ScoutResult> {
+    const list = (items: string[]) => (items.length ? items.map((t) => `- ${t}`).join("\n") : "(keine)");
+    const material = `Heute ist der ${input.today}.\n\nPortfolio der Website (Rechtsgebiete und Schwerpunkte):\n${input.portfolio}`;
+    const found = await this.searchNotes(SCOUT_SEARCH_SYSTEM, `${siteBlock(input.site)}\n\n${material}\n\nFinde aktuell gefragte Themen aus diesem Portfolio.`);
+    const sourceList = found.sources.map((s) => `- ${s.title}: ${s.url}`).join("\n") || "(keine)";
+    const content: Anthropic.ContentBlockParam[] = [
+      {
+        type: "text",
+        text: [
+          siteBlock(input.site),
+          material,
+          `Vorhandene Beitraege der Website (neueste zuerst):\n${list(input.existingTitles.slice(0, 150))}`,
+          `Vom Nutzer bereits abgelehnte Ideen:\n${list(input.rejectedTitles.slice(0, 60))}`,
+          `Recherchenotizen:\n${found.notes}`,
+          `Gefundene Quellen (nur diese duerfen in sources erscheinen):\n${sourceList}`,
+          "Waehle jetzt die besten Themenideen aus.",
+        ].join("\n\n"),
+      },
+    ];
+    return this.structured(SCOUT_JUDGE_SYSTEM, content, SCOUT_SCHEMA, (v) => scoutResultSchema.parse(v));
   }
 
   async checkFreshness(input: { site: SiteProfile; post: { title: string; url: string; publishedAt: string; text: string } }): Promise<FreshnessResult> {

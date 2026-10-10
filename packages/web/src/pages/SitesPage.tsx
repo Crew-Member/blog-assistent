@@ -3,7 +3,7 @@ import { api, type Site, type StyleSample, type WpTestResult } from "../api";
 import { useLoad } from "../hooks";
 import { Chip, EmptyState, Icon, PageHeader } from "../ui";
 
-const EMPTY = { name: "", baseUrl: "", language: "de", audience: "", tone: "", styleGuide: "", disclaimer: "", closingHtml: "", preferredLinks: "", competitionCheck: true, aiNoticeText: "", labelAiImages: true, wpUsername: "", wpAppPassword: "", clearWpPassword: false };
+const EMPTY = { name: "", baseUrl: "", language: "de", audience: "", tone: "", styleGuide: "", disclaimer: "", closingHtml: "", preferredLinks: "", portfolio: "", competitionCheck: true, aiNoticeText: "", labelAiImages: true, wpUsername: "", wpAppPassword: "", clearWpPassword: false };
 
 function StyleSamples({ site, onApply }: { site: Site; onApply: (tone: string, styleGuide: string) => void }) {
   const { data: samples, reload } = useLoad(() => api.get<StyleSample[]>(`/api/sites/${site.id}/style-samples`));
@@ -180,6 +180,9 @@ function SiteForm({ initial, onSaved, onCancel }: { initial?: Site; onSaved: () 
       </label>
       <label>Bevorzugte interne Links <span className="muted">(optional, eine Zeile je Seite: „Titel | Adresse“ – die KI verlinkt sie, wo es passt)</span>
         <textarea rows={3} value={form.preferredLinks} onChange={set("preferredLinks")} placeholder={"Datenschutzberatung | https://…/leistungen/datenschutz/\nKontakt | https://…/kontakt/"} />
+      </label>
+      <label>Themenportfolio <span className="muted">(optional – Rechtsgebiete und Schwerpunkte, eine Zeile je Thema. Der Themen-Scout liest zusätzlich die Kategorien der Website selbst aus)</span>
+        <textarea rows={4} value={form.portfolio} onChange={set("portfolio")} placeholder={"Datenschutzrecht (DSGVO, Beschäftigtendatenschutz, Bußgelder)\nKI-Recht (KI-Verordnung, Haftung)\nArbeitsrecht mit Datenschutzbezug"} />
       </label>
       <label>Disclaimer (wird unter jeden Beitrag gesetzt)<textarea rows={3} value={form.disclaimer} onChange={set("disclaimer")} /></label>
       <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>

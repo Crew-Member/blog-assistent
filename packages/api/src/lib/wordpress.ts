@@ -165,6 +165,20 @@ export async function fetchAllSitePosts(baseUrl: string, maxPages = 10, fetcher:
   return all;
 }
 
+/** Kategorien einer Website mit Anzahl veroeffentlichter Beitraege (oeffentliche REST-API), haeufigste zuerst. */
+export async function fetchSiteCategories(baseUrl: string, fetcher: Fetcher = fetch): Promise<{ name: string; count: number }[]> {
+  const api = await restUrl(baseUrl, "/wp-json/wp/v2/categories");
+  api.searchParams.set("per_page", "100");
+  api.searchParams.set("hide_empty", "true");
+  api.searchParams.set("_fields", "name,count");
+  const data = await getJson(api, fetcher);
+  if (!Array.isArray(data)) return [];
+  return data
+    .map((c: { name?: unknown; count?: unknown }) => ({ name: stripHtml(String(c.name ?? "")), count: Number(c.count ?? 0) }))
+    .filter((c) => c.name && Number.isFinite(c.count))
+    .sort((a, b) => b.count - a.count);
+}
+
 /** Erkennt Seitenbaukaesten im ausgelieferten HTML eines Beitrags. */
 export function detectPageBuilder(html: string): string | undefined {
   if (/elementor/i.test(html)) return "Elementor";

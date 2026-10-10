@@ -43,6 +43,31 @@ model Site {
   radarLastRunAt    DateTime?
   radarRunRequested Boolean   @default(false)
   radarLastError    String    @default("")
+  // Themen-Scout: sucht regelmaessig aktuell gefragte Themen aus dem Portfolio der Website. Standard: aus.
+  // portfolio = Schwerpunkte der Website (Freitext); wird zusammen mit den Kategorien der Website ausgewertet.
+  portfolio         String    @default("")
+  scoutEnabled      Boolean   @default(false)
+  scoutLastRunAt    DateTime?
+  scoutRunRequested Boolean   @default(false)
+  scoutLastError    String    @default("")
+  topicIdeas        TopicIdea[]
+}
+
+// Vom Themen-Scout vorgeschlagenes Thema (noch kein Beitrag).
+model TopicIdea {
+  id          String   @id @default(cuid())
+  siteId      String
+  site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  title       String
+  keyword     String   @default("")
+  area        String   @default("")
+  urgency     String   @default("medium")
+  whyNow      String   @default("")
+  angle       String   @default("")
+  sources     Json     @default("[]")
+  dismissed   Boolean  @default(false)
+  postId      String?
+  createdAt   DateTime @default(now())
 }
 
 // Ergebnis der Aktualitaetspruefung eines veroeffentlichten Beitrags (je Website und WordPress-Beitrag eines).

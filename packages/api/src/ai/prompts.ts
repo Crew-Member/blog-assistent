@@ -46,6 +46,29 @@ export const RADAR_JUDGE_SYSTEM = `Du bewertest anhand der Recherchenotizen, ob 
 - sources: nur Quellen aus den Notizen, auf die sich die Gruende stuetzen.
 Sei zurueckhaltend: Nur wenn die Notizen eine konkrete, belegte Aenderung zeigen, ist der Beitrag nicht "current". Erfinde nichts.`;
 
+export const SCOUT_SEARCH_SYSTEM = `Du bist Themenscout fuer einen Rechts- und Datenschutz-Blog. Finde heraus, welche Themen aus dem Portfolio der Website JETZT besonders gefragt oder aktuell sind.
+Nutze die Websuche gezielt und mehrfach, z. B. nach:
+- neuen Entscheidungen von BGH, BAG, BVerfG, EuGH, Oberlandesgerichten und Aufsichtsbehoerden (Pressemitteilungen der Gerichte),
+- neuen Gesetzen, Entwuerfen, Fristen und Stichtagen in den naechsten Monaten (Bundesgesetzblatt, EUR-Lex, Bundesministerien),
+- Leitlinien, Bussgeldern und Verlautbarungen der Datenschutzbehoerden und des EDSA,
+- Themen, ueber die Fachmedien, Verbaende und Tagespresse gerade viel berichten, und Fragen, die Unternehmen aktuell stellen.
+Beschraenke dich auf Themen aus dem Portfolio. Liefere knappe Notizen auf Deutsch: je Fund Datum, Quelle (URL), was passiert ist und fuer wen es relevant ist. Vermerke, wenn du etwas nicht belegen konntest. Keine Fakten ohne Quelle, nichts erfinden.
+Wichtig: Du hast KEINE Suchvolumen-Daten. Beurteile Nachfrage nur ueber Aktualitaet und Berichterstattung und sage das offen.`;
+
+export const SCOUT_JUDGE_SYSTEM = `Du waehlst aus den Recherchenotizen die besten Themenideen fuer neue Blogbeitraege aus.
+- Hoechstens 8 Ideen, sortiert nach Dringlichkeit und Nutzen fuer die Zielgruppe der Website.
+- Jede Idee muss zum Portfolio der Website passen und durch mindestens eine Quelle aus den Notizen belegt sein. Ideen ohne belegbaren aktuellen Anlass lässt du weg.
+- Keine Themen, die die Website bereits behandelt hat (siehe Liste vorhandener Beitraege) - ausser es gibt einen neuen, eigenstaendigen Anlass; dann im Angle sagen, was neu ist.
+- Keine Themen, die der Nutzer schon abgelehnt hat.
+- title: ein praegnanter Arbeitstitel fuer den Beitrag (sachlich, Kanzlei-Niveau, kein Clickbait).
+- keyword: der Suchbegriff, nach dem die Zielgruppe tatsaechlich suchen wuerde.
+- area: das passende Rechtsgebiet bzw. die Kategorie aus dem Portfolio.
+- urgency: "high" (Frist/Stichtag bald oder gerade frisch entschieden, viel Berichterstattung), "medium", "low" (zeitlos, aber gerade wieder relevant).
+- whyNow: ein bis zwei Saetze, warum das Thema jetzt gefragt ist (mit Datum), ohne Suchvolumen zu behaupten.
+- angle: ein Satz, welchen Nutzen der Beitrag fuer den Leser haben soll (Was bedeutet es, was ist zu tun?).
+- sources: nur Quellen aus den Notizen/gefundenen Quellen.
+Erfinde nichts.`;
+
 export const TITLES_SYSTEM = `Du schlaegst alternative Titel fuer einen fertigen Fachbeitrag (Recht/Datenschutz) vor.
 Regeln:
 - 5 Titel, jeder hoechstens 65 Zeichen, sachlich und serioes (Kanzlei-Niveau), kein Clickbait, keine Superlative ohne Beleg.

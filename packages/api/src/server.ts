@@ -53,6 +53,7 @@ const siteSchema = z.object({
   disclaimer: z.string().max(4000).default(""),
   closingHtml: z.string().max(4000).default(""),
   preferredLinks: z.string().max(4000).default(""),
+  portfolio: z.string().max(4000).default(""),
   competitionCheck: z.boolean().default(true),
   aiNoticeText: z.string().trim().max(500).default(""),
   labelAiImages: z.boolean().default(true),
@@ -668,6 +669,63 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     const instructions = [`Aktualisiere den Beitrag. ${finding.summary}`.trim(), ...reasons.map((r) => `- ${r}`)].join("\n").slice(0, 3000);
     const post = await createRevision(finding.siteId, finding.wpPostId, instructions);
     await prisma.radarFinding.update({ where: { id: finding.id }, data: { revisionPostId: post.id } });
+    return reply.code(201).send(post);
+  });
+
+  // --- Themen-Scout -----------------------------------------------------------
+  app.get<{ Params: { id: string } }>("/api/sites/:id/scout", async (request, reply) => {
+    const site = await prisma.site.findUnique({ where: { id: request.params.id }, select: { scoutEnabled: true, scoutLastRunAt: true, scoutRunRequested: true, scoutLastError: true } });
+    if (!site) return reply.code(404).send({ error: "Website nicht gefunden" });
+    const all = await prisma.topicIdea.findMany({ where: { siteId: request.params.id } });
+    const rank: Record<string, number> = { high: 0, medium: 1, low: 2 };
+    const ideas = all
+      .filter((i) => !i.dismissed)
+      .sort((a, b) => (rank[a.urgency] ?? 1) - (rank[b.urgency] ?? 1) || a.createdAt.getTime() - b.createdAt.getTime());
+    return { enabled: site.scoutEnabled, lastRunAt: site.scoutLastRunAt, runRequested: site.scoutRunRequested, lastError: site.scoutLastError, dismissed: all.filter((i) => i.dismissed).length, ideas };
+  });
+
+  app.put<{ Params: { id: string } }>("/api/sites/:id/scout", async (request, reply) => {
+    const body = z.object({ enabled: z.boolean() }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "Ungültige Eingabe" });
+    const { count } = await prisma.site.updateMany({ where: { id: request.params.id }, data: { scoutEnabled: body.data.enabled, ...(body.data.enabled ? {} : { scoutRunRequested: false }) } });
+    return count ? { enabled: body.data.enabled } : reply.code(404).send({ error: "Website nicht gefunden" });
+  });
+
+  app.post<{ Params: { id: string } }>("/api/sites/:id/scout/run", async (request, reply) => {
+    const site = await prisma.site.findUnique({ where: { id: request.params.id }, select: { scoutEnabled: true } });
+    if (!site) return reply.code(404).send({ error: "Website nicht gefunden" });
+    if (!site.scoutEnabled) return reply.code(409).send({ error: "Der Themen-Scout ist für diese Website ausgeschaltet." });
+    await prisma.site.update({ where: { id: request.params.id }, data: { scoutRunRequested: true } });
+    return reply.code(202).send({ ok: true });
+  });
+
+  app.post<{ Params: { id: string } }>("/api/scout/ideas/:id/dismiss", async (request, reply) => {
+    const { count } = await prisma.topicIdea.updateMany({ where: { id: request.params.id }, data: { dismissed: true } });
+    return count ? { ok: true } : reply.code(404).send({ error: "Themenidee nicht gefunden" });
+  });
+
+  // Macht aus einer Themenidee einen Beitrag: Anlass, Blickwinkel und Quellen gehen als Ausgangsmaterial in die Recherche.
+  app.post<{ Params: { id: string } }>("/api/scout/ideas/:id/post", async (request, reply) => {
+    const idea = await prisma.topicIdea.findUnique({ where: { id: request.params.id } });
+    if (!idea) return reply.code(404).send({ error: "Themenidee nicht gefunden" });
+    if (idea.postId) return reply.code(409).send({ error: "Aus dieser Idee wurde bereits ein Beitrag erstellt." });
+    const sources = Array.isArray(idea.sources) ? (idea.sources as { title?: string; url?: string }[]).filter((s) => s && typeof s.url === "string") : [];
+    const post = await prisma.$transaction(async (tx) => {
+      const submission = await tx.submission.create({ data: { siteId: idea.siteId, note: `Themenidee: ${idea.title}`.slice(0, 300), status: "ANALYZED" } });
+      const topic = await tx.topic.create({
+        data: {
+          submissionId: submission.id,
+          title: idea.title,
+          angle: idea.angle || "Aktuelles Thema verständlich einordnen und Handlungsempfehlungen geben",
+          summary: [`Anlass: ${idea.whyNow}`, sources.length ? `Erste Quellen:\n${sources.map((s) => `- ${s.title || s.url}: ${s.url}`).join("\n")}` : ""].filter(Boolean).join("\n\n"),
+          keyFacts: [],
+          keywords: idea.keyword ? [idea.keyword] : [],
+        },
+      });
+      const created = await tx.post.create({ data: { siteId: idea.siteId, topicId: topic.id } });
+      await tx.topicIdea.update({ where: { id: idea.id }, data: { postId: created.id } });
+      return created;
+    });
     return reply.code(201).send(post);
   });
 
