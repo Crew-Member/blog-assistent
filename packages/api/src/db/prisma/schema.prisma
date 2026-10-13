@@ -50,6 +50,8 @@ model Site {
   scoutLastRunAt    DateTime?
   scoutRunRequested Boolean   @default(false)
   scoutLastError    String    @default("")
+  // Search-Console-Property (z. B. https://kirmse.eu/ oder sc-domain:kirmse.eu); leer = keine Nachfragedaten
+  gscProperty       String    @default("")
   topicIdeas        TopicIdea[]
 }
 
@@ -64,6 +66,8 @@ model TopicIdea {
   urgency     String   @default("medium")
   whyNow      String   @default("")
   angle       String   @default("")
+  // Beleg aus der Search Console (z. B. Einblendungen und Trend), leer wenn keine Daten vorlagen
+  demandNote  String   @default("")
   sources     Json     @default("[]")
   dismissed   Boolean  @default(false)
   postId      String?

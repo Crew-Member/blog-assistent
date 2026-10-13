@@ -103,6 +103,7 @@ export const scoutResultSchema = z.object({
         urgency: z.enum(["high", "medium", "low"]),
         whyNow: z.string(),
         angle: z.string(),
+        demandNote: z.string(),
         sources: z.array(z.object({ title: z.string(), url: z.string() })),
       }),
     )
@@ -198,7 +199,7 @@ export interface AiService {
   /** Wertet die abgerufenen Top-Seiten (Laenge, Gliederung) aus und leitet Zielumfang und fehlende Themen ab. */
   analyzeCompetition(input: { site: SiteProfile; keyword: string; topic: TopicProposal; notes: string; pages: CompetitorPage[] }): Promise<CompetitionInsights>;
   /** Prueft per Websuche, ob ein veroeffentlichter Beitrag noch aktuell ist (neue Rechtsprechung, Gesetzesaenderungen, ...). */
-  scoutTopics(input: { site: SiteProfile; portfolio: string; existingTitles: string[]; rejectedTitles: string[]; today: string }): Promise<ScoutResult>;
+  scoutTopics(input: { site: SiteProfile; portfolio: string; existingTitles: string[]; rejectedTitles: string[]; today: string; demand?: string }): Promise<ScoutResult>;
   checkFreshness(input: { site: SiteProfile; post: { title: string; url: string; publishedAt: string; text: string } }): Promise<FreshnessResult>;
   /** Alternative Titel (hoechstens 65 Zeichen) fuer einen fertigen Beitrag. */
   suggestTitles(input: { site: SiteProfile; title: string; focusKeyword: string; excerpt: string; text: string }): Promise<TitleSuggestions>;

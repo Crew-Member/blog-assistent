@@ -63,6 +63,7 @@ export class FakeAiService implements AiService {
           urgency: "medium",
           whyNow: "Platzhalter (AI_PROVIDER=fake).",
           angle: "Platzhalter-Nutzen für die Leser.",
+          demandNote: "",
           sources: [],
         },
       ],

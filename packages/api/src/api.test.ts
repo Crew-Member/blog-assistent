@@ -571,6 +571,52 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect((await app.inject({ method: "GET", url: `/api/sites/${siteId}/scout`, headers: { cookie } })).json().ideas.map((i: { id: string }) => i.id)).toContain(open.id);
   });
 
+  it("Themen-Scout: nutzt Search-Console-Daten, meldet Fehler als Hinweis und prueft die Verbindung", async () => {
+    wpFetcher = (async () => new Response("[]")) as typeof fetch;
+    const demandSeen: (string | undefined)[] = [];
+    let fail = false;
+    const searchConsole = {
+      configured: () => true,
+      email: () => "dienst@projekt.iam.gserviceaccount.com",
+      queries: async (_property: string, start: string) => {
+        if (fail) throw new Error("kein Zugriff");
+        return start < "2026-01-01" ? [] : [{ query: "ki verordnung fristen", impressions: 300, clicks: 9, position: 14 }];
+      },
+    };
+    ai = fakeWith({
+      scoutTopics: async (input) => {
+        demandSeen.push(input.demand);
+        return { ideas: [{ title: "Idee", keyword: "k", area: "KI", urgency: "high", whyNow: "w", angle: "a", demandNote: "„ki verordnung fristen“: 300 Einblendungen", sources: [] }] };
+      },
+    });
+    const storage = new FileStorage(dir);
+    app = buildServer({ config, prisma, storage, ai, fetcher: wpFetcher, searchConsole });
+    worker = new Worker({ prisma, ai, storage, fetcher: wpFetcher, searchConsole });
+    await app.ready();
+    const login = await app.inject({ method: "POST", url: "/api/auth/login", payload: { password: "geheim-passwort" } });
+    cookie = (login.headers["set-cookie"] as string).split(";")[0] ?? "";
+
+    const siteId = (await app.inject({ method: "POST", url: "/api/sites", headers: { cookie }, payload: { name: "S", portfolio: "KI-Recht", gscProperty: "https://kirmse.eu/" } })).json().id as string;
+    expect((await app.inject({ method: "POST", url: `/api/sites/${siteId}/gsc/test`, headers: { cookie } })).json()).toMatchObject({ ok: true, queries: 1, impressions: 300 });
+    await app.inject({ method: "PUT", url: `/api/sites/${siteId}/scout`, headers: { cookie }, payload: { enabled: true } });
+    await worker.tick();
+    expect(demandSeen[0]).toContain("ki verordnung fristen");
+    const state = (await app.inject({ method: "GET", url: `/api/sites/${siteId}/scout`, headers: { cookie } })).json();
+    expect(state.gsc).toEqual({ property: "https://kirmse.eu/", keyFound: true, email: "dienst@projekt.iam.gserviceaccount.com" });
+    expect(state.ideas[0].demandNote).toContain("300 Einblendungen");
+    expect(state.lastError).toBe("");
+
+    // Search Console faellt aus: Lauf erfolgt ohne Suchdaten, Hinweis statt Fehler, keine erfundenen Belege
+    fail = true;
+    await app.inject({ method: "POST", url: `/api/sites/${siteId}/scout/run`, headers: { cookie } });
+    await worker.tick();
+    expect(demandSeen[1]).toBeUndefined();
+    const after = (await app.inject({ method: "GET", url: `/api/sites/${siteId}/scout`, headers: { cookie } })).json();
+    expect(after.lastError).toMatch(/^Hinweis: Die Search Console konnte nicht gelesen werden/);
+    expect(after.ideas[0].demandNote).toBe("");
+    expect((await app.inject({ method: "POST", url: `/api/sites/${siteId}/gsc/test`, headers: { cookie } })).statusCode).toBe(502);
+  });
+
   it("gibt dem Bildvorschlag Sprache und zuletzt verwendete Bildideen mit", async () => {
     const seen: { language?: string; recent?: string[] }[] = [];
     const fake = new FakeAiService();

@@ -53,7 +53,7 @@ Nutze die Websuche gezielt und mehrfach, z. B. nach:
 - Leitlinien, Bussgeldern und Verlautbarungen der Datenschutzbehoerden und des EDSA,
 - Themen, ueber die Fachmedien, Verbaende und Tagespresse gerade viel berichten, und Fragen, die Unternehmen aktuell stellen.
 Beschraenke dich auf Themen aus dem Portfolio. Liefere knappe Notizen auf Deutsch: je Fund Datum, Quelle (URL), was passiert ist und fuer wen es relevant ist. Vermerke, wenn du etwas nicht belegen konntest. Keine Fakten ohne Quelle, nichts erfinden.
-Wichtig: Du hast KEINE Suchvolumen-Daten. Beurteile Nachfrage nur ueber Aktualitaet und Berichterstattung und sage das offen.`;
+Liegen Suchdaten der Website aus der Google Search Console vor, nutze sie als Hinweis, worauf die Zielgruppe gerade sucht: Suche gezielt nach dem Anlass hinter wachsenden Begriffen und nach Themen, zu denen die Website viele Einblendungen, aber schlechte Platzierungen hat.\nWichtig: Du hast KEINE allgemeinen Suchvolumen-Daten. Ohne Search-Console-Daten beurteilst du Nachfrage nur ueber Aktualitaet und Berichterstattung und sagst das offen.`;
 
 export const SCOUT_JUDGE_SYSTEM = `Du waehlst aus den Recherchenotizen die besten Themenideen fuer neue Blogbeitraege aus.
 - Hoechstens 8 Ideen, sortiert nach Dringlichkeit und Nutzen fuer die Zielgruppe der Website.
@@ -66,8 +66,7 @@ export const SCOUT_JUDGE_SYSTEM = `Du waehlst aus den Recherchenotizen die beste
 - urgency: "high" (Frist/Stichtag bald oder gerade frisch entschieden, viel Berichterstattung), "medium", "low" (zeitlos, aber gerade wieder relevant).
 - whyNow: ein bis zwei Saetze, warum das Thema jetzt gefragt ist (mit Datum), ohne Suchvolumen zu behaupten.
 - angle: ein Satz, welchen Nutzen der Beitrag fuer den Leser haben soll (Was bedeutet es, was ist zu tun?).
-- sources: nur Quellen aus den Notizen/gefundenen Quellen.
-Erfinde nichts.`;
+- demandNote: Beleg aus den Search-Console-Daten, falls ein Begriff der Idee dort vorkommt (Begriff, Einblendungen, Trend, Position - genau so wie geliefert); sonst leer. Erfinde keine Zahlen. Ideen mit Beleg aus den Suchdaten und aktuellem Anlass haben Vorrang; aber nimm auch aktuelle Themen ohne Suchdaten auf, denn neue Ereignisse tauchen dort oft noch nicht auf.\n- sources: nur Quellen aus den Notizen/gefundenen Quellen.\nErfinde nichts.`;
 
 export const TITLES_SYSTEM = `Du schlaegst alternative Titel fuer einen fertigen Fachbeitrag (Recht/Datenschutz) vor.
 Regeln:

@@ -42,6 +42,8 @@ const schema = z.object({
   IMAGE_QUALITY: z.enum(["low", "medium", "high"]).default("medium"),
   IMAGE_WIDTH: z.coerce.number().int().min(256).max(2048).optional(),
   IMAGE_HEIGHT: z.coerce.number().int().min(256).max(2048).optional(),
+  // Schluessel des Google-Dienstkontos fuer die Search Console; leer = Ordner `secrets` durchsuchen
+  GSC_KEY_FILE: z.string().trim().optional().transform((v) => v || undefined),
   STORAGE_DIR: z.string().default("./data/uploads"),
   PORT: z.coerce.number().int().default(3100),
   HOST: z.string().default("0.0.0.0"),

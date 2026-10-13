@@ -16,6 +16,8 @@ import type { FileStorage } from "./lib/storage.js";
 import { detectKind, extractDocument, stripHtml } from "./lib/extract.js";
 import { applyLinkPolicy, sanitizePostHtml, unwrapBlockedLinks, unwrapLinksNotIn } from "./lib/html.js";
 import { selfUrls } from "./pipeline.js";
+import { demandPeriods } from "./lib/gsc.js";
+import type { SearchConsole } from "./lib/gsc.js";
 import { keywordInText, seoChecks } from "./lib/seo.js";
 import { slugify } from "./lib/slug.js";
 import { decryptSecret, encryptSecret } from "./lib/secrets.js";
@@ -34,6 +36,8 @@ export interface ServerDeps {
   images?: ImageProvider;
   /** Fuer Tests austauschbar (WordPress-Import). */
   fetcher?: typeof fetch;
+  /** Google Search Console (Nachfragedaten); optional. */
+  searchConsole?: SearchConsole;
   /** Verzeichnis mit dem gebauten Frontend (optional). */
   webDir?: string;
 }
@@ -54,6 +58,7 @@ const siteSchema = z.object({
   closingHtml: z.string().max(4000).default(""),
   preferredLinks: z.string().max(4000).default(""),
   portfolio: z.string().max(4000).default(""),
+  gscProperty: z.string().trim().max(300).default(""),
   competitionCheck: z.boolean().default(true),
   aiNoticeText: z.string().trim().max(500).default(""),
   labelAiImages: z.boolean().default(true),
@@ -110,7 +115,7 @@ class HttpError extends Error {
   }
 }
 
-export function buildServer({ config, prisma, storage, ai, images, fetcher, webDir }: ServerDeps): FastifyInstance {
+export function buildServer({ config, prisma, storage, ai, images, fetcher, searchConsole, webDir }: ServerDeps): FastifyInstance {
   const app = Fastify({ logger: process.env.NODE_ENV !== "test", trustProxy: true, bodyLimit: 2 * 1024 * 1024 });
 
   /** Gibt nie das (verschluesselte) WordPress-Passwort heraus, nur ob eines gespeichert ist. */
@@ -674,7 +679,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
 
   // --- Themen-Scout -----------------------------------------------------------
   app.get<{ Params: { id: string } }>("/api/sites/:id/scout", async (request, reply) => {
-    const site = await prisma.site.findUnique({ where: { id: request.params.id }, select: { scoutEnabled: true, scoutLastRunAt: true, scoutRunRequested: true, scoutLastError: true } });
+    const site = await prisma.site.findUnique({ where: { id: request.params.id }, select: { scoutEnabled: true, scoutLastRunAt: true, scoutRunRequested: true, scoutLastError: true, gscProperty: true } });
     if (!site) return reply.code(404).send({ error: "Website nicht gefunden" });
     const all = await prisma.topicIdea.findMany({ where: { siteId: request.params.id } });
     const rank: Record<string, number> = { high: 0, medium: 1, low: 2 };
@@ -683,7 +688,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     const ideas = all
       .filter((i) => !i.dismissed && !isDone(i))
       .sort((a, b) => (rank[a.urgency] ?? 1) - (rank[b.urgency] ?? 1) || a.createdAt.getTime() - b.createdAt.getTime());
-    return { enabled: site.scoutEnabled, lastRunAt: site.scoutLastRunAt, runRequested: site.scoutRunRequested, lastError: site.scoutLastError, dismissed: all.filter((i) => i.dismissed).length, ideas, done };
+    return { enabled: site.scoutEnabled, lastRunAt: site.scoutLastRunAt, runRequested: site.scoutRunRequested, lastError: site.scoutLastError, dismissed: all.filter((i) => i.dismissed).length, ideas, done, gsc: { property: site.gscProperty, keyFound: Boolean(searchConsole?.configured()), email: searchConsole?.email() ?? null } };
   });
 
   app.put<{ Params: { id: string } }>("/api/sites/:id/scout", async (request, reply) => {
@@ -699,6 +704,21 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     if (!site.scoutEnabled) return reply.code(409).send({ error: "Der Themen-Scout ist für diese Website ausgeschaltet." });
     await prisma.site.update({ where: { id: request.params.id }, data: { scoutRunRequested: true } });
     return reply.code(202).send({ ok: true });
+  });
+
+  // Prueft die Verbindung zur Search Console fuer die Property dieser Website.
+  app.post<{ Params: { id: string } }>("/api/sites/:id/gsc/test", async (request, reply) => {
+    const site = await prisma.site.findUnique({ where: { id: request.params.id }, select: { gscProperty: true } });
+    if (!site) return reply.code(404).send({ error: "Website nicht gefunden" });
+    if (!site.gscProperty) return reply.code(400).send({ error: "Bei der Website ist keine Search-Console-Property eingetragen (unter „Websites“)." });
+    if (!searchConsole?.configured()) return reply.code(409).send({ error: "Es wurde kein Schlüssel gefunden. Lege die JSON-Datei des Dienstkontos in den Ordner „secrets“ und starte neu." });
+    try {
+      const periods = demandPeriods();
+      const rows = await searchConsole.queries(site.gscProperty, ...periods.current);
+      return { ok: true, queries: rows.length, impressions: rows.reduce((sum, r) => sum + r.impressions, 0) };
+    } catch (error) {
+      return reply.code(502).send({ error: error instanceof Error ? error.message : String(error) });
+    }
   });
 
   app.post<{ Params: { id: string } }>("/api/scout/ideas/:id/dismiss", async (request, reply) => {

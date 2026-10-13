@@ -13,11 +13,13 @@ function ScoutCard({ site }: { site: Site }) {
   const scout = useLoad(() => api.get<ScoutState>(`/api/sites/${site.id}/scout`), (s) => s.enabled && s.runRequested);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [testInfo, setTestInfo] = useState<string>();
   const state = scout.data;
 
   async function act(action: () => Promise<unknown>) {
     setBusy(true);
     setError(undefined);
+    setTestInfo(undefined);
     try {
       await action();
       await scout.reload();
@@ -38,7 +40,7 @@ function ScoutCard({ site }: { site: Site }) {
         <span><strong>{state.enabled ? "Eingeschaltet" : "Ausgeschaltet"}</strong> – sucht wöchentlich im Netz, welche Themen aus deinem Portfolio gerade aktuell sind</span>
       </label>
       <span className="muted">
-        Ausgangspunkt sind dein Themenportfolio (unter „Websites“) und die Kategorien der Website. Die KI recherchiert neue Urteile, Gesetzesänderungen, Fristen und Berichterstattung, lässt bereits behandelte Themen weg und begründet jeden Vorschlag. Das Suchvolumen bei Google kennt sie nicht – „gefragt“ heißt hier: aktuell und viel besprochen. Pro Lauf fallen Kosten für eine Websuche mit der KI an. Es wird nichts ohne dein Zutun geschrieben.
+        Ausgangspunkt sind dein Themenportfolio (unter „Websites“) und die Kategorien der Website. Die KI recherchiert neue Urteile, Gesetzesänderungen, Fristen und Berichterstattung, lässt bereits behandelte Themen weg und begründet jeden Vorschlag. Mit eingerichteter Search Console kommen die echten Suchanfragen deiner Website dazu (wachsende Begriffe, Lücken); allgemeine Suchvolumen bei Google kennt der Scout nicht. Pro Lauf fallen Kosten für eine Websuche mit der KI an. Es wird nichts ohne dein Zutun geschrieben.
       </span>
       {state.enabled && (
         <div className="row">
@@ -51,7 +53,27 @@ function ScoutCard({ site }: { site: Site }) {
           </span>
         </div>
       )}
-      {state.lastError && <span className="error">Letzter Lauf fehlgeschlagen: {state.lastError}</span>}
+      {state.lastError && (state.lastError.startsWith("Hinweis:") ? <span className="muted">{state.lastError}</span> : <span className="error">Letzter Lauf fehlgeschlagen: {state.lastError}</span>)}
+      <div className="row">
+        <span className="muted">
+          Search Console: {!state.gsc.property ? "nicht eingerichtet (Property bei der Website eintragen)" : !state.gsc.keyFound ? "Schlüssel fehlt (JSON-Datei in den Ordner „secrets“ legen und neu starten)" : `verbunden mit ${state.gsc.property}`}
+        </span>
+        {state.gsc.property && state.gsc.keyFound && (
+          <button
+            className="secondary"
+            disabled={busy}
+            onClick={() =>
+              void act(async () => {
+                const r = await api.post<{ queries: number; impressions: number }>(`/api/sites/${site.id}/gsc/test`);
+                setTestInfo(`Verbindung in Ordnung: ${r.queries} Suchbegriffe, ${r.impressions} Einblendungen in den letzten 28 Tagen.`);
+              })
+            }
+          >
+            Verbindung prüfen
+          </button>
+        )}
+      </div>
+      {testInfo && <span className="ok">{testInfo}</span>}
       {state.enabled && !state.runRequested && state.ideas.length === 0 && state.lastRunAt && !state.lastError && <span className="muted">Beim letzten Lauf wurden keine neuen Themen gefunden.</span>}
       {state.ideas.map((idea) => (
         <div key={idea.id} className="card stack" style={{ boxShadow: "none" }}>
@@ -61,6 +83,7 @@ function ScoutCard({ site }: { site: Site }) {
           </div>
           <span className="muted">{[idea.area, idea.keyword && `Suchbegriff: ${idea.keyword}`].filter(Boolean).join(" · ")}</span>
           <span><strong>Warum jetzt:</strong> {idea.whyNow}</span>
+          {idea.demandNote && <span><strong>Suchdaten:</strong> {idea.demandNote}</span>}
           {idea.angle && <span><strong>Nutzen für Leser:</strong> {idea.angle}</span>}
           {idea.sources.length > 0 && (
             <span className="muted">

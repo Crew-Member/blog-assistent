@@ -40,6 +40,7 @@ export interface Site {
   closingHtml: string;
   preferredLinks: string;
   portfolio: string;
+  gscProperty: string;
   competitionCheck: boolean;
   aiNoticeText: string;
   labelAiImages: boolean;
@@ -268,6 +269,7 @@ export interface TopicIdea {
   urgency: "high" | "medium" | "low";
   whyNow: string;
   angle: string;
+  demandNote: string;
   sources: { title: string; url: string }[];
   postId: string | null;
   doneAt: string | null;
@@ -281,6 +283,7 @@ export interface ScoutState {
   dismissed: number;
   ideas: TopicIdea[];
   done: TopicIdea[];
+  gsc: { property: string; keyFound: boolean; email: string | null };
 }
 
 export interface TitleSuggestion {

@@ -7,6 +7,7 @@ import { formatConfigError, loadConfig } from "./config.js";
 import { prisma } from "./db/client.js";
 import { FileStorage } from "./lib/storage.js";
 import { setUsageSink } from "./lib/usage.js";
+import { createSearchConsole, findKeyFile } from "./lib/gsc.js";
 import { createUsageSink } from "./lib/usage-db.js";
 import { buildServer } from "./server.js";
 import { describeAiSetup } from "./startup-info.js";
@@ -24,9 +25,12 @@ const storage = new FileStorage(config.STORAGE_DIR);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ai = createAiService(config);
 const images = createImageProvider(config);
-const app = buildServer({ config, prisma, storage, ai, images, webDir: path.resolve(here, "../../web/dist") });
+const keyFile = findKeyFile(config.GSC_KEY_FILE);
+const searchConsole = createSearchConsole(keyFile);
+console.log(keyFile ? `Search Console: Schlüssel gefunden (${searchConsole.email()})` : "Search Console: kein Schlüssel gefunden (optional, Ordner secrets)");
+const app = buildServer({ config, prisma, storage, ai, images, searchConsole, webDir: path.resolve(here, "../../web/dist") });
 setUsageSink(createUsageSink(prisma, { inputPerMTok: config.AI_PRICE_INPUT_PER_MTOK, outputPerMTok: config.AI_PRICE_OUTPUT_PER_MTOK, searchPer1000: config.AI_PRICE_SEARCH_PER_1000, lightInputPerMTok: config.AI_PRICE_LIGHT_INPUT_PER_MTOK, lightOutputPerMTok: config.AI_PRICE_LIGHT_OUTPUT_PER_MTOK }));
-const worker = new Worker({ prisma, ai, storage, images, imageCostUsd: config.IMAGE_COST_USD });
+const worker = new Worker({ prisma, ai, storage, images, searchConsole, imageCostUsd: config.IMAGE_COST_USD });
 
 const shutdown = async () => {
   worker.stop();

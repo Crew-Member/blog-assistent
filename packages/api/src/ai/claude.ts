@@ -149,12 +149,13 @@ const SCOUT_SCHEMA = {
           urgency: { type: "string", enum: ["high", "medium", "low"] },
           whyNow: { type: "string" },
           angle: { type: "string" },
+          demandNote: { type: "string" },
           sources: {
             type: "array",
             items: { type: "object", properties: { title: { type: "string" }, url: { type: "string" } }, required: ["title", "url"], additionalProperties: false },
           },
         },
-        required: ["title", "keyword", "area", "urgency", "whyNow", "angle", "sources"],
+        required: ["title", "keyword", "area", "urgency", "whyNow", "angle", "demandNote", "sources"],
         additionalProperties: false,
       },
     },
@@ -432,9 +433,10 @@ export class ClaudeAiService implements AiService {
     return this.structured(COMPETITION_SYSTEM, content, COMPETITION_SCHEMA, (v) => competitionInsightsSchema.parse(v));
   }
 
-  async scoutTopics(input: { site: SiteProfile; portfolio: string; existingTitles: string[]; rejectedTitles: string[]; today: string }): Promise<ScoutResult> {
+  async scoutTopics(input: { site: SiteProfile; portfolio: string; existingTitles: string[]; rejectedTitles: string[]; today: string; demand?: string }): Promise<ScoutResult> {
     const list = (items: string[]) => (items.length ? items.map((t) => `- ${t}`).join("\n") : "(keine)");
-    const material = `Heute ist der ${input.today}.\n\nPortfolio der Website (Rechtsgebiete und Schwerpunkte):\n${input.portfolio}`;
+    const demand = input.demand ? `\n\nSuchdaten der Website aus der Google Search Console (echte Suchanfragen der Nutzer):\n${input.demand}` : "";
+    const material = `Heute ist der ${input.today}.\n\nPortfolio der Website (Rechtsgebiete und Schwerpunkte):\n${input.portfolio}${demand}`;
     const found = await this.searchNotes(SCOUT_SEARCH_SYSTEM, `${siteBlock(input.site)}\n\n${material}\n\nFinde aktuell gefragte Themen aus diesem Portfolio.`);
     const sourceList = found.sources.map((s) => `- ${s.title}: ${s.url}`).join("\n") || "(keine)";
     const content: Anthropic.ContentBlockParam[] = [

@@ -298,3 +298,58 @@ describe("castPeople", () => {
     expect(runs.size).toBeGreaterThan(10);
   });
 });
+
+describe("Search Console", () => {
+  it("fasst Suchbegriffe zu wachsenden Begriffen, Luecken und Spitzenreitern zusammen", async () => {
+    const { summarizeDemand, demandPeriods } = await import("./gsc.js");
+    const text = summarizeDemand(
+      [
+        { query: "ki verordnung fristen", impressions: 300, clicks: 9, position: 14.2 },
+        { query: "dsgvo bussgeld", impressions: 500, clicks: 40, position: 4.1 },
+        { query: "selten", impressions: 3, clicks: 0, position: 30 },
+      ],
+      [{ query: "ki verordnung fristen", impressions: 100, clicks: 2, position: 20 }, { query: "dsgvo bussgeld", impressions: 480, clicks: 38, position: 4 }],
+    );
+    expect(text).toContain("Wachsende Suchbegriffe");
+    expect(text).toContain("„ki verordnung fristen“: 300 Einblendungen (Vorperiode 100, +200 %)");
+    expect(text).toContain("Lücken");
+    expect(text).not.toContain("„selten“");
+    expect(summarizeDemand([], [])).toBe("");
+    const p = demandPeriods(new Date("2026-10-15T12:00:00Z"));
+    expect(p.current).toEqual(["2026-09-15", "2026-10-12"]);
+    expect(p.previous).toEqual(["2026-08-18", "2026-09-14"]);
+  });
+
+  it("meldet sich per JWT an und liest Suchbegriffe; erklaert fehlenden Zugriff", async () => {
+    const { createSearchConsole, findKeyFile } = await import("./gsc.js");
+    const { generateKeyPairSync } = await import("node:crypto");
+    const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const nodePath = await import("node:path");
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const dir = mkdtempSync(nodePath.join(tmpdir(), "gsc-"));
+    mkdirSync(nodePath.join(dir, "secrets"));
+    const file = nodePath.join(dir, "secrets", "key.json");
+    writeFileSync(file, JSON.stringify({ type: "service_account", client_email: "dienst@projekt.iam.gserviceaccount.com", private_key: privateKey.export({ type: "pkcs8", format: "pem" }).toString() }));
+    expect(findKeyFile(undefined, dir)).toBe(file);
+    expect(findKeyFile("key.json", nodePath.join(dir, "secrets"))).toBe(file);
+    expect(findKeyFile(undefined, mkdtempSync(nodePath.join(tmpdir(), "leer-")))).toBeUndefined();
+
+    const calls: { url: string; auth?: string; body?: string }[] = [];
+    const fetcher = (async (url: string, init?: RequestInit) => {
+      calls.push({ url, auth: (init?.headers as Record<string, string> | undefined)?.authorization, body: String(init?.body) });
+      if (url.includes("oauth2")) return new Response(JSON.stringify({ access_token: "tok", expires_in: 3600 }));
+      if (url.includes(encodeURIComponent("https://geschlossen.example/"))) return new Response("{}", { status: 403 });
+      return new Response(JSON.stringify({ rows: [{ keys: ["dsgvo"], clicks: 3, impressions: 40, position: 7.5 }] }));
+    }) as typeof fetch;
+    const sc = createSearchConsole(file, fetcher);
+    expect(sc.configured()).toBe(true);
+    expect(sc.email()).toBe("dienst@projekt.iam.gserviceaccount.com");
+    expect(await sc.queries("https://kirmse.eu/", "2026-09-01", "2026-09-28")).toEqual([{ query: "dsgvo", clicks: 3, impressions: 40, position: 7.5 }]);
+    expect(calls[0]?.body).toContain("jwt-bearer");
+    expect(calls[1]?.url).toContain("/sites/https%3A%2F%2Fkirmse.eu%2F/searchAnalytics/query");
+    expect(calls[1]?.auth).toBe("Bearer tok");
+    await expect(sc.queries("https://geschlossen.example/", "a", "b")).rejects.toThrow(/dienst@projekt\.iam\.gserviceaccount\.com/);
+    expect(createSearchConsole(undefined, fetcher).configured()).toBe(false);
+  });
+});

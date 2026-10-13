@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { explainAiError } from "./ai/errors.js";
+import type { SearchConsole } from "./lib/gsc.js";
 import type { AiDocument, AiService, CompetitionGuidance, DraftResult, FactCheckResult, ResearchResult, SiteProfile, TopicProposal } from "./ai/types.js";
 import { escapeHtml, sanitizePostHtml, applyLinkPolicy, urlKey } from "./lib/html.js";
 import { fetchSitePosts } from "./lib/wordpress.js";
@@ -24,6 +25,8 @@ export interface PipelineDeps {
   fetcher?: typeof fetch;
   /** Kosten je erzeugtem Bild (USD) fuer die Kostenuebersicht. */
   imageCostUsd?: number;
+  /** Google Search Console (Nachfragedaten fuer den Themen-Scout); ohne Schluessel nicht vorhanden. */
+  searchConsole?: SearchConsole;
 }
 
 function profileOf(site: { name: string; language: string; audience: string; tone: string; styleGuide: string }): SiteProfile {

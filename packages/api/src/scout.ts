@@ -1,4 +1,5 @@
 import { explainAiError } from "./ai/errors.js";
+import { demandPeriods, summarizeDemand } from "./lib/gsc.js";
 import { fetchAllSitePosts, fetchSiteCategories } from "./lib/wordpress.js";
 import type { PipelineDeps } from "./pipeline.js";
 import { withUsageContext } from "./lib/usage.js";
@@ -33,6 +34,23 @@ async function runScoutRun(deps: PipelineDeps, siteId: string, now: Date): Promi
     const portfolio = portfolioText(site.portfolio, categories);
     if (!portfolio) throw new Error("Das Portfolio ist leer. Trage bei der Website Schwerpunkte ein oder gib die Adresse an, damit die Kategorien gelesen werden können.");
 
+    // Nachfragedaten aus der Search Console (optional). Fehler stoppen den Lauf nicht, werden aber als Hinweis gemeldet.
+    let demand = "";
+    let notice = "";
+    const sc = deps.searchConsole;
+    if (site.gscProperty && sc?.configured()) {
+      try {
+        const periods = demandPeriods(now);
+        const [current, before] = await Promise.all([sc.queries(site.gscProperty, ...periods.current), sc.queries(site.gscProperty, ...periods.previous)]);
+        demand = summarizeDemand(current, before);
+        if (!demand) notice = "Hinweis: Die Search Console lieferte für die letzten Wochen keine Suchbegriffe.";
+      } catch (error) {
+        notice = `Hinweis: Die Search Console konnte nicht gelesen werden, der Lauf erfolgte ohne Suchdaten. ${error instanceof Error ? error.message : String(error)}`;
+      }
+    } else if (site.gscProperty) {
+      notice = "Hinweis: Für die Search Console wurde kein Schlüssel gefunden (Ordner secrets).";
+    }
+
     const previous = await prisma.topicIdea.findMany({ where: { siteId } });
     const rejected = previous.filter((i) => i.dismissed).map((i) => i.title);
     const result = await ai.scoutTopics({
@@ -41,6 +59,7 @@ async function runScoutRun(deps: PipelineDeps, siteId: string, now: Date): Promi
       existingTitles: [...previous.filter((i) => i.doneAt || i.postId).map((i) => i.title), ...posts.map((p) => p.title)],
       rejectedTitles: rejected,
       today: now.toISOString().slice(0, 10),
+      ...(demand ? { demand } : {}),
     });
 
     const rejectedKeys = new Set(rejected.map((t) => t.toLowerCase()));
@@ -54,9 +73,9 @@ async function runScoutRun(deps: PipelineDeps, siteId: string, now: Date): Promi
     await prisma.$transaction([
       prisma.topicIdea.deleteMany({ where: { siteId, dismissed: false, postId: null, doneAt: null } }),
       prisma.topicIdea.createMany({
-        data: ideas.map((i) => ({ siteId, title: i.title, keyword: i.keyword.trim().slice(0, 120), area: i.area.trim().slice(0, 80), urgency: i.urgency, whyNow: i.whyNow, angle: i.angle, sources: i.sources })),
+        data: ideas.map((i) => ({ siteId, title: i.title, keyword: i.keyword.trim().slice(0, 120), area: i.area.trim().slice(0, 80), urgency: i.urgency, whyNow: i.whyNow, angle: i.angle, demandNote: demand ? i.demandNote.trim().slice(0, 300) : "", sources: i.sources })),
       }),
-      prisma.site.update({ where: { id: siteId }, data: { scoutLastError: "" } }),
+      prisma.site.update({ where: { id: siteId }, data: { scoutLastError: notice.slice(0, 600) } }),
     ]);
   } catch (error) {
     await prisma.site.updateMany({ where: { id: siteId }, data: { scoutLastError: explainAiError(error).slice(0, 600) } });
