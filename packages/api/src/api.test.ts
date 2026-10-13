@@ -553,7 +553,22 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect(seen[1]?.rejectedTitles).toEqual(["Niedrig"]);
     const after = (await app.inject({ method: "GET", url: `/api/sites/${siteId}/scout`, headers: { cookie } })).json();
     expect(after.dismissed).toBe(1);
-    expect(after.ideas.filter((i: { postId: string | null }) => i.postId)).toHaveLength(1);
+    expect(after.done.filter((i: { postId: string | null }) => i.postId)).toHaveLength(1);
+
+    // Manuell als umgesetzt markieren: verschwindet aus der Liste, bleibt ueber Laeufe erhalten und wird der KI als vorhanden gemeldet
+    const open = after.ideas[0];
+    expect(open).toBeDefined();
+    await app.inject({ method: "POST", url: `/api/scout/ideas/${open.id}/done`, headers: { cookie }, payload: { done: true } });
+    const marked = (await app.inject({ method: "GET", url: `/api/sites/${siteId}/scout`, headers: { cookie } })).json();
+    expect(marked.ideas.find((i: { id: string }) => i.id === open.id)).toBeUndefined();
+    expect(marked.done.map((i: { id: string }) => i.id)).toContain(open.id);
+    await app.inject({ method: "POST", url: `/api/sites/${siteId}/scout/run`, headers: { cookie } });
+    await worker.tick();
+    expect(seen[2]?.existingTitles).toContain(open.title);
+    const rerun = (await app.inject({ method: "GET", url: `/api/sites/${siteId}/scout`, headers: { cookie } })).json();
+    expect(rerun.done.map((i: { id: string }) => i.id)).toContain(open.id);
+    await app.inject({ method: "POST", url: `/api/scout/ideas/${open.id}/done`, headers: { cookie }, payload: { done: false } });
+    expect((await app.inject({ method: "GET", url: `/api/sites/${siteId}/scout`, headers: { cookie } })).json().ideas.map((i: { id: string }) => i.id)).toContain(open.id);
   });
 
   it("gibt dem Bildvorschlag Sprache und zuletzt verwendete Bildideen mit", async () => {

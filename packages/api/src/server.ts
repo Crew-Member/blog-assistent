@@ -678,10 +678,12 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
     if (!site) return reply.code(404).send({ error: "Website nicht gefunden" });
     const all = await prisma.topicIdea.findMany({ where: { siteId: request.params.id } });
     const rank: Record<string, number> = { high: 0, medium: 1, low: 2 };
+    const isDone = (i: { postId: string | null; doneAt: Date | null }) => Boolean(i.postId || i.doneAt);
+    const done = all.filter((i) => !i.dismissed && isDone(i)).sort((a, b) => (b.doneAt ?? b.createdAt).getTime() - (a.doneAt ?? a.createdAt).getTime());
     const ideas = all
-      .filter((i) => !i.dismissed)
+      .filter((i) => !i.dismissed && !isDone(i))
       .sort((a, b) => (rank[a.urgency] ?? 1) - (rank[b.urgency] ?? 1) || a.createdAt.getTime() - b.createdAt.getTime());
-    return { enabled: site.scoutEnabled, lastRunAt: site.scoutLastRunAt, runRequested: site.scoutRunRequested, lastError: site.scoutLastError, dismissed: all.filter((i) => i.dismissed).length, ideas };
+    return { enabled: site.scoutEnabled, lastRunAt: site.scoutLastRunAt, runRequested: site.scoutRunRequested, lastError: site.scoutLastError, dismissed: all.filter((i) => i.dismissed).length, ideas, done };
   });
 
   app.put<{ Params: { id: string } }>("/api/sites/:id/scout", async (request, reply) => {
@@ -705,6 +707,14 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, webD
   });
 
   // Macht aus einer Themenidee einen Beitrag: Anlass, Blickwinkel und Quellen gehen als Ausgangsmaterial in die Recherche.
+  // Markiert eine Idee als umgesetzt (z. B. weil der Beitrag ausserhalb des Tools entstanden ist) oder nimmt die Markierung zurueck.
+  app.post<{ Params: { id: string } }>("/api/scout/ideas/:id/done", async (request, reply) => {
+    const body = z.object({ done: z.boolean() }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "Ungültige Eingabe" });
+    const { count } = await prisma.topicIdea.updateMany({ where: { id: request.params.id }, data: { doneAt: body.data.done ? new Date() : null } });
+    return count ? { ok: true } : reply.code(404).send({ error: "Themenidee nicht gefunden" });
+  });
+
   app.post<{ Params: { id: string } }>("/api/scout/ideas/:id/post", async (request, reply) => {
     const idea = await prisma.topicIdea.findUnique({ where: { id: request.params.id } });
     if (!idea) return reply.code(404).send({ error: "Themenidee nicht gefunden" });

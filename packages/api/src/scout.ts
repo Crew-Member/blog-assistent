@@ -38,7 +38,7 @@ async function runScoutRun(deps: PipelineDeps, siteId: string, now: Date): Promi
     const result = await ai.scoutTopics({
       site: profile,
       portfolio,
-      existingTitles: posts.map((p) => p.title),
+      existingTitles: [...previous.filter((i) => i.doneAt || i.postId).map((i) => i.title), ...posts.map((p) => p.title)],
       rejectedTitles: rejected,
       today: now.toISOString().slice(0, 10),
     });
@@ -50,9 +50,9 @@ async function runScoutRun(deps: PipelineDeps, siteId: string, now: Date): Promi
     const rank: Record<string, number> = { high: 0, medium: 1, low: 2 };
     ideas.sort((a, b) => (rank[a.urgency] ?? 1) - (rank[b.urgency] ?? 1));
 
-    // Neue Vorschlaege ersetzen die alten, soweit diese weder abgelehnt noch in einen Beitrag uebernommen wurden.
+    // Neue Vorschlaege ersetzen die alten, soweit diese weder abgelehnt noch umgesetzt (markiert oder in einen Beitrag uebernommen) wurden.
     await prisma.$transaction([
-      prisma.topicIdea.deleteMany({ where: { siteId, dismissed: false, postId: null } }),
+      prisma.topicIdea.deleteMany({ where: { siteId, dismissed: false, postId: null, doneAt: null } }),
       prisma.topicIdea.createMany({
         data: ideas.map((i) => ({ siteId, title: i.title, keyword: i.keyword.trim().slice(0, 120), area: i.area.trim().slice(0, 80), urgency: i.urgency, whyNow: i.whyNow, angle: i.angle, sources: i.sources })),
       }),

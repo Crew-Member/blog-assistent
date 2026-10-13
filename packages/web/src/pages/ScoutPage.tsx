@@ -83,10 +83,27 @@ function ScoutCard({ site }: { site: Site }) {
                 Beitrag dazu erstellen
               </button>
             )}
-            {!idea.postId && <button className="secondary" disabled={busy} onClick={() => void act(() => api.post(`/api/scout/ideas/${idea.id}/dismiss`))}>Ablehnen</button>}
+            <button className="secondary" disabled={busy} onClick={() => void act(() => api.post(`/api/scout/ideas/${idea.id}/done`, { done: true }))}>Als umgesetzt markieren</button>
+            <button className="secondary" disabled={busy} onClick={() => void act(() => api.post(`/api/scout/ideas/${idea.id}/dismiss`))}>Ablehnen</button>
           </div>
         </div>
       ))}
+      {state.done.length > 0 && (
+        <details>
+          <summary>Umgesetzt ({state.done.length})</summary>
+          <div className="list">
+            {state.done.map((idea) => (
+              <div key={idea.id} className="list-item">
+                <div className="list-main">
+                  <div className="list-title">{idea.title}</div>
+                  <div className="list-meta">{idea.area && <span className="chip">{idea.area}</span>}{idea.doneAt && <span>markiert {relTime(idea.doneAt)}</span>}{idea.postId && <a href={`#/posts/${idea.postId}`}>Beitrag ansehen →</a>}</div>
+                </div>
+                {!idea.postId && <button className="secondary" disabled={busy} onClick={() => void act(() => api.post(`/api/scout/ideas/${idea.id}/done`, { done: false }))}>Markierung entfernen</button>}
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
       {error && <span className="error">{error}</span>}
     </div>
   );

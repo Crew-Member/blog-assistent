@@ -67,6 +67,8 @@ model TopicIdea {
   sources     Json     @default("[]")
   dismissed   Boolean  @default(false)
   postId      String?
+  // Vom Nutzer als umgesetzt markiert (auch fuer Themen, die ausserhalb des Tools erledigt wurden).
+  doneAt      DateTime?
   createdAt   DateTime @default(now())
 }
 

@@ -270,6 +270,7 @@ export interface TopicIdea {
   angle: string;
   sources: { title: string; url: string }[];
   postId: string | null;
+  doneAt: string | null;
 }
 
 export interface ScoutState {
@@ -279,6 +280,7 @@ export interface ScoutState {
   lastError: string;
   dismissed: number;
   ideas: TopicIdea[];
+  done: TopicIdea[];
 }
 
 export interface TitleSuggestion {
