@@ -15,7 +15,8 @@ export interface SearchConsole {
   configured(): boolean;
   /** E-Mail-Adresse des Dienstkontos (zum Freigeben in der Search Console). */
   email(): string | undefined;
-  queries(property: string, startDate: string, endDate: string): Promise<GscRow[]>;
+  /** page: nur Suchanfragen, die auf genau diese Seitenadresse gefuehrt haben. */
+  queries(property: string, startDate: string, endDate: string, opts?: { page?: string }): Promise<GscRow[]>;
 }
 
 export class GscError extends Error {
@@ -101,13 +102,20 @@ export function createSearchConsole(keyFile: string | undefined, fetcher: typeof
   return {
     configured: () => Boolean(key),
     email: () => key?.client_email,
-    async queries(rawProperty, startDate, endDate) {
+    async queries(rawProperty, startDate, endDate, opts) {
       const property = normalizeProperty(rawProperty);
       const bearer = await accessToken();
       const res = await fetcher(`https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(property)}/searchAnalytics/query`, {
         method: "POST",
         headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json" },
-        body: JSON.stringify({ startDate, endDate, dimensions: ["query"], rowLimit: 1000, dataState: "final" }),
+        body: JSON.stringify({
+          startDate,
+          endDate,
+          dimensions: ["query"],
+          rowLimit: 1000,
+          dataState: "final",
+          ...(opts?.page ? { dimensionFilterGroups: [{ filters: [{ dimension: "page", operator: "equals", expression: opts.page }] }] } : {}),
+        }),
       });
       if (res.status === 403 || res.status === 404) {
         const detail = (await res.json().catch(() => ({}))) as { error?: { message?: string; status?: string; errors?: { reason?: string }[]; details?: { reason?: string }[] } };
@@ -204,4 +212,36 @@ export function demandNoteFor(idea: { title: string; keyword: string }, current:
       return `„${r.query}“: ${r.impressions} Einblendungen in 28 Tagen (${trend}), Position ${r.position.toFixed(1).replace(".", ",")}`;
     })
     .join(" · ");
+}
+
+/**
+ * Suchdaten fuer die Ueberarbeitung eines Beitrags: Suchanfragen, ueber die genau diese Seite gefunden wird (mit Trend und Chancen),
+ * plus verwandte Suchbegriffe der Website, bei denen die Seite nicht auftaucht. Leer, wenn keine Daten vorliegen.
+ */
+export function summarizePageDemand(page: GscRow[], pagePrevious: GscRow[], site: GscRow[], title: string): { text: string; count: number } {
+  const prev = new Map(pagePrevious.map((r) => [r.query.toLowerCase(), r]));
+  const pos = (r: GscRow) => r.position.toFixed(1).replace(".", ",");
+  const top = [...page].sort((a, b) => b.impressions - a.impressions).slice(0, 25);
+  const lines = top.map((r) => {
+    const p = prev.get(r.query.toLowerCase());
+    const trend = !p ? "neu" : p.impressions > 0 ? `${r.impressions >= p.impressions ? "+" : ""}${Math.round(((r.impressions - p.impressions) / p.impressions) * 100)} %` : "neu";
+    const chance = r.position > 5 && r.impressions >= 20 ? " [Chance: viele Einblendungen, aber nicht in den Top 5]" : "";
+    return `- „${r.query}“: ${r.impressions} Einblendungen (${trend}), ${r.clicks} Klicks, Position ${pos(r)}${chance}`;
+  });
+  const own = new Set(page.map((r) => r.query.toLowerCase()));
+  const titleStems = new Set(stems(title));
+  const related = site
+    .filter((r) => !own.has(r.query.toLowerCase()) && r.impressions >= 20)
+    .filter((r) => {
+      const q = stems(r.query);
+      const overlap = q.filter((w) => titleStems.has(w)).length;
+      return q.length > 0 && overlap >= Math.ceil(q.length * 0.6) && (overlap >= 2 || q.length === 1);
+    })
+    .sort((a, b) => b.impressions - a.impressions)
+    .slice(0, 8)
+    .map((r) => `- „${r.query}“: ${r.impressions} Einblendungen, Position ${pos(r)} (auf einer anderen Seite)`);
+  const parts: string[] = [];
+  if (lines.length) parts.push(`Suchanfragen, über die dieser Beitrag in der Google-Suche gefunden wird (letzte 28 Tage):\n${lines.join("\n")}`);
+  if (related.length) parts.push(`Verwandte Suchbegriffe der Website, bei denen dieser Beitrag nicht auftaucht:\n${related.join("\n")}`);
+  return { text: parts.join("\n\n").slice(0, 5000), count: page.length };
 }

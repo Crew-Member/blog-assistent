@@ -67,6 +67,8 @@ export interface RevisionInput {
   html: string;
   /** Wunsch des Nutzers, was geaendert werden soll (kann leer sein). */
   instructions: string;
+  /** Suchdaten der Search Console zu diesem Beitrag (optional, Text fuer die KI). */
+  searchData?: string;
 }
 
 export interface DraftInput {

@@ -125,16 +125,19 @@ Du ueberarbeitest einen BESTEHENDEN, bereits veroeffentlichten Beitrag der Websi
 - Fakten, die nur im Originalbeitrag stehen und in der Recherche weder bestaetigt noch widerlegt werden, darfst du uebernehmen, wenn sie unverdaechtig sind; markiere zweifelhafte in unverifiedClaims.
 - Verlinke den bestehenden Beitrag selbst NICHT (er wird durch deine Fassung ersetzt oder ergaenzt), auch nicht dessen alte Adresse; Links im Originaltext, die auf ihn selbst zeigen, entfernst du.
 - title, metaDescription, slug, focusKeyword gelten fuer die ueberarbeitete Fassung; das Fokus-Keyword des Originals darf beibehalten werden, wenn es passt.
-- changeSummary: 3 bis 8 kurze Stichpunkte (Zeilen mit "- "), was gegenueber dem Original geaendert, ergaenzt oder gestrichen wurde und warum.
+- Liegen Suchdaten der Search Console vor: Waehle das Fokus-Keyword bevorzugt aus den Suchanfragen mit den meisten Einblendungen, sofern es zum Beitrag passt. Deckst du wichtige Suchanfragen mit \"Chance\" oder verwandte Suchbegriffe sinnvoll ab (Ueberschrift, Einstieg, passender Abschnitt - nur wenn es inhaltlich passt und der Text nicht kuenstlich aufgeblaeht wird), und nenne im changeSummary, welche Suchanfragen du beruecksichtigt hast. Nenne die Zahlen nicht im Beitragstext und stopfe keine Keywords.\n- changeSummary: 3 bis 8 kurze Stichpunkte (Zeilen mit "- "), was gegenueber dem Original geaendert, ergaenzt oder gestrichen wurde und warum.
 
 Regeln:${DRAFT_SYSTEM.split("\n\nRegeln:")[1] ?? ""}`;
 
-export function revisionBlock(r: { title: string; url: string; html: string; instructions: string }): string {
+export function revisionBlock(r: { title: string; url: string; html: string; instructions: string; searchData?: string }): string {
   return [
     `Bestehender Beitrag "${r.title}" (${r.url}), HTML:`,
     r.html.slice(0, 60000),
+    r.searchData ? `Suchdaten aus der Google Search Console (echte Zahlen der Website):\n${r.searchData}` : "",
     r.instructions.trim() ? `Wuensche des Nutzers fuer die Ueberarbeitung:\n${r.instructions.trim()}` : "Keine besonderen Wuensche - pruefe auf Aktualitaet, Verstaendlichkeit und SEO und ueberarbeite entsprechend.",
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export function relatedPostsBlock(posts: { title: string; url: string; excerpt: string }[]): string {

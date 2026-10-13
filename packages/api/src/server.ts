@@ -921,8 +921,8 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, sear
       ? seoChecks({ title: post.title ?? "", slug: post.slug ?? "", metaDescription: post.metaDescription ?? "", focusKeyword: post.focusKeyword ?? "", contentHtml: post.contentHtml ?? "" })
       : [];
     const { image, revisionSource, previousContentHtml, ...rest } = post;
-    const rev = revisionSource as { wpPostId?: number; title?: string; url?: string; instructions?: string; builder?: string } | null;
-    const revisionOf = rev ? { wpPostId: rev.wpPostId ?? 0, title: rev.title ?? "", url: rev.url ?? "", instructions: rev.instructions ?? "", builder: rev.builder ?? null } : null;
+    const rev = revisionSource as { wpPostId?: number; title?: string; url?: string; instructions?: string; builder?: string; searchQueries?: number } | null;
+    const revisionOf = rev ? { wpPostId: rev.wpPostId ?? 0, title: rev.title ?? "", url: rev.url ?? "", instructions: rev.instructions ?? "", builder: rev.builder ?? null, searchQueries: rev.searchQueries ?? null } : null;
     return { ...rest, revisionOf, canUndoRefine: Boolean(previousContentHtml), image: image ? publicImage(image) : null, seoChecks: seo };
   });
 

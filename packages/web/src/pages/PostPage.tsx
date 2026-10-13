@@ -469,6 +469,8 @@ function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: bool
       {seo && <div className={seo.status === "set" ? "ok" : "error"}>{seo.message}</div>}
       {dirty && <div className="error">Es gibt ungespeicherte Änderungen. Gesendet wird der gespeicherte Stand – bitte erst speichern.</div>}
 
+      {post.revisionOf?.searchQueries ? <span className="muted">Bei der Überarbeitung berücksichtigt: {post.revisionOf.searchQueries} Suchanfragen aus der Search Console, über die dieser Beitrag gefunden wird.</span> : null}
+
       {post.revisionOf && !draftFlow && !prep && (
         <div className="stack">
           {!builder && (

@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { explainAiError } from "./ai/errors.js";
-import type { SearchConsole } from "./lib/gsc.js";
-import type { AiDocument, AiService, CompetitionGuidance, DraftResult, FactCheckResult, ResearchResult, SiteProfile, TopicProposal } from "./ai/types.js";
+import { demandPeriods, summarizePageDemand, type SearchConsole } from "./lib/gsc.js";
+import type { RevisionInput, AiDocument, AiService, CompetitionGuidance, DraftResult, FactCheckResult, ResearchResult, SiteProfile, TopicProposal } from "./ai/types.js";
 import { escapeHtml, sanitizePostHtml, applyLinkPolicy, urlKey } from "./lib/html.js";
 import { fetchSitePosts } from "./lib/wordpress.js";
 import { parsePreferredLinks } from "./lib/links.js";
@@ -243,7 +243,26 @@ async function generatePostRun(deps: PipelineDeps, postId: string): Promise<void
 
     const styleSamples = post.site.styleSamples.map((s) => ({ title: s.title, text: s.text }));
     const rev = post.revisionSource as { wpPostId?: number; title?: string; url?: string; html?: string; instructions?: string; publishedAt?: string } | null;
-    const revision = rev ? { title: rev.title ?? "", url: rev.url ?? "", html: sanitizePostHtml(rev.html ?? ""), instructions: rev.instructions ?? "" } : undefined;
+    const revision: RevisionInput | undefined = rev ? { title: rev.title ?? "", url: rev.url ?? "", html: sanitizePostHtml(rev.html ?? ""), instructions: rev.instructions ?? "" } : undefined;
+    // Suchdaten zur Seite aus der Search Console (optional; Fehler stoppen die Ueberarbeitung nie).
+    if (revision && rev && revision.url && post.site.gscProperty && deps.searchConsole?.configured()) {
+      try {
+        const sc = deps.searchConsole;
+        const periods = demandPeriods();
+        const [pageNow, pageBefore, siteNow] = await Promise.all([
+          sc.queries(post.site.gscProperty, ...periods.current, { page: revision.url }),
+          sc.queries(post.site.gscProperty, ...periods.previous, { page: revision.url }),
+          sc.queries(post.site.gscProperty, ...periods.current),
+        ]);
+        const summary = summarizePageDemand(pageNow, pageBefore, siteNow, revision.title);
+        if (summary.text) {
+          revision.searchData = summary.text;
+          await prisma.post.update({ where: { id: postId }, data: { revisionSource: { ...rev, searchQueries: summary.count } as unknown as Prisma.InputJsonValue } });
+        }
+      } catch {
+        /* ohne Suchdaten weiter */
+      }
+    }
     // Interne Links: vorhandene Beitraege der Website (best effort - ohne Liste gibt es einfach keine internen Links).
     let relatedPosts: { title: string; url: string; excerpt: string }[] = [];
     if (post.site.baseUrl) {

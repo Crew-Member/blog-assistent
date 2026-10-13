@@ -153,7 +153,7 @@ export interface PostDetail {
   canUndoRefine: boolean;
   /** Gesetzt, wenn dieser Beitrag den veröffentlichten Originalbeitrag in WordPress ersetzt hat. */
   wpReplacedAt: string | null;
-  revisionOf: { wpPostId: number; title: string; url: string; instructions: string; builder: string | null } | null;
+  revisionOf: { wpPostId: number; title: string; url: string; instructions: string; builder: string | null; searchQueries: number | null } | null;
   id: string;
   status: PostStatus;
   error: string | null;

@@ -571,6 +571,53 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect((await app.inject({ method: "GET", url: `/api/sites/${siteId}/scout`, headers: { cookie } })).json().ideas.map((i: { id: string }) => i.id)).toContain(open.id);
   });
 
+  it("Ueberarbeitung: reicht Suchdaten der Seite aus der Search Console an die KI weiter und arbeitet ohne sie weiter", async () => {
+    wpFetcher = (async (url: string) => {
+      const u = new URL(url);
+      if (u.pathname === "/wp-json/wp/v2/posts/7") return new Response(JSON.stringify({ id: 7, title: { rendered: "Videoüberwachung am Arbeitsplatz" }, link: "https://93.184.216.34/alt/", date: "2024-01-01T00:00:00", excerpt: { rendered: "" }, content: { rendered: "<p>Text</p>" } }));
+      return new Response("[]");
+    }) as typeof fetch;
+    const calls: { page?: string }[] = [];
+    let fail = false;
+    const searchConsole = {
+      configured: () => true,
+      email: () => "dienst@projekt.iam.gserviceaccount.com",
+      queries: async (_property: string, _start: string, _end: string, opts?: { page?: string }) => {
+        const first = calls.filter((c) => c.page === opts?.page).length === 0; // 1. Abruf je Seite = aktueller Zeitraum, 2. = Vorperiode
+        calls.push({ page: opts?.page });
+        if (fail) throw new Error("kein Zugriff");
+        if (opts?.page) return first ? [{ query: "videoüberwachung arbeitsplatz", impressions: 400, clicks: 12, position: 9.4 }] : [{ query: "videoüberwachung arbeitsplatz", impressions: 200, clicks: 8, position: 8 }];
+        return [{ query: "videoüberwachung arbeitsplatz", impressions: 400, clicks: 12, position: 9.4 }, { query: "videoüberwachung arbeitsplatz erlaubt", impressions: 250, clicks: 3, position: 12 }];
+      },
+    };
+    const seen: (string | undefined)[] = [];
+    const fake = new FakeAiService();
+    ai = fakeWith({ draft: async (input) => { seen.push(input.revision?.searchData); return fake.draft(input); } });
+    const storage = new FileStorage(dir);
+    app = buildServer({ config, prisma, storage, ai, fetcher: wpFetcher, searchConsole });
+    worker = new Worker({ prisma, ai, storage, fetcher: wpFetcher, searchConsole });
+    await app.ready();
+    const login = await app.inject({ method: "POST", url: "/api/auth/login", payload: { password: "geheim-passwort" } });
+    cookie = (login.headers["set-cookie"] as string).split(";")[0] ?? "";
+    const siteId = (await app.inject({ method: "POST", url: "/api/sites", headers: { cookie }, payload: { name: "S", baseUrl: "https://93.184.216.34", gscProperty: "https://93.184.216.34/" } })).json().id as string;
+
+    const rev = await app.inject({ method: "POST", url: `/api/sites/${siteId}/revisions`, headers: { cookie }, payload: { wpPostId: 7 } });
+    await worker.tick();
+    expect(seen[0]).toContain("„videoüberwachung arbeitsplatz“: 400 Einblendungen (+100 %), 12 Klicks, Position 9,4 [Chance");
+    expect(seen[0]).toContain("„videoüberwachung arbeitsplatz erlaubt“: 250 Einblendungen");
+    expect(calls.filter((c) => c.page === "https://93.184.216.34/alt/")).toHaveLength(2);
+    const post = (await app.inject({ method: "GET", url: `/api/posts/${rev.json().id}`, headers: { cookie } })).json();
+    expect(post.status).toBe("DRAFT_READY");
+    expect(post.revisionOf.searchQueries).toBe(1);
+
+    // Search Console faellt aus: Ueberarbeitung laeuft ohne Suchdaten
+    fail = true;
+    const rev2 = await app.inject({ method: "POST", url: `/api/sites/${siteId}/revisions`, headers: { cookie }, payload: { wpPostId: 7 } });
+    await worker.tick();
+    expect(seen[1]).toBeUndefined();
+    expect((await app.inject({ method: "GET", url: `/api/posts/${rev2.json().id}`, headers: { cookie } })).json().status).toBe("DRAFT_READY");
+  });
+
   it("Themen-Scout: nutzt Search-Console-Daten, meldet Fehler als Hinweis und prueft die Verbindung", async () => {
     wpFetcher = (async () => new Response("[]")) as typeof fetch;
     const demandSeen: (string | undefined)[] = [];
