@@ -679,7 +679,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, sear
 
   // --- Themen-Scout -----------------------------------------------------------
   app.get<{ Params: { id: string } }>("/api/sites/:id/scout", async (request, reply) => {
-    const site = await prisma.site.findUnique({ where: { id: request.params.id }, select: { scoutEnabled: true, scoutLastRunAt: true, scoutRunRequested: true, scoutLastError: true, gscProperty: true } });
+    const site = await prisma.site.findUnique({ where: { id: request.params.id }, select: { scoutEnabled: true, scoutLastRunAt: true, scoutRunRequested: true, scoutLastError: true, scoutLastInfo: true, gscProperty: true } });
     if (!site) return reply.code(404).send({ error: "Website nicht gefunden" });
     const all = await prisma.topicIdea.findMany({ where: { siteId: request.params.id } });
     const rank: Record<string, number> = { high: 0, medium: 1, low: 2 };
@@ -688,7 +688,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, sear
     const ideas = all
       .filter((i) => !i.dismissed && !isDone(i))
       .sort((a, b) => (rank[a.urgency] ?? 1) - (rank[b.urgency] ?? 1) || a.createdAt.getTime() - b.createdAt.getTime());
-    return { enabled: site.scoutEnabled, lastRunAt: site.scoutLastRunAt, runRequested: site.scoutRunRequested, lastError: site.scoutLastError, dismissed: all.filter((i) => i.dismissed).length, ideas, done, gsc: { property: site.gscProperty, keyFound: Boolean(searchConsole?.configured()), email: searchConsole?.email() ?? null } };
+    return { enabled: site.scoutEnabled, lastRunAt: site.scoutLastRunAt, runRequested: site.scoutRunRequested, lastError: site.scoutLastError, lastInfo: site.scoutLastInfo, dismissed: all.filter((i) => i.dismissed).length, ideas, done, gsc: { property: site.gscProperty, keyFound: Boolean(searchConsole?.configured()), email: searchConsole?.email() ?? null } };
   });
 
   app.put<{ Params: { id: string } }>("/api/sites/:id/scout", async (request, reply) => {

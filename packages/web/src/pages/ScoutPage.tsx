@@ -74,6 +74,7 @@ function ScoutCard({ site }: { site: Site }) {
         )}
       </div>
       {testInfo && <span className="ok">{testInfo}</span>}
+      {state.lastInfo && <span className="muted">Letzter Lauf – {state.lastInfo}</span>}
       {state.enabled && !state.runRequested && state.ideas.length === 0 && state.lastRunAt && !state.lastError && <span className="muted">Beim letzten Lauf wurden keine neuen Themen gefunden.</span>}
       {state.ideas.map((idea) => (
         <div key={idea.id} className="card stack" style={{ boxShadow: "none" }}>

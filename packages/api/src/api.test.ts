@@ -586,7 +586,7 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     ai = fakeWith({
       scoutTopics: async (input) => {
         demandSeen.push(input.demand);
-        return { ideas: [{ title: "Idee", keyword: "k", area: "KI", urgency: "high", whyNow: "w", angle: "a", demandNote: "„ki verordnung fristen“: 300 Einblendungen", sources: [] }] };
+        return { ideas: [{ title: "KI-Verordnung: Neue Fristen", keyword: "ki verordnung fristen", area: "KI", urgency: "high", whyNow: "w", angle: "a", demandNote: "von der KI erfunden: 999 Einblendungen", sources: [] }] };
       },
     });
     const storage = new FileStorage(dir);
@@ -604,6 +604,9 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     const state = (await app.inject({ method: "GET", url: `/api/sites/${siteId}/scout`, headers: { cookie } })).json();
     expect(state.gsc).toEqual({ property: "https://kirmse.eu/", keyFound: true, email: "dienst@projekt.iam.gserviceaccount.com" });
     expect(state.ideas[0].demandNote).toContain("300 Einblendungen");
+    expect(state.ideas[0].demandNote).not.toContain("999");
+    expect(state.lastInfo).toContain("1 Suchbegriffe");
+    expect(state.lastInfo).toContain("1 von 1 Ideen");
     expect(state.lastError).toBe("");
 
     // Search Console faellt aus: Lauf erfolgt ohne Suchdaten, Hinweis statt Fehler, keine erfundenen Belege

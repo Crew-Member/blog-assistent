@@ -358,3 +358,20 @@ describe("Search Console", () => {
     expect(createSearchConsole(undefined, fetcher).configured()).toBe(false);
   });
 });
+
+describe("demandNoteFor", () => {
+  it("belegt Ideen nur mit passenden Suchbegriffen und echten Zahlen", async () => {
+    const { demandNoteFor } = await import("./gsc.js");
+    const now = [
+      { query: "ki verordnung fristen", impressions: 300, clicks: 9, position: 14.2 },
+      { query: "ki verordnung", impressions: 900, clicks: 30, position: 8 },
+      { query: "dsgvo bussgeld", impressions: 500, clicks: 40, position: 4.1 },
+    ];
+    const before = [{ query: "ki verordnung fristen", impressions: 100, clicks: 2, position: 20 }];
+    const note = demandNoteFor({ title: "KI-Omnibus: Neue Fristen der KI-Verordnung", keyword: "ki verordnung fristen" }, now, before);
+    expect(note).toContain("„ki verordnung“: 900 Einblendungen in 28 Tagen (neu gegenüber der Vorperiode), Position 8,0");
+    expect(note).toContain("„ki verordnung fristen“: 300 Einblendungen in 28 Tagen (+200 % gegenüber der Vorperiode), Position 14,2");
+    expect(note).not.toContain("dsgvo");
+    expect(demandNoteFor({ title: "Videoüberwachung im Betrieb", keyword: "videoüberwachung" }, now, before)).toBe("");
+  });
+});

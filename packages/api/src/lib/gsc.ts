@@ -168,3 +168,40 @@ export function summarizeDemand(current: GscRow[], previous: GscRow[]): string {
   if (top.length) parts.push(`Meistgesuchte Begriffe der Website:\n${top.map(line).join("\n")}`);
   return parts.join("\n\n").slice(0, 7000);
 }
+
+const STOP = new Set(["der", "die", "das", "und", "für", "fuer", "von", "mit", "zum", "zur", "den", "dem", "des", "ein", "eine", "einer", "im", "in", "am", "an", "auf", "bei", "nach", "neue", "neuen", "neuer", "oder", "wie", "was", "ist", "sind"]);
+
+/** Zerlegt Text in vergleichbare Wortstaemme (klein, ohne Satzzeichen, erste fuenf Buchstaben). */
+function stems(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((w) => w.length >= 3 && !STOP.has(w))
+    .map((w) => w.slice(0, 5));
+}
+
+/**
+ * Belegt eine Themenidee mit echten Suchdaten: sucht Suchbegriffe, deren Woerter (Staemme) weitgehend im Titel oder Suchbegriff der Idee vorkommen,
+ * und beschreibt die staerksten mit den gelieferten Zahlen. Leer, wenn nichts passt.
+ */
+export function demandNoteFor(idea: { title: string; keyword: string }, current: GscRow[], previous: GscRow[]): string {
+  const ideaStems = new Set(stems(`${idea.title} ${idea.keyword}`));
+  if (ideaStems.size === 0) return "";
+  const prev = new Map(previous.map((r) => [r.query.toLowerCase(), r]));
+  const hits = current
+    .filter((r) => {
+      const q = stems(r.query);
+      if (q.length === 0) return false;
+      const overlap = q.filter((w) => ideaStems.has(w)).length;
+      return overlap >= Math.ceil(q.length * 0.6) && (overlap >= 2 || q.length === 1);
+    })
+    .sort((a, b) => b.impressions - a.impressions)
+    .slice(0, 2);
+  return hits
+    .map((r) => {
+      const p = prev.get(r.query.toLowerCase());
+      const trend = !p ? "neu gegenüber der Vorperiode" : p.impressions > 0 ? `${r.impressions >= p.impressions ? "+" : ""}${Math.round(((r.impressions - p.impressions) / p.impressions) * 100)} % gegenüber der Vorperiode` : "neu gegenüber der Vorperiode";
+      return `„${r.query}“: ${r.impressions} Einblendungen in 28 Tagen (${trend}), Position ${r.position.toFixed(1).replace(".", ",")}`;
+    })
+    .join(" · ");
+}

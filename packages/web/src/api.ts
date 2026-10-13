@@ -280,6 +280,7 @@ export interface ScoutState {
   lastRunAt: string | null;
   runRequested: boolean;
   lastError: string;
+  lastInfo: string;
   dismissed: number;
   ideas: TopicIdea[];
   done: TopicIdea[];

@@ -1,5 +1,5 @@
 import { explainAiError } from "./ai/errors.js";
-import { demandPeriods, summarizeDemand } from "./lib/gsc.js";
+import { demandNoteFor, demandPeriods, summarizeDemand, type GscRow } from "./lib/gsc.js";
 import { fetchAllSitePosts, fetchSiteCategories } from "./lib/wordpress.js";
 import type { PipelineDeps } from "./pipeline.js";
 import { withUsageContext } from "./lib/usage.js";
@@ -37,17 +37,24 @@ async function runScoutRun(deps: PipelineDeps, siteId: string, now: Date): Promi
     // Nachfragedaten aus der Search Console (optional). Fehler stoppen den Lauf nicht, werden aber als Hinweis gemeldet.
     let demand = "";
     let notice = "";
+    let info = "";
+    let currentRows: GscRow[] = [];
+    let previousRows: GscRow[] = [];
     const sc = deps.searchConsole;
     if (site.gscProperty && sc?.configured()) {
       try {
         const periods = demandPeriods(now);
         const [current, before] = await Promise.all([sc.queries(site.gscProperty, ...periods.current), sc.queries(site.gscProperty, ...periods.previous)]);
+        currentRows = current;
+        previousRows = before;
         demand = summarizeDemand(current, before);
+        info = `Search Console: ${current.length} Suchbegriffe der letzten 28 Tage gelesen (${periods.current[0]} bis ${periods.current[1]}).`;
         if (!demand) notice = "Hinweis: Die Search Console lieferte für die letzten Wochen keine Suchbegriffe.";
       } catch (error) {
         notice = `Hinweis: Die Search Console konnte nicht gelesen werden, der Lauf erfolgte ohne Suchdaten. ${error instanceof Error ? error.message : String(error)}`;
       }
     } else if (site.gscProperty) {
+      info = "Search Console: nicht genutzt (kein Schlüssel).";
       notice = "Hinweis: Für die Search Console wurde kein Schlüssel gefunden (Ordner secrets).";
     }
 
@@ -69,13 +76,15 @@ async function runScoutRun(deps: PipelineDeps, siteId: string, now: Date): Promi
     const rank: Record<string, number> = { high: 0, medium: 1, low: 2 };
     ideas.sort((a, b) => (rank[a.urgency] ?? 1) - (rank[b.urgency] ?? 1));
 
+    if (currentRows.length) info += ` ${ideas.filter((i) => demandNoteFor(i, currentRows, previousRows)).length} von ${ideas.length} Ideen konnten mit Suchdaten belegt werden.`;
+
     // Neue Vorschlaege ersetzen die alten, soweit diese weder abgelehnt noch umgesetzt (markiert oder in einen Beitrag uebernommen) wurden.
     await prisma.$transaction([
       prisma.topicIdea.deleteMany({ where: { siteId, dismissed: false, postId: null, doneAt: null } }),
       prisma.topicIdea.createMany({
-        data: ideas.map((i) => ({ siteId, title: i.title, keyword: i.keyword.trim().slice(0, 120), area: i.area.trim().slice(0, 80), urgency: i.urgency, whyNow: i.whyNow, angle: i.angle, demandNote: demand ? i.demandNote.trim().slice(0, 300) : "", sources: i.sources })),
+        data: ideas.map((i) => ({ siteId, title: i.title, keyword: i.keyword.trim().slice(0, 120), area: i.area.trim().slice(0, 80), urgency: i.urgency, whyNow: i.whyNow, angle: i.angle, demandNote: demandNoteFor(i, currentRows, previousRows).slice(0, 400), sources: i.sources })),
       }),
-      prisma.site.update({ where: { id: siteId }, data: { scoutLastError: notice.slice(0, 600) } }),
+      prisma.site.update({ where: { id: siteId }, data: { scoutLastError: notice.slice(0, 600), scoutLastInfo: info.slice(0, 400) } }),
     ]);
   } catch (error) {
     await prisma.site.updateMany({ where: { id: siteId }, data: { scoutLastError: explainAiError(error).slice(0, 600) } });
