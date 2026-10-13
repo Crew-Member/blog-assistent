@@ -350,6 +350,11 @@ describe("Search Console", () => {
     expect(calls[1]?.url).toContain("/sites/https%3A%2F%2Fkirmse.eu%2F/searchAnalytics/query");
     expect(calls[1]?.auth).toBe("Bearer tok");
     await expect(sc.queries("https://geschlossen.example/", "a", "b")).rejects.toThrow(/dienst@projekt\.iam\.gserviceaccount\.com/);
+    const off = createSearchConsole(file, (async (url: string) =>
+      url.includes("oauth2")
+        ? new Response(JSON.stringify({ access_token: "t" }))
+        : new Response(JSON.stringify({ error: { message: "Search Console API has not been used in project 1 before or it is disabled.", errors: [{ reason: "accessNotConfigured" }] } }), { status: 403 })) as typeof fetch);
+    await expect(off.queries("https://kirmse.eu/", "a", "b")).rejects.toThrow(/nicht aktiviert/);
     expect(createSearchConsole(undefined, fetcher).configured()).toBe(false);
   });
 });

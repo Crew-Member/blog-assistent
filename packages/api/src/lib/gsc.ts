@@ -110,10 +110,15 @@ export function createSearchConsole(keyFile: string | undefined, fetcher: typeof
         body: JSON.stringify({ startDate, endDate, dimensions: ["query"], rowLimit: 1000, dataState: "final" }),
       });
       if (res.status === 403 || res.status === 404) {
-        throw new GscError(
-          `Kein Zugriff auf die Search-Console-Property „${property}“. Prüfe den Namen (z. B. https://kirmse.eu/ oder sc-domain:kirmse.eu) und ob ${key?.client_email ?? "das Dienstkonto"} dort unter Einstellungen → Nutzer und Berechtigungen eingetragen ist. Außerdem muss die Search Console API im Google-Cloud-Projekt aktiviert sein.`,
-          res.status,
-        );
+        const detail = (await res.json().catch(() => ({}))) as { error?: { message?: string; status?: string; errors?: { reason?: string }[]; details?: { reason?: string }[] } };
+        const google = detail.error?.message ?? "";
+        const reasons = [...(detail.error?.errors ?? []), ...(detail.error?.details ?? [])].map((e) => e.reason ?? "").join(" ");
+        const apiOff = /accessNotConfigured|SERVICE_DISABLED|has not been used in project|is disabled/i.test(`${google} ${reasons}`);
+        const who = key?.client_email ?? "das Dienstkonto";
+        const hint = apiOff
+          ? `Die Search Console API ist im Google-Cloud-Projekt nicht aktiviert (APIs und Dienste → Bibliothek → „Google Search Console API“ → Aktivieren).`
+          : `${who} ist in der Property „${property}“ nicht als Nutzer eingetragen (Search Console → Einstellungen → Nutzer und Berechtigungen) oder die Property heißt anders (z. B. mit www. oder als sc-domain:…).`;
+        throw new GscError(`Kein Zugriff auf die Search-Console-Property „${property}“. ${hint}${google ? ` Antwort von Google: ${google}` : ""}`, res.status);
       }
       const body = (await res.json().catch(() => ({}))) as { rows?: { keys?: string[]; clicks?: number; impressions?: number; position?: number }[]; error?: { message?: string } };
       if (!res.ok) throw new GscError(`Search Console: ${body.error?.message ?? `HTTP ${res.status}`}`, res.status);
