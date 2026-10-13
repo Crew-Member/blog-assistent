@@ -1,7 +1,38 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { POST_LABEL, SUBMISSION_LABEL, api, isBusy, type PostListItem, type Site, type SubmissionListItem } from "../api";
 import { useLoad } from "../hooks";
 import { EmptyState, Icon, PageHeader, POST_TONE, Stat, StatusChip, SUBMISSION_TONE, relTime } from "../ui";
+
+/** Ein- und ausklappbarer Bereich; der Zustand wird im Browser gemerkt (falls verfügbar). */
+function Section({ id, title, count, children }: { id: string; title: string; count?: number; children: ReactNode }) {
+  const key = `home-section-${id}`;
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem(key) !== "closed";
+    } catch {
+      return true;
+    }
+  });
+  function toggle() {
+    const next = !open;
+    setOpen(next);
+    try {
+      localStorage.setItem(key, next ? "open" : "closed");
+    } catch {
+      /* ohne Speicher bleibt der Zustand nur für diese Sitzung */
+    }
+  }
+  return (
+    <section className="collapsible">
+      <button type="button" className="collapsible-head" aria-expanded={open} onClick={toggle}>
+        <span className={`collapsible-chevron${open ? " open" : ""}`}><Icon name="chevron" size={18} /></span>
+        <h2>{title}</h2>
+        {count !== undefined && <span className="chip">{count}</span>}
+      </button>
+      {open && <div className="stack">{children}</div>}
+    </section>
+  );
+}
 
 function Upload({ sites, onDone }: { sites: Site[]; onDone: () => void }) {
   const [siteId, setSiteId] = useState(sites[0]?.id ?? "");
@@ -105,9 +136,13 @@ export function HomePage() {
         <Stat icon="send" label="In WordPress" value={postList.filter((p) => p.wpPostId !== null).length} tone="warn" />
       </div>
 
-      {sites.data && <Upload sites={sites.data} onDone={() => { void submissions.reload(); }} />}
+      {sites.data && (
+        <Section id="upload" title="Unterlagen hochladen">
+          <Upload sites={sites.data} onDone={() => { void submissions.reload(); }} />
+        </Section>
+      )}
 
-      <h2>Beiträge</h2>
+      <Section id="posts" title="Beiträge" count={postList.length}>
       {postList.length === 0 ? (
         <EmptyState icon="pen" title="Noch keine Beiträge">Sobald du bei einem Themenvorschlag „Beitrag erstellen“ wählst, erscheint er hier.</EmptyState>
       ) : (
@@ -131,8 +166,9 @@ export function HomePage() {
           ))}
         </div>
       )}
+      </Section>
 
-      <h2>Letzte Uploads</h2>
+      <Section id="submissions" title="Letzte Uploads" count={submissionList.length}>
       {submissionList.length === 0 ? (
         <EmptyState icon="upload" title="Noch nichts hochgeladen">Ziehe oben eine Datei in das Feld, um zu beginnen.</EmptyState>
       ) : (
@@ -155,6 +191,7 @@ export function HomePage() {
           ))}
         </div>
       )}
+      </Section>
     </>
   );
 }
