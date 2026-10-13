@@ -224,7 +224,7 @@ Motivfamilien (waehle die passendste und wechsle bewusst zwischen ihnen):
 - Nahaufnahmen: Haende bei der Arbeit, Detail am Geraet, Dokumente in Haenden (ohne lesbaren Text).
 Vermeide Klischees: kein leerer Schreibtisch, keine Paragrafenzeichen-Collagen, nicht immer Waage und Hammer. Schreibtisch oder Waage nur, wenn das Thema sie wirklich erzwingt.
 
-Menschen sind ausdruecklich erwuenscht: natuerlich wirkende, frei erfundene Personen unterschiedlichen Alters und Hintergrunds in glaubwuerdigen Berufssituationen. Nicht erlaubt: reale Personen oder Prominente nachbilden, Kinder, Beteiligte des geschilderten Falls. Gut funktionieren Halbtotale, Blick ueber die Schulter, Silhouetten, Seiten- oder Rueckansichten und Haende - das wirkt oft weniger kuenstlich als frontale Gesichter.
+Menschen sind ausdruecklich erwuenscht: natuerlich wirkende, frei erfundene Personen unterschiedlichen Alters und Hintergrunds in glaubwuerdigen Berufssituationen. Nicht erlaubt: reale Personen oder Prominente nachbilden, Kinder, Beteiligte des geschilderten Falls. Jede sichtbare Person beschreibst du im Prompt konkret mit den Merkmalen der vorgegebenen Besetzung (Geschlecht, Alter, Erscheinungsbild, Haare, Statur, Kleidung) - nie nur "eine Frau" oder "ein Geschaeftsmann", denn allgemeine Angaben fuehren dazu, dass alle Personen gleich aussehen. Nutze die Personen der Besetzung der Reihe nach und aendere ihre Merkmale nicht; kommen weniger Personen vor, lass die uebrigen weg. Gut funktionieren Halbtotale, Blick ueber die Schulter, Silhouetten, Seiten- oder Rueckansichten und Haende - das wirkt oft weniger kuenstlich als frontale Gesichter.
 
 Der Prompt (Feld prompt):
 - Sprache: wie in der Anweisung unten vorgegeben.

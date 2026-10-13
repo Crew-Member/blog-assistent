@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { recordUsage } from "../lib/usage.js";
+import { castPeople } from "../lib/casting.js";
 import { COMPETITOR_SEARCH_SYSTEM, COMPETITION_SYSTEM, competitionBlock, RADAR_JUDGE_SYSTEM, RADAR_SEARCH_SYSTEM, SCOUT_JUDGE_SYSTEM, SCOUT_SEARCH_SYSTEM, TITLES_SYSTEM, REFINE_SYSTEM, internalLinksBlock, REVISE_SYSTEM, relatedPostsBlock, revisionBlock, ANALYZE_SYSTEM, CATEGORY_SYSTEM, DRAFT_SYSTEM, IMAGE_PLAN_SYSTEM, FACTCHECK_SYSTEM, RESEARCH_SYSTEM, STYLE_SYSTEM, siteBlock, styleSamplesBlock, topicBlock } from "./prompts.js";
 import {
   analyzeResultSchema,
@@ -572,6 +573,7 @@ export class ClaudeAiService implements AiService {
           input.style ? `Vorgegebener Stil: ${input.style}` : "Stil: frei waehlen",
           `Sprache des Bild-Prompts (Feld prompt): ${input.promptLanguage === "en" ? "Englisch" : "Deutsch"}`,
           input.recentPrompts?.length ? `Zuletzt verwendete Bildideen dieser Website (nicht wiederholen):\n${input.recentPrompts.map((p) => `- ${p.slice(0, 220)}`).join("\n")}` : "",
+          `Besetzung (nur verwenden, falls Menschen im Bild vorkommen; nimm die Personen der Reihe nach und uebernimm ihre Merkmale woertlich in den Prompt):\n${castPeople().join("\n")}`,
           "Entwirf das Beitragsbild.",
         ]
           .filter(Boolean)

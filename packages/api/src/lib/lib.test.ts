@@ -283,3 +283,18 @@ describe("autoLinkRulings", () => {
     expect(out).toContain("1 BvR 99/20.</p>"); // ohne Quelle bleibt es Text
   });
 });
+
+describe("castPeople", () => {
+  it("liefert konkrete, wechselnde Personenbeschreibungen", async () => {
+    const { castPeople } = await import("./casting.js");
+    const a = castPeople(3);
+    expect(a).toHaveLength(3);
+    expect(a[0]).toMatch(/^Person 1: (Frau|Mann), /);
+    // Deterministisch bei fester Zufallsquelle, verschieden bei anderer
+    let n = 0;
+    const seq = () => ((n = (n * 7 + 3) % 10) + 0.05) / 10;
+    expect(castPeople(2, seq)).toEqual(castPeople(2, ((m) => () => ((m = (m * 7 + 3) % 10) + 0.05) / 10)(0)));
+    const runs = new Set(Array.from({ length: 20 }, () => castPeople(1)[0]));
+    expect(runs.size).toBeGreaterThan(10);
+  });
+});
