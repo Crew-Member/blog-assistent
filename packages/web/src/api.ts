@@ -279,6 +279,7 @@ export interface ScoutState {
   enabled: boolean;
   lastRunAt: string | null;
   runRequested: boolean;
+  running: boolean;
   lastError: string;
   lastInfo: string;
   dismissed: number;

@@ -608,6 +608,7 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect(state.lastInfo).toContain("1 Suchbegriffe");
     expect(state.lastInfo).toContain("1 von 1 Ideen");
     expect(state.lastError).toBe("");
+    expect(state.running).toBe(false);
 
     // Search Console faellt aus: Lauf erfolgt ohne Suchdaten, Hinweis statt Fehler, keine erfundenen Belege
     fail = true;

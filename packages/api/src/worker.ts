@@ -106,7 +106,7 @@ export class Worker {
     const next = await prisma.site.findFirst({ where, select: { id: true } });
     if (!next) return undefined;
     // Zeitstempel sofort setzen (wie beim Radar): keine Endlosschleife, keine Mehrfachkosten.
-    const { count } = await prisma.site.updateMany({ where: { id: next.id, ...where }, data: { scoutRunRequested: false, scoutLastRunAt: new Date() } });
+    const { count } = await prisma.site.updateMany({ where: { id: next.id, ...where }, data: { scoutRunRequested: false, scoutRunning: true, scoutLastRunAt: new Date() } });
     return count === 1 ? next.id : undefined;
   }
 

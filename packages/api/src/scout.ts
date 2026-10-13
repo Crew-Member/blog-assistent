@@ -88,5 +88,7 @@ async function runScoutRun(deps: PipelineDeps, siteId: string, now: Date): Promi
     ]);
   } catch (error) {
     await prisma.site.updateMany({ where: { id: siteId }, data: { scoutLastError: explainAiError(error).slice(0, 600) } });
+  } finally {
+    await prisma.site.updateMany({ where: { id: siteId }, data: { scoutRunning: false } }).catch(() => undefined);
   }
 }

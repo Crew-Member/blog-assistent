@@ -10,7 +10,7 @@ const URGENCY = {
 } as const;
 
 function ScoutCard({ site }: { site: Site }) {
-  const scout = useLoad(() => api.get<ScoutState>(`/api/sites/${site.id}/scout`), (s) => s.enabled && s.runRequested);
+  const scout = useLoad(() => api.get<ScoutState>(`/api/sites/${site.id}/scout`), (s) => s.enabled && (s.runRequested || s.running));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [testInfo, setTestInfo] = useState<string>();
@@ -44,11 +44,11 @@ function ScoutCard({ site }: { site: Site }) {
       </span>
       {state.enabled && (
         <div className="row">
-          <button className="secondary" disabled={busy || state.runRequested} onClick={() => void act(() => api.post(`/api/sites/${site.id}/scout/run`))}>
-            {state.runRequested ? <><Spinner /> Suche läuft …</> : "Jetzt nach Themen suchen"}
+          <button className="secondary" disabled={busy || state.runRequested || state.running} onClick={() => void act(() => api.post(`/api/sites/${site.id}/scout/run`))}>
+            {state.runRequested || state.running ? <><Spinner /> {state.running ? "Suche läuft – das dauert etwa 1 bis 3 Minuten …" : "Suche wird gestartet …"}</> : "Jetzt nach Themen suchen"}
           </button>
           <span className="muted">
-            {state.lastRunAt ? `Letzter Lauf ${relTime(state.lastRunAt)}` : "Noch kein Lauf"}
+            {state.running && state.lastRunAt ? `Lauf gestartet ${relTime(state.lastRunAt)}` : state.lastRunAt ? `Letzter Lauf ${relTime(state.lastRunAt)}` : "Noch kein Lauf"}
             {state.dismissed > 0 ? ` · abgelehnt: ${state.dismissed}` : ""}
           </span>
         </div>
@@ -74,8 +74,8 @@ function ScoutCard({ site }: { site: Site }) {
         )}
       </div>
       {testInfo && <span className="ok">{testInfo}</span>}
-      {state.lastInfo && <span className="muted">Letzter Lauf – {state.lastInfo}</span>}
-      {state.enabled && !state.runRequested && state.ideas.length === 0 && state.lastRunAt && !state.lastError && <span className="muted">Beim letzten Lauf wurden keine neuen Themen gefunden.</span>}
+      {state.lastInfo && !state.running && <span className="muted">Letzter Lauf – {state.lastInfo}</span>}
+      {state.enabled && !state.runRequested && !state.running && state.ideas.length === 0 && state.lastRunAt && !state.lastError && <span className="muted">Beim letzten Lauf wurden keine neuen Themen gefunden.</span>}
       {state.ideas.map((idea) => (
         <div key={idea.id} className="card stack" style={{ boxShadow: "none" }}>
           <div className="row spread">
