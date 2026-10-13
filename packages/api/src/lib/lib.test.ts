@@ -345,7 +345,7 @@ describe("Search Console", () => {
     const sc = createSearchConsole(file, fetcher);
     expect(sc.configured()).toBe(true);
     expect(sc.email()).toBe("dienst@projekt.iam.gserviceaccount.com");
-    expect(await sc.queries("https://kirmse.eu/", "2026-09-01", "2026-09-28")).toEqual([{ query: "dsgvo", clicks: 3, impressions: 40, position: 7.5 }]);
+    expect(await sc.queries("https://kirmse.eu", "2026-09-01", "2026-09-28")).toEqual([{ query: "dsgvo", clicks: 3, impressions: 40, position: 7.5 }]);
     expect(calls[0]?.body).toContain("jwt-bearer");
     expect(calls[1]?.url).toContain("/sites/https%3A%2F%2Fkirmse.eu%2F/searchAnalytics/query");
     expect(calls[1]?.auth).toBe("Bearer tok");

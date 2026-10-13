@@ -101,7 +101,8 @@ export function createSearchConsole(keyFile: string | undefined, fetcher: typeof
   return {
     configured: () => Boolean(key),
     email: () => key?.client_email,
-    async queries(property, startDate, endDate) {
+    async queries(rawProperty, startDate, endDate) {
+      const property = normalizeProperty(rawProperty);
       const bearer = await accessToken();
       const res = await fetcher(`https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(property)}/searchAnalytics/query`, {
         method: "POST",
@@ -121,6 +122,12 @@ export function createSearchConsole(keyFile: string | undefined, fetcher: typeof
         .map((r) => ({ query: r.keys![0]!, clicks: r.clicks ?? 0, impressions: r.impressions ?? 0, position: r.position ?? 0 }));
     },
   };
+}
+
+/** URL-Praefix-Properties heissen immer mit Schraegstrich am Ende (https://kirmse.eu/); Leerraum und fehlender Schraegstrich werden ergaenzt. */
+export function normalizeProperty(property: string): string {
+  const p = property.trim();
+  return /^https?:\/\/[^/]+$/i.test(p) ? `${p}/` : p;
 }
 
 const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
