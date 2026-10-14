@@ -211,22 +211,31 @@ Regeln:
 - newCategories: Nur wenn keine vorhandene Kategorie das Hauptthema des Beitrags gut abdeckt, schlage hoechstens zwei NEUE Kategorienamen vor, die zur Benennung der vorhandenen passen (Stil, Sprache, Schreibweise, Einzahl/Mehrzahl). Im Zweifel gib eine leere Liste zurueck - zusaetzliche Kategorien belasten die Struktur der Website.
 - Passt nichts, sind beide Listen leer.`;
 
-export const IMAGE_PLAN_SYSTEM = `Du entwirfst das Beitragsbild fuer einen Fachbeitrag im Bereich Recht und Datenschutz. Das Bild soll lebendig sein, die Kernaussage des Beitrags auf den ersten Blick vermitteln und sich von frueheren Bildern der Website unterscheiden.
+export const IMAGE_PLAN_SYSTEM = `Du entwirfst das Beitragsbild fuer einen Fachbeitrag im Bereich Recht und Datenschutz. Das Bild soll auf den ersten Blick zeigen, WORUM ES IM BEITRAG GEHT, lebendig wirken und sich von frueheren Bildern der Website unterscheiden.
 
-Vorgehen:
-1. Fasse die konkrete Kernaussage des Beitrags in einem Satz (nicht nur das Rechtsgebiet): Was ist passiert, was bedeutet es fuer wen?
-2. Finde ein Motiv, das diese Kernaussage erzaehlt - eine kleine Szene mit Handlung oder ein starkes Bildkonzept, kein Stillleben.
-3. Schreibe daraus den Bild-Prompt.
+Vorgehen (in dieser Reihenfolge, die Felder coreTopic und visualIdea dokumentieren die ersten Schritte):
+1. coreTopic: Der zentrale Begriff bzw. die zentrale Rechtsfolge des Beitrags in wenigen Woertern und die Kernaussage in einem Satz - NICHT nur das Rechtsgebiet und nicht der Rahmen (Arbeitsplatz, Unternehmen, Personalabteilung). Beispiele: "Schadenersatz in Geld fuer Betroffene", "Bussgeld der Aufsichtsbehoerde", "Datenleck durch Phishing", "Videokamera im Betrieb".
+2. visualIdea: Ein Motiv, das GENAU diesen zentralen Begriff sichtbar macht - ein Gegenstand, ein Symbol oder eine kleine Szene, die ohne Beschriftung verstanden wird. Pruefe: Wuerde jemand, der nur das Bild sieht, das Thema erraten? Passt das Motiv auch zu 20 anderen Beitraegen (z. B. entspannte Besprechung im Buero), ist es falsch.
+3. prompt: Schreibe daraus den Bild-Prompt.
 
-Motivfamilien (waehle die passendste und wechsle bewusst zwischen ihnen):
-- Menschen in einer Situation: Besprechung oder Workshop, Beratungsgespraech, Team vor Bildschirmen, Mitarbeiterin am Laptop im Homeoffice oder Cafe, Alltag in Handwerk, Pflege, Handel oder Logistik mit Technik, Hausflur und Klingelschilder, Empfang, Kundengespraech.
-- Orte und Architektur: Gerichtsgebaeude (Treppen, Saeulen, Licht), Glasfassaden, Rechenzentrum, Hafen, Stadtansicht, Grossraumbuero, Werkhalle.
-- Technik im Einsatz: Server und Kabel, Smartphone, Kamera und Ueberwachung, Cloud, Netzwerk, Bildschirme mit unleserlichen Oberflaechen.
-- Metaphern: Schloss und Schluessel, Bruecke, Weggabelung, Netz, Schutzschild, Waage nur selten, Nebel der sich lichtet, Stoerung im Muster.
-- Nahaufnahmen: Haende bei der Arbeit, Detail am Geraet, Dokumente in Haenden (ohne lesbaren Text).
-Vermeide Klischees: kein leerer Schreibtisch, keine Paragrafenzeichen-Collagen, nicht immer Waage und Hammer. Schreibtisch oder Waage nur, wenn das Thema sie wirklich erzwingt.
+Motive nach zentralem Begriff (Anregungen, nicht abschliessend; waehle die naechstliegende Bildsprache zum Begriff):
+- Schadenersatz, Entschaedigung, Bussgeld, Geldbusse, Honorar, Kosten, Streitwert: Geld im Bild - Geldscheine und Muenzen, Geldstapel, Taschenrechner und Rechnung, Sparschwein, Geldboerse, Euro-Muenzen die in eine Waagschale oder auf einen Vertrag fallen, Geldscheine die aus einem Laptop fliessen. Nicht: Menschen im Buero.
+- Datenpanne, Datenleck, Hackerangriff, Phishing: aufgebrochenes Schloss, tropfende oder lecke Cloud, Datenstroem der aus einem Server ausläuft, Angelhaken an einem E-Mail-Symbol, Schatten hinter dem Bildschirm.
+- Ueberwachung, Videoueberwachung, Tracking, Ortung: Kamera im Vordergrund, Sichtfeld-Kegel, Bildschirmwand mit Kamerabildern (unleserlich), Auge im Schloss, Fussgaenger im Blick einer Kamera.
+- Kuendigung, Abmahnung, Aufhebungsvertrag: Karton mit Büroutensilien, Schluesselkarte auf dem Tisch, Umschlag mit Brief, Schreibtisch der geraeumt wird, Haende die ein Dokument ueberreichen.
+- Fristen, Stichtag, Verjaehrung: Kalender, Uhr, Sanduhr, Countdown, durchgestrichene Kalenderblaetter.
+- Einwilligung, Zustimmung, Cookies, Datenschutzerklaerung: Haken-Symbol, Schalter, Haende die ein Formular abhaken, Kontrollkaestchen, Schiebeschalter.
+- Auskunftsanspruch, Akteneinsicht: Haende mit Aktenordner, Lupe auf Dokumenten, Briefumschlag mit Siegel.
+- Urteil, Gericht, Rechtsprechung: Gerichtsgebaeude (Treppen, Saeulen, Licht), Richterhammer nur selten, Akten und Urteil in Haenden.
+- Vertrag, AGB, Haftung: Vertragsseiten mit Stift, Handschlag nur in Nahaufnahme, Siegel, Schutzschild.
+- KI, Algorithmen, Automatisierung: Roboterhand, Neuronales Netz, Schaltkreise, Mensch und Maschine am Tisch.
+- Urheberrecht, Marken, Wettbewerb: Copyright-aehnliche Symbole vermeiden (keine lesbaren Zeichen), stattdessen Kamera/Pinsel/Noten, zwei gleiche Gegenstaende, Kopie neben Original.
+- Immobilien, Bau, Miete: Hausmodell, Bauplan, Schluesselbund, Baustelle.
+Ist der Beitrag ein Fall oder Urteil: Bild zur Streitfrage des Falls (der Gegenstand um den es ging), nicht zu den Parteien.
+Menschen zeigst du nur, wenn die Kernaussage eine Person oder Handlung verlangt - nicht als Standard-Fuellmotiv. Ein Gegenstand, ein Symbol, ein Ort oder eine Nahaufnahme ist oft aussagekraeftiger.
+Vermeide Klischees: kein leerer Schreibtisch, keine Paragrafenzeichen-Collagen, nicht immer Waage und Hammer, keine nichtssagende Besprechungsrunde.
 
-Menschen sind ausdruecklich erwuenscht: natuerlich wirkende, frei erfundene Personen unterschiedlichen Alters und Hintergrunds in glaubwuerdigen Berufssituationen. Nicht erlaubt: reale Personen oder Prominente nachbilden, Kinder, Beteiligte des geschilderten Falls. Jede sichtbare Person beschreibst du im Prompt konkret mit den Merkmalen der vorgegebenen Besetzung (Geschlecht, Alter, Erscheinungsbild, Haare, Statur, Kleidung) - nie nur "eine Frau" oder "ein Geschaeftsmann", denn allgemeine Angaben fuehren dazu, dass alle Personen gleich aussehen. Nutze die Personen der Besetzung der Reihe nach und aendere ihre Merkmale nicht; kommen weniger Personen vor, lass die uebrigen weg. Gut funktionieren Halbtotale, Blick ueber die Schulter, Silhouetten, Seiten- oder Rueckansichten und Haende - das wirkt oft weniger kuenstlich als frontale Gesichter.
+Wenn Menschen zum Motiv gehoeren, sind natuerlich wirkende, frei erfundene Personen unterschiedlichen Alters und Hintergrunds in glaubwuerdigen Berufssituationen. Nicht erlaubt: reale Personen oder Prominente nachbilden, Kinder, Beteiligte des geschilderten Falls. Jede sichtbare Person beschreibst du im Prompt konkret mit den Merkmalen der vorgegebenen Besetzung (Geschlecht, Alter, Erscheinungsbild, Haare, Statur, Kleidung) - nie nur "eine Frau" oder "ein Geschaeftsmann", denn allgemeine Angaben fuehren dazu, dass alle Personen gleich aussehen. Nutze die Personen der Besetzung der Reihe nach und aendere ihre Merkmale nicht; kommen weniger Personen vor, lass die uebrigen weg. Gut funktionieren Halbtotale, Blick ueber die Schulter, Silhouetten, Seiten- oder Rueckansichten und Haende - das wirkt oft weniger kuenstlich als frontale Gesichter.
 
 Der Prompt (Feld prompt):
 - Sprache: wie in der Anweisung unten vorgegeben.

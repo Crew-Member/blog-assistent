@@ -81,7 +81,7 @@ Jeder KI-Aufruf wird mit Tokens und Websuchen protokolliert; die Seite **Kosten*
 
 ### Kosten senken
 
-Die größten Posten sind meist die Websuchen (Recherche, Wettbewerbsvergleich) und der lange Text mit Faktencheck. Stellschrauben in der `.env`: `AI_MODEL_LIGHT` (günstigeres Modell für Wettbewerb, Bildvorschlag, Titel, Kategorien, Stil, Radar; läuft zusätzlich mit niedriger Denktiefe `AI_EFFORT_LIGHT`), `AI_MODEL_RESEARCH` (günstigeres Modell nur für die Recherche), `RESEARCH_MAX_SEARCHES` (weniger Suchen je Schritt), `AI_EFFORT` (Denktiefe des Hauptmodells). Bei **Überarbeitungen** läuft die Recherche automatisch mit höchstens 4 Suchen und ohne Wettbewerbsvergleich; für den Faktencheck werden höchstens 4 Primärquellen mit begrenzter Länge abgerufen. Pro Website lässt sich der Wettbewerbsvergleich abschalten, der Aktualisierungsradar ebenso. Die Seite **Kosten** zeigt je Schritt, was ein Beitrag kostet.
+Die größten Posten sind meist die Websuchen (Recherche, Wettbewerbsvergleich) und der lange Text mit Faktencheck. Stellschrauben in der `.env`: `AI_MODEL_LIGHT` (günstigeres Modell für Wettbewerb, Titel, Kategorien, Stil, Radar; läuft zusätzlich mit niedriger Denktiefe `AI_EFFORT_LIGHT`), `AI_MODEL_RESEARCH` (günstigeres Modell nur für die Recherche), `RESEARCH_MAX_SEARCHES` (weniger Suchen je Schritt), `AI_EFFORT` (Denktiefe des Hauptmodells). Bei **Überarbeitungen** läuft die Recherche automatisch mit höchstens 4 Suchen und ohne Wettbewerbsvergleich; für den Faktencheck werden höchstens 4 Primärquellen mit begrenzter Länge abgerufen. Pro Website lässt sich der Wettbewerbsvergleich abschalten, der Aktualisierungsradar ebenso. Die Seite **Kosten** zeigt je Schritt, was ein Beitrag kostet.
 
 ### Wie der Faktencheck arbeitet
 

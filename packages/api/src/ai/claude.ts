@@ -1,3 +1,4 @@
+import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { recordUsage } from "../lib/usage.js";
 import { castPeople } from "../lib/casting.js";
@@ -58,7 +59,7 @@ export interface ClaudeOptions {
 }
 
 /** Schritte, die ohne Qualitaetsverlust mit einem kleineren Modell und weniger Denktiefe laufen koennen. */
-const LIGHT_STEPS = new Set(["competition_search", "competition", "image_plan", "titles", "categories", "style", "radar_search", "radar", "scout_search", "scout"]);
+const LIGHT_STEPS = new Set(["competition_search", "competition", "titles", "categories", "style", "radar_search", "radar", "scout_search", "scout"]);
 
 const MAX_CONTINUATIONS = 5;
 
@@ -224,13 +225,16 @@ const CATEGORY_SCHEMA = {
 const IMAGE_PLAN_SCHEMA = {
   type: "object",
   properties: {
+    // Denkschritte vor dem Prompt (werden nicht gespeichert): zuerst Kernbegriff und Motivwahl festlegen
+    coreTopic: { type: "string" },
+    visualIdea: { type: "string" },
     style: { type: "string", enum: ["illustration", "photo"] },
     prompt: { type: "string" },
     altText: { type: "string" },
     caption: { type: "string" },
     searchQuery: { type: "string" },
   },
-  required: ["style", "prompt", "altText", "caption", "searchQuery"],
+  required: ["coreTopic", "visualIdea", "style", "prompt", "altText", "caption", "searchQuery"],
   additionalProperties: false,
 } as const;
 
@@ -571,7 +575,7 @@ export class ClaudeAiService implements AiService {
         text: [
           `Website: ${input.site.name}`,
           input.site.audience && `Zielgruppe: ${input.site.audience}`,
-          `Beitrag:\nTitel: ${input.post.title}\nFokus-Keyword: ${input.post.focusKeyword}\nAuszug: ${input.post.excerpt}\nAnfang des Textes: ${input.post.text.slice(0, 1800)}`,
+          `Beitrag:\nTitel: ${input.post.title}\nFokus-Keyword: ${input.post.focusKeyword}\nAuszug: ${input.post.excerpt}\nText des Beitrags (Auszug): ${input.post.text.slice(0, 5000)}`,
           input.style ? `Vorgegebener Stil: ${input.style}` : "Stil: frei waehlen",
           `Sprache des Bild-Prompts (Feld prompt): ${input.promptLanguage === "en" ? "Englisch" : "Deutsch"}`,
           input.recentPrompts?.length ? `Zuletzt verwendete Bildideen dieser Website (nicht wiederholen):\n${input.recentPrompts.map((p) => `- ${p.slice(0, 220)}`).join("\n")}` : "",
@@ -582,7 +586,7 @@ export class ClaudeAiService implements AiService {
           .join("\n\n"),
       },
     ];
-    const plan = await this.structured(IMAGE_PLAN_SYSTEM, content, IMAGE_PLAN_SCHEMA, (v) => imagePlanSchema.parse(v));
+    const { coreTopic: _coreTopic, visualIdea: _visualIdea, ...plan } = await this.structured(IMAGE_PLAN_SYSTEM, content, IMAGE_PLAN_SCHEMA, (v) => imagePlanSchema.extend({ coreTopic: z.string(), visualIdea: z.string() }).parse(v));
     return { ...plan, style: input.style ?? plan.style, altText: plan.altText.slice(0, 125), caption: plan.caption.slice(0, 120) };
   }
 }
