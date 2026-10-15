@@ -17,6 +17,7 @@ import { detectKind, extractDocument, stripHtml } from "./lib/extract.js";
 import { applyLinkPolicy, sanitizePostHtml, unwrapBlockedLinks, unwrapLinksNotIn } from "./lib/html.js";
 import { selfUrls } from "./pipeline.js";
 import { demandPeriods } from "./lib/gsc.js";
+import { parseClosingTargets, resolveClosing, siteClosing, targetFor } from "./lib/closing.js";
 import type { SearchConsole } from "./lib/gsc.js";
 import { keywordInText, seoChecks } from "./lib/seo.js";
 import { slugify } from "./lib/slug.js";
@@ -56,6 +57,7 @@ const siteSchema = z.object({
   styleGuide: z.string().max(20000).default(""),
   disclaimer: z.string().max(4000).default(""),
   closingHtml: z.string().max(4000).default(""),
+  closingTargets: z.string().max(4000).default(""),
   preferredLinks: z.string().max(4000).default(""),
   portfolio: z.string().max(4000).default(""),
   gscProperty: z.string().trim().max(300).default(""),
@@ -313,7 +315,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, sear
     if (post.status !== "DRAFT_READY" || !post.title || !post.contentHtml) throw new HttpError(409, "Nur fertige Entwürfe können an WordPress gesendet werden.");
     const { client, site } = await wpClientFor(post.siteId);
 
-    const { content: contentForWp, imageNotice: needsImageNotice } = await wpContentFor(post, site);
+    const { content: baseContent, imageNotice: needsImageNotice } = await wpContentFor(post, site);
 
     // Ersetzen des veroeffentlichten Originals: nur bei Ueberarbeitungen, nur mit Bestaetigung, nur das Original dieser Ueberarbeitung.
     const source = post.revisionSource as { wpPostId?: number } | null;
@@ -330,6 +332,21 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, sear
       const builder = detectPageBuilder(await client.renderedContent(source!.wpPostId!).catch(() => ""));
       if (builder) {
         throw new HttpError(409, `BUILDER:${builder}: Dieser Beitrag wurde mit ${builder} gebaut.`);
+      }
+    }
+
+    // Schlussabsatz mit Zielseite passend zur Hauptkategorie (nur wenn die Website Zielseiten je Kategorie hinterlegt hat und der Absatz unveraendert im Text steht).
+    let contentForWp = baseContent;
+    const closingTargets = parseClosingTargets(site.closingTargets);
+    if (!replace && closingTargets.length && body.data.categoryIds.length) {
+      try {
+        const names = new Map((await client.categories()).map((c) => [c.id, c.name]));
+        const primaryName = names.get(body.data.primaryCategoryId && body.data.categoryIds.includes(body.data.primaryCategoryId) ? body.data.primaryCategoryId : body.data.categoryIds[0]!);
+        const standard = siteClosing(site);
+        const wanted = resolveClosing(site.closingHtml, targetFor(closingTargets, primaryName));
+        if (standard && wanted && wanted !== standard && baseContent.includes(standard)) contentForWp = baseContent.replace(standard, wanted);
+      } catch {
+        /* Kategorien nicht lesbar: Standard-Schlussabsatz bleibt */
       }
     }
 
@@ -796,7 +813,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, sear
     const footerStamp = post.contentHtml.match(FOOTER_RE)?.[0] ?? "";
     let current = post.contentHtml.replace(FOOTER_RE, "");
     // Der feste Schlussabsatz der Website gehoert nicht zum Text, den die KI sieht.
-    const closing = sanitizePostHtml(post.site.closingHtml);
+    const closing = siteClosing(post.site);
     let footer = footerStamp;
     if (closing && current.trimEnd().endsWith(closing)) {
       current = current.trimEnd().slice(0, -closing.length).trimEnd();

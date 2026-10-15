@@ -21,6 +21,8 @@ model Site {
   disclaimer String   @default("")
   // Fester Schlussabsatz (HTML: a, strong, em), wird vor dem Disclaimer angehaengt - nicht von der KI geschrieben.
   closingHtml String  @default("")
+  // Zielseiten je Hauptkategorie fuer die Platzhalter {{url}} und {{bereich}} im Schlussabsatz: eine Zeile je Kategorie "Kategorie | https://… | Linktext"; "Standard" gilt sonst
+  closingTargets String @default("")
   // Bevorzugte interne Link-Ziele, eine pro Zeile: "Titel | https://..." oder nur die Adresse.
   preferredLinks String @default("")
   // Vor dem Schreiben die Top-Ergebnisse zum Suchbegriff auswerten (Umfang, Gliederung). Kostet eine Websuche je Beitrag.

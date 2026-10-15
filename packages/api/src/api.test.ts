@@ -618,6 +618,31 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect((await app.inject({ method: "GET", url: `/api/posts/${rev2.json().id}`, headers: { cookie } })).json().status).toBe("DRAFT_READY");
   });
 
+  it("tauscht den Schlussabsatz beim Senden gegen die Zielseite der Hauptkategorie", async () => {
+    const calls = fakeWordPress({ ...standardRoutes(), "POST /wp-json/wp/v2/posts": [{ body: { id: 42, link: `${WP_BASE}/?p=42`, status: "draft" } }, { body: { id: 43, link: `${WP_BASE}/?p=43`, status: "draft" } }] });
+    await setup(new FakeAiService());
+    const site = await createWpSite({
+      closingHtml: '<p>Mehr dazu: <a href="{{url}}">{{bereich}}</a></p>',
+      closingTargets: "Standard | https://kirmse.eu/blog/ | Blog\nDatenschutzrecht | https://kirmse.eu/datenschutzrecht/ | Mehr zum Datenschutzrecht",
+    });
+    const postId = await makePost(site.id);
+    expect((await getPost(postId)).contentHtml).toMatch(/href="https:\/\/kirmse\.eu\/blog\/"[^>]*>Blog<\/a>/);
+
+    // Hauptkategorie Datenschutzrecht (3) -> passende Zielseite
+    await app.inject({ method: "POST", url: `/api/posts/${postId}/wordpress/publish`, headers: { cookie }, payload: { categoryIds: [1, 3], primaryCategoryId: 3, tags: [] } });
+    const first = calls.find((c) => c.method === "POST" && c.path === "/wp-json/wp/v2/posts")!;
+    expect(String(first.body?.content)).toMatch(/href="https:\/\/kirmse\.eu\/datenschutzrecht\/"[^>]*>Mehr zum Datenschutzrecht<\/a>/);
+    expect(String(first.body?.content)).not.toContain("kirmse.eu/blog/");
+    expect(first.body?.categories).toEqual([3, 1]);
+    expect(first.body?.meta).toMatchObject({ rank_math_primary_category: "3" });
+
+    // Der gespeicherte Entwurf behaelt den Standard; Hauptkategorie ohne eigene Zeile (Allgemein) -> Standard
+    expect((await getPost(postId)).contentHtml).toMatch(/href="https:\/\/kirmse\.eu\/blog\/"[^>]*>Blog<\/a>/);
+    await app.inject({ method: "POST", url: `/api/posts/${postId}/wordpress/publish`, headers: { cookie }, payload: { categoryIds: [1, 3], primaryCategoryId: 1, tags: [] } });
+    const second = calls.filter((c) => c.method === "POST" && c.path.startsWith("/wp-json/wp/v2/posts"))[1]!;
+    expect(String(second.body?.content)).toMatch(/href="https:\/\/kirmse\.eu\/blog\/"[^>]*>Blog<\/a>/);
+  });
+
   it("Themen-Scout: nutzt Search-Console-Daten, meldet Fehler als Hinweis und prueft die Verbindung", async () => {
     wpFetcher = (async () => new Response("[]")) as typeof fetch;
     const demandSeen: (string | undefined)[] = [];

@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { explainAiError } from "./ai/errors.js";
 import { demandPeriods, summarizePageDemand, type SearchConsole } from "./lib/gsc.js";
+import { siteClosing } from "./lib/closing.js";
 import type { RevisionInput, AiDocument, AiService, CompetitionGuidance, DraftResult, FactCheckResult, ResearchResult, SiteProfile, TopicProposal } from "./ai/types.js";
 import { escapeHtml, sanitizePostHtml, applyLinkPolicy, urlKey } from "./lib/html.js";
 import { fetchSitePosts } from "./lib/wordpress.js";
@@ -319,7 +320,7 @@ async function generatePostRun(deps: PipelineDeps, postId: string): Promise<void
     // Entwurf sofort sichern: schlaegt der Faktencheck fehl, geht die Arbeit nicht verloren.
     await prisma.post.update({
       where: { id: postId },
-      data: { ...draftFields, status: "FACTCHECKING", contentHtml: assemblePostHtml(draft.contentHtml, post.site.disclaimer, post.site.closingHtml, new Date(), rev?.publishedAt), unverifiedClaims: draft.unverifiedClaims },
+      data: { ...draftFields, status: "FACTCHECKING", contentHtml: assemblePostHtml(draft.contentHtml, post.site.disclaimer, siteClosing(post.site), new Date(), rev?.publishedAt), unverifiedClaims: draft.unverifiedClaims },
     });
 
     const uploaded = await loadAiDocuments(deps, post.topic.submissionId);
@@ -344,7 +345,7 @@ async function generatePostRun(deps: PipelineDeps, postId: string): Promise<void
       const html = applyLinkPolicy(autoLinkRulings(checked, rulingSources), post.site.baseUrl, knownInternal, linkOptions);
       await prisma.post.update({
         where: { id: postId },
-        data: { status: "DRAFT_READY", error: null, contentHtml: assemblePostHtml(html, post.site.disclaimer, post.site.closingHtml, new Date(), rev?.publishedAt), unverifiedClaims: unverified, factCheck: stored as unknown as Prisma.InputJsonValue },
+        data: { status: "DRAFT_READY", error: null, contentHtml: assemblePostHtml(html, post.site.disclaimer, siteClosing(post.site), new Date(), rev?.publishedAt), unverifiedClaims: unverified, factCheck: stored as unknown as Prisma.InputJsonValue },
       });
     } catch (error) {
       const stored: StoredFactCheck = { status: "skipped", summary: "Der Faktencheck konnte nicht durchgeführt werden – der Entwurf ist ungeprüft.", issues: [], references: [], ranAt: new Date().toISOString(), error: errorMessage(error) };

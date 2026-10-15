@@ -375,3 +375,26 @@ describe("demandNoteFor", () => {
     expect(demandNoteFor({ title: "Videoüberwachung im Betrieb", keyword: "videoüberwachung" }, now, before)).toBe("");
   });
 });
+
+describe("Schlussabsatz mit Zielseiten", () => {
+  const closing = '<p>Mehr dazu: <a href="{{url}}">{{bereich}}</a></p>';
+  const targets = "Standard | https://kirmse.eu/blog/ | Blog\nArbeitsrecht | https://kirmse.eu/arbeitsrecht/ | Mehr zum Arbeitsrecht\nOnline- & IT-Recht | https://kirmse.eu/it-recht/ | IT-Recht\nkaputt | http://unsicher.example/ | x\nohne Adresse";
+
+  it("liest Zeilen, ignoriert ungueltige und waehlt die Zielseite nach Kategorie", async () => {
+    const { parseClosingTargets, targetFor, siteClosing } = await import("./closing.js");
+    const list = parseClosingTargets(targets);
+    expect(list.map((t) => t.category)).toEqual(["Standard", "Arbeitsrecht", "Online- & IT-Recht"]);
+    expect(targetFor(list, "arbeitsrecht")?.url).toBe("https://kirmse.eu/arbeitsrecht/");
+    expect(targetFor(list, "Online- &amp; IT-Recht")?.url).toBe("https://kirmse.eu/it-recht/");
+    expect(targetFor(list, "Unbekannt")?.url).toBe("https://kirmse.eu/blog/");
+    expect(targetFor(list, undefined)?.url).toBe("https://kirmse.eu/blog/");
+    expect(siteClosing({ closingHtml: closing, closingTargets: targets })).toMatch(/^<p>Mehr dazu: <a href="https:\/\/kirmse\.eu\/blog\/"[^>]*>Blog<\/a><\/p>$/);
+    expect(siteClosing({ closingHtml: closing, closingTargets: targets }, "Arbeitsrecht")).toMatch(/href="https:\/\/kirmse\.eu\/arbeitsrecht\/"[^>]*>Mehr zum Arbeitsrecht/);
+  });
+
+  it("laesst Absaetze ohne Platzhalter unveraendert und streicht Platzhalter-Absaetze ohne Zielseite", async () => {
+    const { siteClosing } = await import("./closing.js");
+    expect(siteClosing({ closingHtml: "<p>Fest <strong>so</strong></p>", closingTargets: targets })).toBe("<p>Fest <strong>so</strong></p>");
+    expect(siteClosing({ closingHtml: closing, closingTargets: "" })).toBe("");
+  });
+});

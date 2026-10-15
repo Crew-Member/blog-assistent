@@ -3,7 +3,7 @@ import { api, type Site, type StyleSample, type WpTestResult } from "../api";
 import { useLoad } from "../hooks";
 import { Chip, EmptyState, Icon, PageHeader } from "../ui";
 
-const EMPTY = { name: "", baseUrl: "", language: "de", audience: "", tone: "", styleGuide: "", disclaimer: "", closingHtml: "", preferredLinks: "", portfolio: "", gscProperty: "", competitionCheck: true, aiNoticeText: "", labelAiImages: true, wpUsername: "", wpAppPassword: "", clearWpPassword: false };
+const EMPTY = { name: "", baseUrl: "", language: "de", audience: "", tone: "", styleGuide: "", disclaimer: "", closingHtml: "", closingTargets: "", preferredLinks: "", portfolio: "", gscProperty: "", competitionCheck: true, aiNoticeText: "", labelAiImages: true, wpUsername: "", wpAppPassword: "", clearWpPassword: false };
 
 function StyleSamples({ site, onApply }: { site: Site; onApply: (tone: string, styleGuide: string) => void }) {
   const { data: samples, reload } = useLoad(() => api.get<StyleSample[]>(`/api/sites/${site.id}/style-samples`));
@@ -177,6 +177,9 @@ function SiteForm({ initial, onSaved, onCancel }: { initial?: Site; onSaved: () 
       <label>Stilleitfaden / Beispiele<textarea rows={5} value={form.styleGuide} onChange={set("styleGuide")} placeholder="Gewünschte Länge, Gliederung, Besonderheiten – oder Auszüge aus bestehenden Beiträgen als Stilvorlage" /></label>
       <label>Fester Schlussabsatz <span className="muted">(optional, HTML erlaubt: &lt;a&gt;, &lt;strong&gt;, &lt;em&gt;)</span>
         <textarea rows={3} value={form.closingHtml} onChange={set("closingHtml")} placeholder='z. B. <p>Haben Sie Fragen zum Datenschutz in Ihrem Unternehmen? <a href="https://…/kontakt/">Sprechen Sie uns an.</a></p>' />
+      </label>
+      <label>Zielseiten je Hauptkategorie für den Schlussabsatz <span className="muted">(optional – eine Zeile je Kategorie: „Kategorie | Adresse | Linktext“. Im Schlussabsatz stehen dafür die Platzhalter {"{{url}}"} und {"{{bereich}}"}. Die Zeile „Standard“ gilt, wenn keine Kategorie passt)</span>
+        <textarea rows={5} value={form.closingTargets} onChange={set("closingTargets")} placeholder={"Standard | https://…/blog/ | Aktuelle Beiträge aus unserem Blog\nArbeitsrecht | https://…/arbeitsrecht/ | Mehr zum Arbeitsrecht"} />
       </label>
       <label>Bevorzugte interne Links <span className="muted">(optional, eine Zeile je Seite: „Titel | Adresse“ – die KI verlinkt sie, wo es passt)</span>
         <textarea rows={3} value={form.preferredLinks} onChange={set("preferredLinks")} placeholder={"Datenschutzberatung | https://…/leistungen/datenschutz/\nKontakt | https://…/kontakt/"} />

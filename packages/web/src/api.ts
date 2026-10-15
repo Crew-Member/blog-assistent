@@ -38,6 +38,7 @@ export interface Site {
   styleGuide: string;
   disclaimer: string;
   closingHtml: string;
+  closingTargets: string;
   preferredLinks: string;
   portfolio: string;
   gscProperty: string;
