@@ -2,7 +2,7 @@ import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { recordUsage } from "../lib/usage.js";
 import { castPeople } from "../lib/casting.js";
-import { COMPETITOR_SEARCH_SYSTEM, COMPETITION_SYSTEM, competitionBlock, RADAR_JUDGE_SYSTEM, RADAR_SEARCH_SYSTEM, SCOUT_JUDGE_SYSTEM, SCOUT_SEARCH_SYSTEM, BACKLINK_SYSTEM, TITLES_SYSTEM, REFINE_SYSTEM, internalLinksBlock, REVISE_SYSTEM, relatedPostsBlock, revisionBlock, ANALYZE_SYSTEM, CATEGORY_SYSTEM, DRAFT_SYSTEM, IMAGE_PLAN_SYSTEM, FACTCHECK_SYSTEM, RESEARCH_SYSTEM, STYLE_SYSTEM, siteBlock, styleSamplesBlock, topicBlock } from "./prompts.js";
+import { COMPETITOR_SEARCH_SYSTEM, COMPETITION_SYSTEM, competitionBlock, RADAR_JUDGE_SYSTEM, RADAR_SEARCH_SYSTEM, SCOUT_JUDGE_SYSTEM, SCOUT_SEARCH_SYSTEM, BACKLINK_SYSTEM, TITLES_SYSTEM, REFINE_SYSTEM, internalLinksBlock, REVISE_SYSTEM, relatedPostsBlock, revisionBlock, structureBlock, ANALYZE_SYSTEM, CATEGORY_SYSTEM, DRAFT_SYSTEM, IMAGE_PLAN_SYSTEM, FACTCHECK_SYSTEM, RESEARCH_SYSTEM, STYLE_SYSTEM, siteBlock, styleSamplesBlock, topicBlock } from "./prompts.js";
 import {
   analyzeResultSchema,
   categorySuggestionSchema,
@@ -527,6 +527,7 @@ export class ClaudeAiService implements AiService {
           siteBlock(input.site),
           styleSamplesBlock(input.styleSamples),
           topicBlock(input.topic),
+          structureBlock(input.structure),
           input.revision ? revisionBlock(input.revision) : "",
           `Recherchenotizen:\n${input.research.notes}`,
           `Gefundene Quellen (nur diese duerfen in sources erscheinen):\n${sourceList}`,

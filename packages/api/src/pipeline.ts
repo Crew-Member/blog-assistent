@@ -293,7 +293,7 @@ async function generatePostRun(deps: PipelineDeps, postId: string): Promise<void
         await prisma.post.update({ where: { id: postId }, data: { competition: result.stored as unknown as Prisma.InputJsonValue } });
       }
     }
-    const draft = await ai.draft({ site, topic, research, styleSamples, relatedPosts, ...(competition ? { competition } : {}), ...(revision ? { revision } : {}) });
+    const draft = await ai.draft({ site, topic, research, styleSamples, relatedPosts, ...(competition ? { competition } : {}), ...(revision ? { revision } : {}), structure: { summary: post.site.structureSummary, faq: post.site.structureFaq } });
     // Bekannte interne Ziele: Liste der Website plus Links, die schon im Originalbeitrag standen.
     const originalLinks = [...(revision?.html ?? "").matchAll(/href="([^"]+)"/g)].map((m) => (m[1] ?? "").replace(/&amp;/g, "&"));
     const internalLinks = [...relatedPosts.map((p) => ({ title: p.title, url: p.url })), ...originalLinks.map((url) => ({ title: "", url }))];

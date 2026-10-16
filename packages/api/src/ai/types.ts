@@ -82,6 +82,8 @@ export interface DraftInput {
   competition?: CompetitionGuidance;
   /** Gesetzt, wenn ein bestehender Beitrag ueberarbeitet statt neu geschrieben wird. */
   revision?: RevisionInput;
+  /** Strukturelemente je Website (Kurzfassung am Anfang, Fragenabschnitt am Ende). */
+  structure?: { summary: boolean; faq: boolean };
 }
 
 export const refineResultSchema = z.object({ contentHtml: z.string().min(1), note: z.string() });

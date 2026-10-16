@@ -43,6 +43,8 @@ export interface Site {
   portfolio: string;
   gscProperty: string;
   competitionCheck: boolean;
+  structureSummary: boolean;
+  structureFaq: boolean;
   aiNoticeText: string;
   labelAiImages: boolean;
   wpUsername: string;

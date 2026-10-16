@@ -500,3 +500,41 @@ describe("SEO-Potenziale bei wenig Daten", () => {
     expect(kinds).toEqual(expect.arrayContaining(["quick_win:1", "low_ctr:2"]));
   });
 });
+
+describe("optimizeForWeb", () => {
+  it("verkleinert zu breite Bilder auf 1600 px als JPEG und behaelt den KI-Vermerk", async () => {
+    const { optimizeForWeb } = await import("./webimage.js");
+    const { makePlaceholderPng } = await import("./png.js");
+    const sharp = (await import("sharp")).default;
+    const big = makePlaceholderPng(2400, 1200);
+    const out = await optimizeForWeb(big, "image/png", true);
+    expect(out).toMatchObject({ mimeType: "image/jpeg", ext: "jpg", optimized: true });
+    expect((await sharp(out.data).metadata()).width).toBe(1600);
+    expect(out.data.toString("latin1")).toContain("trainedAlgorithmicMedia");
+    const plain = await optimizeForWeb(big, "image/png", false);
+    expect(plain.data.toString("latin1")).not.toContain("trainedAlgorithmicMedia");
+  });
+
+  it("laesst Unlesbares und bereits schlanke Bilder unveraendert", async () => {
+    const { optimizeForWeb } = await import("./webimage.js");
+    const { makePlaceholderPng } = await import("./png.js");
+    const junk = Buffer.from("kein bild");
+    expect((await optimizeForWeb(junk, "image/png", false)).optimized).toBe(false);
+    const small = makePlaceholderPng(300, 200);
+    const res = await optimizeForWeb(small, "image/png", false);
+    if (!res.optimized) expect(res.data).toBe(small);
+    else expect(res.data.length).toBeLessThan(small.length);
+  });
+});
+
+describe("structureBlock", () => {
+  it("beschreibt Kurzfassung und Fragenabschnitt nur, wenn eingeschaltet", async () => {
+    const { structureBlock } = await import("../ai/prompts.js");
+    expect(structureBlock(undefined)).toBe("");
+    expect(structureBlock({ summary: false, faq: false })).toBe("");
+    const both = structureBlock({ summary: true, faq: true });
+    expect(both).toContain("Das Wichtigste in Kürze");
+    expect(both).toContain("Häufige Fragen");
+    expect(structureBlock({ summary: true, faq: false })).not.toContain("Fragenabschnitt");
+  });
+});

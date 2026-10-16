@@ -26,6 +26,7 @@ import { decryptSecret, encryptSecret } from "./lib/secrets.js";
 import { detectPageBuilder, fetchAllSitePosts, fetchSitePost, fetchSitePosts, fetchWordPressPosts } from "./lib/wordpress.js";
 import { WordPressClient, WordPressError, type WpDraftInput } from "./lib/wp-client.js";
 import { markAsAiGenerated, sniffImageType } from "./lib/png.js";
+import { optimizeForWeb } from "./lib/webimage.js";
 import type { ImageProvider } from "./image/provider.js";
 import { finalCaption } from "./pipeline.js";
 
@@ -63,6 +64,8 @@ const siteSchema = z.object({
   portfolio: z.string().max(4000).default(""),
   gscProperty: z.string().trim().max(300).default(""),
   competitionCheck: z.boolean().default(true),
+  structureSummary: z.boolean().default(true),
+  structureFaq: z.boolean().default(true),
   aiNoticeText: z.string().trim().max(500).default(""),
   labelAiImages: z.boolean().default(true),
   wpUsername: z.string().trim().max(120).default(""),
@@ -372,12 +375,13 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, sear
     const image = await prisma.postImage.findUnique({ where: { postId: post.id } });
     if (image && image.status === "READY" && image.storageKey) {
       try {
-        const ext = image.mimeType === "image/jpeg" ? "jpg" : image.mimeType === "image/webp" ? "webp" : "png";
+        // Fuer das Web verkleinern (max. 1600 px Breite, JPEG); das Original im Tool bleibt unveraendert.
+        const web = await optimizeForWeb(await storage.load(image.storageKey), image.mimeType ?? "image/png", image.aiGenerated);
         const mediaId = await client.syncMedia({
           existingId: image.wpMediaId,
-          data: await storage.load(image.storageKey),
-          mimeType: image.mimeType ?? "image/png",
-          filename: `${post.slug || "beitragsbild"}.${ext}`,
+          data: web.data,
+          mimeType: web.mimeType,
+          filename: `${post.slug || "beitragsbild"}.${web.ext}`,
           alt: image.altText,
           caption: finalCaption(image.caption, image.aiGenerated, site.labelAiImages),
           title: post.title,

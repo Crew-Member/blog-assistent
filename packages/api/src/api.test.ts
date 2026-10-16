@@ -1275,8 +1275,8 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     const pub = await jsonPost(`/api/posts/${postId}/wordpress/publish`, { categoryIds: [3], tags: [] });
     expect(pub.json().image).toMatchObject({ status: "set" });
     const upload = calls.find((c) => c.method === "POST" && c.path === "/wp-json/wp/v2/media")!;
-    expect(upload.headers["content-type"]).toBe("image/png");
-    expect(upload.headers["content-disposition"]).toContain("beispielthema.png");
+    expect(upload.headers["content-type"]).toBe("image/jpeg"); // fuer das Web neu kodiert
+    expect(upload.headers["content-disposition"]).toContain("beispielthema.jpg");
     const meta = calls.find((c) => c.path === "/wp-json/wp/v2/media/55")!;
     expect(meta.body).toMatchObject({ alt_text: expect.any(String), caption: expect.stringContaining("Bild: KI-generiert") });
     expect(calls.find((c) => c.path === "/wp-json/wp/v2/posts" && c.method === "POST")?.body).toMatchObject({ featured_media: 55 });

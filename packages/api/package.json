@@ -27,6 +27,7 @@
     "mammoth": "^1.8.0",
     "prisma": "^5.22.0",
     "sanitize-html": "^2.13.0",
+    "sharp": "^0.35.5",
     "zod": "^3.23.8"
   },
   "devDependencies": {

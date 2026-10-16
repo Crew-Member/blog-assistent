@@ -3,7 +3,7 @@ import { api, type Site, type StyleSample, type WpTestResult } from "../api";
 import { useLoad } from "../hooks";
 import { Chip, EmptyState, Icon, PageHeader } from "../ui";
 
-const EMPTY = { name: "", baseUrl: "", language: "de", audience: "", tone: "", styleGuide: "", disclaimer: "", closingHtml: "", closingTargets: "", preferredLinks: "", portfolio: "", gscProperty: "", competitionCheck: true, aiNoticeText: "", labelAiImages: true, wpUsername: "", wpAppPassword: "", clearWpPassword: false };
+const EMPTY = { name: "", baseUrl: "", language: "de", audience: "", tone: "", styleGuide: "", disclaimer: "", closingHtml: "", closingTargets: "", preferredLinks: "", portfolio: "", gscProperty: "", competitionCheck: true, structureSummary: true, structureFaq: true, aiNoticeText: "", labelAiImages: true, wpUsername: "", wpAppPassword: "", clearWpPassword: false };
 
 function StyleSamples({ site, onApply }: { site: Site; onApply: (tone: string, styleGuide: string) => void }) {
   const { data: samples, reload } = useLoad(() => api.get<StyleSample[]>(`/api/sites/${site.id}/style-samples`));
@@ -189,6 +189,14 @@ function SiteForm({ initial, onSaved, onCancel }: { initial?: Site; onSaved: () 
       </label>
       <label>Search-Console-Property <span className="muted">(optional – genau so wie in der Search Console links oben, z. B. https://kirmse.eu/ oder sc-domain:kirmse.eu; der Themen-Scout nutzt damit die echten Suchanfragen der Website)</span>
         <input value={form.gscProperty} onChange={set("gscProperty")} placeholder="https://kirmse.eu/" />
+      </label>
+      <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
+        <input type="checkbox" style={{ width: "auto" }} checked={form.structureSummary} onChange={(e) => setForm({ ...form, structureSummary: e.target.checked })} />
+        <span>Kurzfassung „Das Wichtigste in Kürze“ direkt nach dem Einstieg <span className="muted">– 3 bis 4 knappe Punkte; hilft Lesern und Suchmaschinen</span></span>
+      </label>
+      <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
+        <input type="checkbox" style={{ width: "auto" }} checked={form.structureFaq} onChange={(e) => setForm({ ...form, structureFaq: e.target.checked })} />
+        <span>Abschnitt „Häufige Fragen“ am Ende <span className="muted">– 3 bis 4 Leserfragen mit kurzen Antworten</span></span>
       </label>
       <label>Disclaimer (wird unter jeden Beitrag gesetzt)<textarea rows={3} value={form.disclaimer} onChange={set("disclaimer")} /></label>
       <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
