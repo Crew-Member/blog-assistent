@@ -111,6 +111,22 @@ export const scoutResultSchema = z.object({
     )
     .max(10),
 });
+export const backlinkResultSchema = z.object({
+  suggestions: z
+    .array(
+      z.object({
+        candidate: z.number().int(),
+        anchor: z.string(),
+        sentenceHtml: z.string(),
+        afterText: z.string(),
+        reason: z.string(),
+        relevance: z.number(),
+      }),
+    )
+    .max(10),
+});
+export type BacklinkResult = z.infer<typeof backlinkResultSchema>;
+
 export type ScoutResult = z.infer<typeof scoutResultSchema>;
 
 export const titleSuggestionsSchema = z.object({ titles: z.array(z.object({ title: z.string().min(1), note: z.string() })).min(1).max(8) });
@@ -201,6 +217,8 @@ export interface AiService {
   /** Wertet die abgerufenen Top-Seiten (Laenge, Gliederung) aus und leitet Zielumfang und fehlende Themen ab. */
   analyzeCompetition(input: { site: SiteProfile; keyword: string; topic: TopicProposal; notes: string; pages: CompetitorPage[] }): Promise<CompetitionInsights>;
   /** Prueft per Websuche, ob ein veroeffentlichter Beitrag noch aktuell ist (neue Rechtsprechung, Gesetzesaenderungen, ...). */
+  /** Schlaegt vor, wo in aelteren Beitraegen ein Link auf den Zielbeitrag passt (je Beitrag hoechstens ein Satz). */
+  suggestBacklinks(input: { site: SiteProfile; target: { title: string; url: string; text: string }; candidates: { title: string; url: string; text: string }[] }): Promise<BacklinkResult>;
   scoutTopics(input: { site: SiteProfile; portfolio: string; existingTitles: string[]; rejectedTitles: string[]; today: string; demand?: string }): Promise<ScoutResult>;
   checkFreshness(input: { site: SiteProfile; post: { title: string; url: string; publishedAt: string; text: string } }): Promise<FreshnessResult>;
   /** Alternative Titel (hoechstens 65 Zeichen) fuer einen fertigen Beitrag. */

@@ -17,6 +17,21 @@ export interface SearchConsole {
   email(): string | undefined;
   /** page: nur Suchanfragen, die auf genau diese Seitenadresse gefuehrt haben. */
   queries(property: string, startDate: string, endDate: string, opts?: { page?: string }): Promise<GscRow[]>;
+  /** Kennzahlen je Seite (Adresse) der Website. */
+  pageStats(property: string, startDate: string, endDate: string): Promise<GscPageRow[]>;
+  /** Suchanfragen je Seite (Seite + Suchbegriff), bis zu 5000 Zeilen. */
+  pageQueries(property: string, startDate: string, endDate: string): Promise<GscPageQueryRow[]>;
+}
+
+export interface GscPageRow {
+  page: string;
+  clicks: number;
+  impressions: number;
+  position: number;
+}
+
+export interface GscPageQueryRow extends GscRow {
+  page: string;
 }
 
 export class GscError extends Error {
@@ -99,40 +114,48 @@ export function createSearchConsole(keyFile: string | undefined, fetcher: typeof
     return token.value;
   }
 
+  type RawRow = { keys?: string[]; clicks?: number; impressions?: number; position?: number };
+
+  async function search(rawProperty: string, payload: Record<string, unknown>): Promise<RawRow[]> {
+    const property = normalizeProperty(rawProperty);
+    const bearer = await accessToken();
+    const res = await fetcher(`https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(property)}/searchAnalytics/query`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json" },
+      body: JSON.stringify({ dataState: "final", ...payload }),
+    });
+    if (res.status === 403 || res.status === 404) {
+      const detail = (await res.json().catch(() => ({}))) as { error?: { message?: string; status?: string; errors?: { reason?: string }[]; details?: { reason?: string }[] } };
+      const google = detail.error?.message ?? "";
+      const reasons = [...(detail.error?.errors ?? []), ...(detail.error?.details ?? [])].map((e) => e.reason ?? "").join(" ");
+      const apiOff = /accessNotConfigured|SERVICE_DISABLED|has not been used in project|is disabled/i.test(`${google} ${reasons}`);
+      const who = key?.client_email ?? "das Dienstkonto";
+      const hint = apiOff
+        ? `Die Search Console API ist im Google-Cloud-Projekt nicht aktiviert (APIs und Dienste → Bibliothek → „Google Search Console API“ → Aktivieren).`
+        : `${who} ist in der Property „${property}“ nicht als Nutzer eingetragen (Search Console → Einstellungen → Nutzer und Berechtigungen) oder die Property heißt anders (z. B. mit www. oder als sc-domain:…).`;
+      throw new GscError(`Kein Zugriff auf die Search-Console-Property „${property}“. ${hint}${google ? ` Antwort von Google: ${google}` : ""}`, res.status);
+    }
+    const body = (await res.json().catch(() => ({}))) as { rows?: RawRow[]; error?: { message?: string } };
+    if (!res.ok) throw new GscError(`Search Console: ${body.error?.message ?? `HTTP ${res.status}`}`, res.status);
+    return body.rows ?? [];
+  }
+
   return {
     configured: () => Boolean(key),
     email: () => key?.client_email,
     async queries(rawProperty, startDate, endDate, opts) {
-      const property = normalizeProperty(rawProperty);
-      const bearer = await accessToken();
-      const res = await fetcher(`https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(property)}/searchAnalytics/query`, {
-        method: "POST",
-        headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json" },
-        body: JSON.stringify({
-          startDate,
-          endDate,
-          dimensions: ["query"],
-          rowLimit: 1000,
-          dataState: "final",
-          ...(opts?.page ? { dimensionFilterGroups: [{ filters: [{ dimension: "page", operator: "equals", expression: opts.page }] }] } : {}),
-        }),
-      });
-      if (res.status === 403 || res.status === 404) {
-        const detail = (await res.json().catch(() => ({}))) as { error?: { message?: string; status?: string; errors?: { reason?: string }[]; details?: { reason?: string }[] } };
-        const google = detail.error?.message ?? "";
-        const reasons = [...(detail.error?.errors ?? []), ...(detail.error?.details ?? [])].map((e) => e.reason ?? "").join(" ");
-        const apiOff = /accessNotConfigured|SERVICE_DISABLED|has not been used in project|is disabled/i.test(`${google} ${reasons}`);
-        const who = key?.client_email ?? "das Dienstkonto";
-        const hint = apiOff
-          ? `Die Search Console API ist im Google-Cloud-Projekt nicht aktiviert (APIs und Dienste → Bibliothek → „Google Search Console API“ → Aktivieren).`
-          : `${who} ist in der Property „${property}“ nicht als Nutzer eingetragen (Search Console → Einstellungen → Nutzer und Berechtigungen) oder die Property heißt anders (z. B. mit www. oder als sc-domain:…).`;
-        throw new GscError(`Kein Zugriff auf die Search-Console-Property „${property}“. ${hint}${google ? ` Antwort von Google: ${google}` : ""}`, res.status);
-      }
-      const body = (await res.json().catch(() => ({}))) as { rows?: { keys?: string[]; clicks?: number; impressions?: number; position?: number }[]; error?: { message?: string } };
-      if (!res.ok) throw new GscError(`Search Console: ${body.error?.message ?? `HTTP ${res.status}`}`, res.status);
-      return (body.rows ?? [])
-        .filter((r) => r.keys?.[0])
-        .map((r) => ({ query: r.keys![0]!, clicks: r.clicks ?? 0, impressions: r.impressions ?? 0, position: r.position ?? 0 }));
+      const rows = await search(rawProperty, { startDate, endDate, dimensions: ["query"], rowLimit: 1000, ...(opts?.page ? { dimensionFilterGroups: [{ filters: [{ dimension: "page", operator: "equals", expression: opts.page }] }] } : {}) });
+      return rows.filter((r) => r.keys?.[0]).map((r) => ({ query: r.keys![0]!, clicks: r.clicks ?? 0, impressions: r.impressions ?? 0, position: r.position ?? 0 }));
+    },
+    async pageStats(rawProperty, startDate, endDate) {
+      const rows = await search(rawProperty, { startDate, endDate, dimensions: ["page"], rowLimit: 1000 });
+      return rows.filter((r) => r.keys?.[0]).map((r) => ({ page: r.keys![0]!, clicks: r.clicks ?? 0, impressions: r.impressions ?? 0, position: r.position ?? 0 }));
+    },
+    async pageQueries(rawProperty, startDate, endDate) {
+      const rows = await search(rawProperty, { startDate, endDate, dimensions: ["page", "query"], rowLimit: 5000 });
+      return rows
+        .filter((r) => r.keys?.[0] && r.keys[1])
+        .map((r) => ({ page: r.keys![0]!, query: r.keys![1]!, clicks: r.clicks ?? 0, impressions: r.impressions ?? 0, position: r.position ?? 0 }));
     },
   };
 }

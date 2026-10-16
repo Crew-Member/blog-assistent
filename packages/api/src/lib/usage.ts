@@ -50,6 +50,7 @@ export const STEP_LABELS: Record<string, string> = {
   radar: "Radar: Bewertung",
   scout_search: "Themen-Scout: Suche",
   scout: "Themen-Scout: Auswahl",
+  backlinks: "Rückwärts-Verlinkung",
 };
 
 export function costOf(entry: UsageEntry, prices: Prices): number {

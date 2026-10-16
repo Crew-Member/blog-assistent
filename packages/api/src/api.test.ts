@@ -643,6 +643,79 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect(String(second.body?.content)).toMatch(/href="https:\/\/kirmse\.eu\/blog\/"[^>]*>Blog<\/a>/);
   });
 
+  it("SEO-Potenziale: wertet Seiten- und Suchanfragedaten der Search Console aus", async () => {
+    wpFetcher = (async (url: string) => {
+      const u = new URL(url);
+      if (u.pathname === "/wp-json/wp/v2/posts/7") return new Response(JSON.stringify({ id: 7, title: { rendered: "Alter Beitrag" }, link: "https://93.184.216.34/alt/", date: "2024-01-01T00:00:00", excerpt: { rendered: "" }, content: { rendered: "<p>Text</p>" } }));
+      if (u.pathname === "/wp-json/wp/v2/posts") return new Response(JSON.stringify([{ id: 7, title: { rendered: "Alter Beitrag" }, link: "https://93.184.216.34/alt/", date: "2024-01-01T00:00:00", excerpt: { rendered: "" } }]));
+      return new Response("[]");
+    }) as typeof fetch;
+    const searchConsole = {
+      configured: () => true,
+      email: () => "dienst@projekt.iam.gserviceaccount.com",
+      queries: async () => [],
+      pageStats: async () => [{ page: "https://93.184.216.34/alt/", impressions: 400, clicks: 4, position: 12 }],
+      pageQueries: async () => [{ page: "https://93.184.216.34/alt/", query: "alter beitrag thema", impressions: 300, clicks: 3, position: 12 }],
+    };
+    await setup(new FakeAiService());
+    app = buildServer({ config, prisma, storage: new FileStorage(dir), ai, fetcher: wpFetcher, searchConsole });
+    await app.ready();
+    const login = await app.inject({ method: "POST", url: "/api/auth/login", payload: { password: "geheim-passwort" } });
+    cookie = (login.headers["set-cookie"] as string).split(";")[0] ?? "";
+    const withoutProperty = (await app.inject({ method: "POST", url: "/api/sites", headers: { cookie }, payload: { name: "A", baseUrl: "https://93.184.216.34" } })).json().id as string;
+    expect((await app.inject({ method: "POST", url: `/api/sites/${withoutProperty}/seo-potential`, headers: { cookie } })).statusCode).toBe(400);
+    const siteId = (await app.inject({ method: "POST", url: "/api/sites", headers: { cookie }, payload: { name: "B", baseUrl: "https://93.184.216.34", gscProperty: "https://93.184.216.34/" } })).json().id as string;
+    const res = await app.inject({ method: "POST", url: `/api/sites/${siteId}/seo-potential`, headers: { cookie } });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.postsKnown).toBe(1);
+    expect(body.items[0]).toMatchObject({ wpPostId: 7, kind: "quick_win" });
+    expect(body.items[0].instructions).toContain("alter beitrag thema");
+    // Ueberarbeitung aus dem Hinweis starten
+    const rev = await app.inject({ method: "POST", url: `/api/sites/${siteId}/revisions`, headers: { cookie }, payload: { wpPostId: 7, instructions: body.items[0].instructions } });
+    expect(rev.statusCode).toBe(201);
+  });
+
+  it("Rueckwaerts-Verlinkung: schlaegt Saetze vor und verwirft unpassende Vorschlaege", async () => {
+    const full = (id: number, title: string, html: string) => ({ id, title: { rendered: title }, link: `https://93.184.216.34/p${id}/`, date: "2024-01-01T00:00:00", excerpt: { rendered: "" }, content: { rendered: html } });
+    const posts = [
+      full(1, "Neuer Beitrag zum Schadensersatz", "<p>Neuer Text zum Schadensersatz.</p>"),
+      full(2, "Aelterer Beitrag A", "<p>Der Arbeitgeber haftet bei Datenpannen. Weitere Folgen sind moeglich.</p>"),
+      full(3, "Aelterer Beitrag B", '<p>Hier steht schon <a href="https://93.184.216.34/p1/">der Link</a>.</p>'),
+      full(4, "Aelterer Beitrag C", "<p>Ein ganz anderes Thema ohne Bezug.</p>"),
+    ];
+    wpFetcher = (async (url: string) => {
+      const u = new URL(url);
+      const m = /\/posts\/(\d+)$/.exec(u.pathname);
+      if (m) return new Response(JSON.stringify(posts.find((p) => p.id === Number(m[1]))));
+      if (u.pathname === "/wp-json/wp/v2/posts") return new Response(JSON.stringify(posts.map(({ content, ...rest }) => rest)));
+      return new Response("[]");
+    }) as typeof fetch;
+    let candidatesSeen: string[] = [];
+    await setup(fakeWith({
+      suggestBacklinks: async (input) => {
+        candidatesSeen = input.candidates.map((c) => c.title);
+        return {
+          suggestions: [
+            { candidate: 0, anchor: "Schadensersatz bei Datenpannen", sentenceHtml: '<a href="https://93.184.216.34/p1/">Schadensersatz bei Datenpannen</a> erklären wir hier.', afterText: "Der Arbeitgeber haftet bei Datenpannen.", reason: "Vertieft die Haftung.", relevance: 8 },
+            { candidate: 1, anchor: "x", sentenceHtml: '<a href="https://fremd.example/x">falsches Ziel</a>', afterText: "", reason: "r", relevance: 9 },
+            { candidate: 1, anchor: "y", sentenceHtml: '<a href="https://93.184.216.34/p1/">zu schwach</a>', afterText: "", reason: "r", relevance: 3 },
+          ],
+        };
+      },
+    }));
+    const siteId = (await app.inject({ method: "POST", url: "/api/sites", headers: { cookie }, payload: { name: "S", baseUrl: "https://93.184.216.34" } })).json().id as string;
+    const res = await app.inject({ method: "POST", url: `/api/sites/${siteId}/backlinks`, headers: { cookie }, payload: { wpPostId: 1 } });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(candidatesSeen).toEqual(["Aelterer Beitrag A", "Aelterer Beitrag C"]); // B verlinkt schon, der Zielbeitrag selbst fehlt
+    expect(body.suggestions).toHaveLength(1);
+    expect(body.suggestions[0]).toMatchObject({ wpPostId: 2, anchor: "Schadensersatz bei Datenpannen" });
+    expect(body.suggestions[0].sentenceHtml).toContain('href="https://93.184.216.34/p1/"');
+    expect(body.suggestions[0].placement).toContain("Nach dem Absatz, der beginnt mit");
+    expect(body.suggestions[0].editUrl).toBe("https://93.184.216.34/wp-admin/post.php?post=2&action=edit");
+  });
+
   it("Themen-Scout: nutzt Search-Console-Daten, meldet Fehler als Hinweis und prueft die Verbindung", async () => {
     wpFetcher = (async () => new Response("[]")) as typeof fetch;
     const demandSeen: (string | undefined)[] = [];

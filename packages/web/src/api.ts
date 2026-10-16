@@ -320,3 +320,42 @@ export interface PostUsage {
   calls: number;
   steps: UsageStep[];
 }
+
+export interface SeoPotentialItem {
+  wpPostId: number;
+  title: string;
+  url: string;
+  kind: "quick_win" | "low_ctr" | "declining" | "cannibalization";
+  score: number;
+  headline: string;
+  details: string[];
+  topQueries: { query: string; impressions: number; clicks: number; position: number }[];
+  instructions: string;
+  competing?: { title: string; url: string }[];
+}
+
+export interface SeoPotentialResult {
+  period: [string, string];
+  pagesAnalyzed: number;
+  postsKnown: number;
+  items: SeoPotentialItem[];
+}
+
+export interface BacklinkSuggestion {
+  wpPostId: number;
+  title: string;
+  url: string;
+  editUrl: string;
+  builder: string | null;
+  anchor: string;
+  sentenceHtml: string;
+  placement: string;
+  reason: string;
+  relevance: number;
+}
+
+export interface BacklinkResult {
+  target: { title: string; url: string };
+  checked: number;
+  suggestions: BacklinkSuggestion[];
+}

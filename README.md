@@ -67,6 +67,12 @@ Bei einer Überarbeitung gibt es einen Hauptknopf **„Beitrag in WordPress aktu
 - **Beitrag mit Seitenbaukasten (Elementor, Divi, WPBakery, Beaver Builder):** Dort zeigt die Website den Inhalt des Baukastens, nicht den Beitragstext. Das Tool erkennt das und zeigt stattdessen die Schritte *Text kopieren → Beitrag im Baukasten öffnen → im Textblock einfügen und speichern*. Der kopierte Text entspricht dem, was an WordPress ginge (inklusive Hinweis auf ein KI-Bild).
 - Unter „Weitere Möglichkeiten“: **als neuen Entwurf senden** (Original bleibt unberührt, optional mit dem Datum des Originals) und – bei Baukasten-Beiträgen – den Beitragstext trotzdem ersetzen.
 
+### SEO-Potenziale und Rückwärts-Verlinkung
+
+Auf der Seite **Überarbeiten** zeigt die Karte **SEO-Potenziale** (nur bei eingetragener Search-Console-Property), welche veröffentlichten Beiträge sich am meisten lohnen: Beiträge kurz vor der ersten Google-Seite (Position 7 bis 20), Beiträge mit vielen Einblendungen und wenigen Klicks, Rückgänge gegenüber den 28 Tagen davor und Beiträge, die sich bei derselben Suchanfrage gegenseitig Platzierungen wegnehmen. Die Analyse nutzt nur Daten der Search Console und kostet nichts; die genannten Klickzahlen sind grobe Schätzungen. „Überarbeitung starten“ übernimmt eine fertige Anweisung, und die Suchdaten der Seite fließen wie sonst in die Überarbeitung ein.
+
+Bei einem ausgewählten Beitrag findet **Rückwärts-Verlinkung** (aufklappbar) Stellen in älteren Beiträgen, an denen ein Link auf diesen Beitrag den Lesern hilft: pro älterem Beitrag ein fertiger Satz mit Link, die Stelle im Text und eine Begründung. Beiträge, die schon verlinken, scheiden aus; Vorschläge mit falschem Linkziel oder geringer Relevanz werden verworfen. Das Tool ändert nichts selbst – du fügst den Satz im Editor ein (bei Elementor-Beiträgen im Elementor-Editor). Kosten: ein kurzer Aufruf des leichten Modells.
+
 ### Schlussabsatz je Hauptkategorie
 
 Der feste Schlussabsatz einer Website kann die Platzhalter `{{url}}` und `{{bereich}}` enthalten. Im Feld „Zielseiten je Hauptkategorie“ steht je Zeile `Kategorie | Adresse | Linktext`, dazu eine Zeile `Standard`. Beim Erzeugen des Entwurfs gilt die Standard-Zeile; beim Senden an WordPress wird der Absatz gegen die Zeile der gewählten Hauptkategorie ausgetauscht (ohne passende Zeile bleibt der Standard). Wurde der Absatz im Entwurf von Hand geändert, bleibt er unverändert.

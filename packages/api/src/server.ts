@@ -14,15 +14,16 @@ import type { AiService } from "./ai/types.js";
 import type { Config } from "./config.js";
 import type { FileStorage } from "./lib/storage.js";
 import { detectKind, extractDocument, stripHtml } from "./lib/extract.js";
-import { applyLinkPolicy, sanitizePostHtml, unwrapBlockedLinks, unwrapLinksNotIn } from "./lib/html.js";
+import { applyLinkPolicy, sanitizePostHtml, unwrapBlockedLinks, unwrapLinksNotIn, urlKey } from "./lib/html.js";
 import { selfUrls } from "./pipeline.js";
 import { demandPeriods } from "./lib/gsc.js";
+import { analyzeSeoPotential } from "./lib/seo-potential.js";
 import { parseClosingTargets, resolveClosing, siteClosing, targetFor } from "./lib/closing.js";
 import type { SearchConsole } from "./lib/gsc.js";
 import { keywordInText, seoChecks } from "./lib/seo.js";
 import { slugify } from "./lib/slug.js";
 import { decryptSecret, encryptSecret } from "./lib/secrets.js";
-import { detectPageBuilder, fetchSitePost, fetchSitePosts, fetchWordPressPosts } from "./lib/wordpress.js";
+import { detectPageBuilder, fetchAllSitePosts, fetchSitePost, fetchSitePosts, fetchWordPressPosts } from "./lib/wordpress.js";
 import { WordPressClient, WordPressError, type WpDraftInput } from "./lib/wp-client.js";
 import { markAsAiGenerated, sniffImageType } from "./lib/png.js";
 import type { ImageProvider } from "./image/provider.js";
@@ -774,6 +775,105 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, sear
       return created;
     });
     return reply.code(201).send(post);
+  });
+
+  // --- SEO-Potenziale (Search Console) ---------------------------------------
+  app.post<{ Params: { id: string } }>("/api/sites/:id/seo-potential", async (request, reply) => {
+    const site = await prisma.site.findUnique({ where: { id: request.params.id }, select: { baseUrl: true, gscProperty: true } });
+    if (!site) return reply.code(404).send({ error: "Website nicht gefunden" });
+    if (!site.baseUrl) return reply.code(400).send({ error: "Für die Website ist keine Adresse hinterlegt" });
+    if (!site.gscProperty) return reply.code(400).send({ error: "Bei der Website ist keine Search-Console-Property eingetragen (unter „Websites“)." });
+    if (!searchConsole?.configured()) return reply.code(409).send({ error: "Es wurde kein Search-Console-Schlüssel gefunden (Ordner „secrets“)." });
+    try {
+      const periods = demandPeriods();
+      const [posts, now, previous, queries] = await Promise.all([
+        fetchAllSitePosts(site.baseUrl, 10, fetcher),
+        searchConsole.pageStats(site.gscProperty, ...periods.current),
+        searchConsole.pageStats(site.gscProperty, ...periods.previous),
+        searchConsole.pageQueries(site.gscProperty, ...periods.current),
+      ]);
+      const items = analyzeSeoPotential({ posts: posts.map((p) => ({ id: p.id, title: p.title, url: p.url })), now, previous, queries });
+      return { period: periods.current, pagesAnalyzed: now.length, postsKnown: posts.length, items };
+    } catch (error) {
+      return reply.code(502).send({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  // --- Rueckwaerts-Verlinkung -------------------------------------------------
+  app.post<{ Params: { id: string } }>("/api/sites/:id/backlinks", async (request, reply) => {
+    const body = z.object({ wpPostId: z.number().int().positive() }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "Ungültige Eingabe" });
+    const site = await prisma.site.findUnique({ where: { id: request.params.id } });
+    if (!site) return reply.code(404).send({ error: "Website nicht gefunden" });
+    if (!site.baseUrl) return reply.code(400).send({ error: "Für die Website ist keine Adresse hinterlegt" });
+    useUsageContext({ siteId: site.id });
+    let target;
+    try {
+      target = await fetchSitePost(site.baseUrl, body.data.wpPostId, fetcher);
+    } catch (error) {
+      return reply.code(502).send({ error: `Beitrag konnte nicht geladen werden: ${error instanceof Error ? error.message : String(error)}` });
+    }
+    const targetKey = urlKey(target.url);
+    const words = [...new Set(target.title.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 5))].slice(0, 4);
+    const found = new Map<number, { id: number; title: string; url: string }>();
+    for (const search of [target.title, words.join(" ")].filter((q) => q.trim())) {
+      try {
+        for (const p of await fetchSitePosts(site.baseUrl, { search, count: 10 }, fetcher)) if (p.url && urlKey(p.url) !== targetKey && !found.has(p.id)) found.set(p.id, p);
+      } catch {
+        /* Suche nicht moeglich: mit dem arbeiten, was da ist */
+      }
+    }
+    const candidates: { id: number; title: string; url: string; html: string; text: string }[] = [];
+    for (const p of [...found.values()].slice(0, 8)) {
+      try {
+        const full = await fetchSitePost(site.baseUrl, p.id, fetcher);
+        // Beitraege, die den Zielbeitrag schon verlinken, scheiden aus.
+        const links = [...full.html.matchAll(/href="([^"]+)"/g)].map((m) => urlKey((m[1] ?? "").replace(/&amp;/g, "&")));
+        if (links.includes(targetKey)) continue;
+        candidates.push({ id: p.id, title: p.title, url: p.url, html: full.html, text: stripHtml(full.html) });
+      } catch {
+        /* einzelner Beitrag nicht ladbar */
+      }
+    }
+    if (candidates.length === 0) return { target: { title: target.title, url: target.url }, checked: 0, suggestions: [] };
+
+    let result;
+    try {
+      result = await ai.suggestBacklinks({
+        site: { name: site.name, language: site.language, audience: site.audience, tone: site.tone, styleGuide: site.styleGuide },
+        target: { title: target.title, url: target.url, text: stripHtml(target.html) },
+        candidates: candidates.map((c) => ({ title: c.title, url: c.url, text: c.text })),
+      });
+    } catch (error) {
+      return reply.code(502).send({ error: `Vorschläge nicht möglich: ${explainAiError(error)}` });
+    }
+    const origin = site.baseUrl.replace(/\/+$/, "");
+    const used = new Set<number>();
+    const suggestions = [];
+    for (const s of result.suggestions.sort((a, b) => b.relevance - a.relevance)) {
+      const c = candidates[s.candidate];
+      if (!c || used.has(s.candidate) || s.relevance < 6) continue;
+      const sentence = sanitizePostHtml(`<p>${s.sentenceHtml}</p>`).replace(/^<p>/, "").replace(/<\/p>\s*$/, "").trim();
+      const hrefs = [...sentence.matchAll(/href="([^"]+)"/g)].map((m) => urlKey((m[1] ?? "").replace(/&amp;/g, "&")));
+      if (!sentence || hrefs.length !== 1 || hrefs[0] !== targetKey) continue; // genau ein Link, und zwar auf den Zielbeitrag
+      used.add(s.candidate);
+      const needle = s.afterText.trim().toLowerCase().slice(0, 50);
+      const located = needle.length >= 12 && c.text.toLowerCase().includes(needle);
+      const builder = detectPageBuilder(c.html) ?? null;
+      suggestions.push({
+        wpPostId: c.id,
+        title: c.title,
+        url: c.url,
+        editUrl: `${origin}/wp-admin/post.php?post=${c.id}&action=${builder === "Elementor" ? "elementor" : "edit"}`,
+        builder,
+        anchor: s.anchor,
+        sentenceHtml: sentence,
+        placement: located ? `Nach dem Absatz, der beginnt mit „${s.afterText.trim()}“` : "Am Ende des thematisch passenden Abschnitts",
+        reason: s.reason,
+        relevance: s.relevance,
+      });
+    }
+    return { target: { title: target.title, url: target.url }, checked: candidates.length, suggestions };
   });
 
   // --- Titelvorschlaege -------------------------------------------------------

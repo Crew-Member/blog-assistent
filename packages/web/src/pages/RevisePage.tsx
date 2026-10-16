@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api, type RadarState, type Site, type SitePostSummary } from "../api";
+import { api, type BacklinkResult, type RadarState, type SeoPotentialItem, type SeoPotentialResult, type Site, type SitePostSummary } from "../api";
 import { useLoad } from "../hooks";
 import { Chip, EmptyState, Icon, PageHeader, Spinner, relTime } from "../ui";
 
@@ -94,6 +94,137 @@ function RadarCard({ siteId }: { siteId: string }) {
   );
 }
 
+const KIND = {
+  quick_win: { label: "Kurz vor Seite 1", tone: "warn" },
+  low_ctr: { label: "Wenig Klicks", tone: "info" },
+  declining: { label: "Rückgang", tone: "danger" },
+  cannibalization: { label: "Konkurrenz im eigenen Haus", tone: "info" },
+} as const;
+
+function SeoPotentialCard({ siteId }: { siteId: string }) {
+  const [result, setResult] = useState<SeoPotentialResult>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  async function run() {
+    setBusy(true);
+    setError(undefined);
+    try {
+      setResult(await api.post<SeoPotentialResult>(`/api/sites/${siteId}/seo-potential`));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revise(item: SeoPotentialItem) {
+    setBusy(true);
+    setError(undefined);
+    try {
+      const post = await api.post<{ id: string }>(`/api/sites/${siteId}/revisions`, { wpPostId: item.wpPostId, instructions: item.instructions });
+      window.location.hash = `#/posts/${post.id}`;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card stack">
+      <div className="card-title"><Icon name="search" /> SEO-Potenziale (Search Console)</div>
+      <span className="muted">
+        Zeigt veröffentlichte Beiträge, bei denen sich eine Überarbeitung am ehesten lohnt: Beiträge kurz vor der ersten Google-Seite, Beiträge mit vielen Einblendungen und wenigen Klicks, Rückgänge und Beiträge, die sich gegenseitig Platzierungen wegnehmen. Grundlage sind die letzten 28 Tage. Die Analyse kostet nichts; die angegebenen Klickzahlen sind grobe Schätzungen.
+      </span>
+      <div className="row">
+        <button className="secondary" disabled={busy} onClick={() => void run()}>{busy && !result ? <><Spinner /> Analyse läuft …</> : result ? "Neu analysieren" : "Analyse starten"}</button>
+        {result && <span className="muted">{result.pagesAnalyzed} Seiten mit Einblendungen, {result.items.length} Hinweise (Zeitraum {result.period[0]} bis {result.period[1]})</span>}
+      </div>
+      {result && result.items.length === 0 && <span className="muted">Aktuell gibt es keine auffälligen Beiträge. Das kann bei wenigen Einblendungen auch an der Datenmenge liegen.</span>}
+      {result?.items.map((item) => (
+        <div key={`${item.kind}-${item.wpPostId}`} className="card stack" style={{ boxShadow: "none" }}>
+          <div className="row spread">
+            <strong>{item.title}</strong>
+            <Chip tone={KIND[item.kind].tone}>{KIND[item.kind].label}</Chip>
+          </div>
+          <span><strong>{item.headline}</strong>{item.score > 0 ? <span className="muted"> – geschätzt bis zu {item.score} Klicks mehr in 28 Tagen</span> : null}</span>
+          <ul>{item.details.map((d, i) => <li key={i}>{d}</li>)}</ul>
+          {item.topQueries.length > 0 && (
+            <span className="muted">Suchanfragen: {item.topQueries.map((q) => `„${q.query}“ (${q.impressions} Einbl., Pos. ${q.position.toFixed(1).replace(".", ",")})`).join(" · ")}</span>
+          )}
+          <div className="row">
+            <button disabled={busy} onClick={() => void revise(item)}>Überarbeitung starten</button>
+            <a href={item.url} target="_blank" rel="noreferrer noopener" className="muted">Original ansehen</a>
+          </div>
+        </div>
+      ))}
+      {error && <span className="error">{error}</span>}
+    </div>
+  );
+}
+
+function BacklinksPanel({ siteId, post }: { siteId: string; post: SitePostSummary }) {
+  const [result, setResult] = useState<BacklinkResult>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const [copied, setCopied] = useState<number>();
+
+  async function run() {
+    setBusy(true);
+    setError(undefined);
+    setResult(undefined);
+    try {
+      setResult(await api.post<BacklinkResult>(`/api/sites/${siteId}/backlinks`, { wpPostId: post.id }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copy(html: string, id: number) {
+    try {
+      const text = html.replace(/<[^>]+>/g, "");
+      await navigator.clipboard.write([new ClipboardItem({ "text/html": new Blob([html], { type: "text/html" }), "text/plain": new Blob([text], { type: "text/plain" }) })]);
+    } catch {
+      try {
+        await navigator.clipboard.writeText(html);
+      } catch {
+        return;
+      }
+    }
+    setCopied(id);
+    setTimeout(() => setCopied(undefined), 3000);
+  }
+
+  return (
+    <div className="stack">
+      <div className="row">
+        <button className="secondary" disabled={busy} onClick={() => void run()}>{busy ? <><Spinner /> Suche läuft …</> : "Passende Links aus älteren Beiträgen finden"}</button>
+        <span className="muted">Findet Stellen in anderen Beiträgen, an denen ein Link auf „{post.title}“ den Lesern hilft. Es wird nichts verändert; du fügst den Satz selbst ein.</span>
+      </div>
+      {result && result.checked === 0 && <span className="muted">Es wurden keine thematisch verwandten Beiträge ohne Link auf diesen Beitrag gefunden.</span>}
+      {result && result.checked > 0 && result.suggestions.length === 0 && <span className="muted">{result.checked} Beiträge geprüft, aber keine Stelle, an der ein Link wirklich passt.</span>}
+      {result?.suggestions.map((s) => (
+        <div key={s.wpPostId} className="card stack" style={{ boxShadow: "none" }}>
+          <div className="row spread">
+            <strong>{s.title}</strong>
+            <a href={s.editUrl} target="_blank" rel="noreferrer noopener">im Editor öffnen <Icon name="external" size={14} /></a>
+          </div>
+          <span className="muted">{s.reason}</span>
+          <span><strong>Einfügen:</strong> {s.placement}</span>
+          <blockquote dangerouslySetInnerHTML={{ __html: s.sentenceHtml }} />
+          {s.builder && <span className="error">Dieser Beitrag wurde mit {s.builder} gebaut – den Satz bitte dort im {s.builder}-Editor einfügen.</span>}
+          <div className="row">
+            <button className="secondary" onClick={() => void copy(s.sentenceHtml, s.wpPostId)}>{copied === s.wpPostId ? "Kopiert" : "Satz kopieren"}</button>
+          </div>
+        </div>
+      ))}
+      {error && <span className="error">{error}</span>}
+    </div>
+  );
+}
+
 export function RevisePage() {
   const sites = useLoad(() => api.get<Site[]>("/api/sites"));
   const [siteId, setSiteId] = useState("");
@@ -149,6 +280,7 @@ export function RevisePage() {
           </div>
         </div>
       )}
+      {usable.length > 0 && activeId && usable.find((s) => s.id === activeId)?.gscProperty && <SeoPotentialCard key={`seo-${activeId}`} siteId={activeId} />}
       {usable.length > 0 && activeId && <RadarCard key={activeId} siteId={activeId} />}
       {usable.length > 0 && (
         <div className="card stack">
@@ -182,6 +314,10 @@ export function RevisePage() {
           </label>
           <span className="muted">Die KI recherchiert aktuelle Entwicklungen, überarbeitet den Text, prüft die Fakten und setzt passende interne Links auf andere Beiträge der Website. Beim Senden an WordPress entsteht ein neuer Entwurf; der veröffentlichte Beitrag wird nie überschrieben.</span>
           <div><button disabled={busy} onClick={start}>{busy ? "Bitte warten …" : "Überarbeitung starten"}</button></div>
+          <details>
+            <summary>Rückwärts-Verlinkung: Wo sollten ältere Beiträge auf diesen Beitrag verweisen?</summary>
+            <BacklinksPanel key={selected.id} siteId={activeId} post={selected} />
+          </details>
         </div>
       )}
       {error && <span className="error">{error}</span>}

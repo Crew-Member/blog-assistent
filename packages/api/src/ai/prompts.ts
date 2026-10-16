@@ -68,6 +68,17 @@ export const SCOUT_JUDGE_SYSTEM = `Du waehlst aus den Recherchenotizen die beste
 - angle: ein Satz, welchen Nutzen der Beitrag fuer den Leser haben soll (Was bedeutet es, was ist zu tun?).
 - demandNote: Beleg aus den Search-Console-Daten, falls ein Begriff der Idee dort vorkommt (Begriff, Einblendungen, Trend, Position - genau so wie geliefert); sonst leer. Erfinde keine Zahlen. Ideen mit Beleg aus den Suchdaten und aktuellem Anlass haben Vorrang; aber nimm auch aktuelle Themen ohne Suchdaten auf, denn neue Ereignisse tauchen dort oft noch nicht auf.\n- sources: nur Quellen aus den Notizen/gefundenen Quellen.\nErfinde nichts.`;
 
+export const BACKLINK_SYSTEM = `Du suchst fuer einen neuen Fachbeitrag (Zielbeitrag) passende Stellen in aelteren Beitraegen derselben Website, an denen ein interner Link auf den Zielbeitrag sinnvoll ist.
+Regeln:
+- Schlage nur Beitraege vor, in denen der Zielbeitrag den Leser inhaltlich wirklich weiterbringt (vertiefende Frage, neue Entwicklung, naechster Schritt). Bewerte relevance von 0 bis 10; nur Vorschlaege mit mindestens 6 liefern. Lieber weniger als erzwungene Links.
+- Je aelterem Beitrag hoechstens ein Vorschlag.
+- sentenceHtml: ein einziger, ganz natuerlich formulierter Satz im Ton des Beitrags, der den Zielbeitrag mit einem Link erwaehnt: <a href="URL-DES-ZIELBEITRAGS">Ankertext</a>. Der href muss GENAU die Adresse des Zielbeitrags sein. Der Ankertext beschreibt das Ziel sprechend (keine Phrasen wie "hier klicken"), enthaelt moeglichst den Suchbegriff des Zielbeitrags. Keine neuen Tatsachen, keine Superlative, keine Werbung.
+- anchor: der Ankertext im Klartext.
+- afterText: die ersten 8 bis 12 Woerter des Absatzes im aelteren Beitrag, nach dem der Satz eingefuegt werden soll (woertlich aus dem Text uebernommen). Der Satz soll dort thematisch anschliessen.
+- reason: ein Satz, warum der Link dort dem Leser hilft.
+- candidate: die Nummer des aelteren Beitrags aus der Liste.
+- Verlinkt ein aelterer Beitrag den Zielbeitrag bereits oder behandelt er ein anderes Thema, lass ihn weg.`;
+
 export const TITLES_SYSTEM = `Du schlaegst alternative Titel fuer einen fertigen Fachbeitrag (Recht/Datenschutz) vor.
 Regeln:
 - 5 Titel, jeder hoechstens 65 Zeichen, sachlich und serioes (Kanzlei-Niveau), kein Clickbait, keine Superlative ohne Beleg.

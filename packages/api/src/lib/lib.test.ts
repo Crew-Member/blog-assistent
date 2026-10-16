@@ -412,3 +412,42 @@ describe("Disclaimer im Beitragsfuss", () => {
     expect(script).not.toContain("javascript:");
   });
 });
+
+describe("analyzeSeoPotential", () => {
+  it("findet Quick Wins, geringe Klickrate, Rueckgaenge und Kannibalisierung", async () => {
+    const { analyzeSeoPotential } = await import("./seo-potential.js");
+    const posts = [
+      { id: 1, title: "Quick Win", url: "https://kirmse.eu/a/" },
+      { id: 2, title: "Wenig Klicks", url: "https://kirmse.eu/b/" },
+      { id: 3, title: "Rueckgang", url: "https://kirmse.eu/c/" },
+      { id: 4, title: "Kannibale A", url: "https://kirmse.eu/d/" },
+      { id: 5, title: "Kannibale B", url: "https://kirmse.eu/e/" },
+      { id: 6, title: "Unauffaellig", url: "https://kirmse.eu/f/" },
+    ];
+    const now = [
+      { page: "https://kirmse.eu/a/", impressions: 400, clicks: 4, position: 12 },
+      { page: "https://kirmse.eu/b/", impressions: 1000, clicks: 10, position: 4 },
+      { page: "https://kirmse.eu/c/", impressions: 60, clicks: 2, position: 6 },
+      { page: "https://kirmse.eu/f/", impressions: 500, clicks: 50, position: 2 },
+      { page: "https://kirmse.eu/kategorie/", impressions: 9000, clicks: 10, position: 15 },
+    ];
+    const previous = [{ page: "https://kirmse.eu/c/", impressions: 300, clicks: 30, position: 5 }];
+    const queries = [
+      { page: "https://kirmse.eu/a/", query: "dsgvo bussgeld", impressions: 300, clicks: 3, position: 12 },
+      { page: "https://kirmse.eu/d/", query: "videoueberwachung", impressions: 100, clicks: 1, position: 9 },
+      { page: "https://kirmse.eu/e/", query: "videoueberwachung", impressions: 40, clicks: 0, position: 14 },
+    ];
+    const items = analyzeSeoPotential({ posts, now, previous, queries });
+    const kinds = items.map((i) => `${i.kind}:${i.wpPostId}`);
+    expect(kinds).toContain("quick_win:1");
+    expect(kinds).toContain("low_ctr:2");
+    expect(kinds).toContain("declining:3");
+    expect(kinds).toContain("cannibalization:5"); // der schwaechere von beiden
+    expect(kinds.some((k) => k.endsWith(":6"))).toBe(false); // gute Platzierung und Klickrate
+    expect(items.every((i) => i.url.startsWith("https://kirmse.eu/") && i.wpPostId !== 0)).toBe(true); // Kategorieseiten fehlen
+    expect(items.find((i) => i.kind === "quick_win")?.instructions).toContain("„dsgvo bussgeld“");
+    expect(items.find((i) => i.kind === "cannibalization")?.competing?.[0]?.title).toBe("Kannibale A");
+    const scores = items.map((i) => i.score);
+    expect([...scores].sort((a, b) => b - a)).toEqual(scores);
+  });
+});
