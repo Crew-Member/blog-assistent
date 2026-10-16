@@ -96,8 +96,11 @@ export function assemblePostHtml(contentHtml: string, disclaimer: string, closin
   const stand = now.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Berlin" });
   // Bei Ueberarbeitungen: Datum der Erstveroeffentlichung mit nennen ("Stand:" bleibt der Anfang der Zeile).
   const original = originalDate && /^\d{4}-\d{2}-\d{2}/.test(originalDate) ? `${originalDate.slice(8, 10)}.${originalDate.slice(5, 7)}.${originalDate.slice(0, 4)}` : "";
-  const notes = [original ? `Stand: ${stand} (aktualisiert). Ursprünglich veröffentlicht am ${original}.` : `Stand: ${stand}.`, disclaimer.trim()].filter(Boolean).join(" ");
-  const footer = `<p><em>${escapeHtml(notes)}</em></p>`;
+  const standText = original ? `Stand: ${stand} (aktualisiert). Ursprünglich veröffentlicht am ${original}.` : `Stand: ${stand}.`;
+  // Der Disclaimer darf Links und einfache Hervorhebungen enthalten (a, strong, em); ohne Tags bleibt er reiner, maskierter Text.
+  const note = disclaimer.trim();
+  const noteHtml = /<\/?[a-z][^>]*>/i.test(note) ? sanitizePostHtml(`<p>${note}</p>`).replace(/^<p>/, "").replace(/<\/p>\s*$/, "") : escapeHtml(note);
+  const footer = `<p><em>${[escapeHtml(standText), noteHtml].filter(Boolean).join(" ")}</em></p>`;
   return `${body}\n${footer}`;
 }
 

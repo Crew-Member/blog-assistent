@@ -398,3 +398,17 @@ describe("Schlussabsatz mit Zielseiten", () => {
     expect(siteClosing({ closingHtml: closing, closingTargets: "" })).toBe("");
   });
 });
+
+describe("Disclaimer im Beitragsfuss", () => {
+  it("erlaubt Links im Disclaimer und maskiert reinen Text weiterhin", async () => {
+    const { assemblePostHtml } = await import("../pipeline.js");
+    const now = new Date("2026-10-16T10:00:00Z");
+    const withLink = assemblePostHtml("<p>Text</p>", 'Kein Rechtsrat. Mehr im <a href="https://kirmse.eu/blog">Blog</a>', "", now);
+    expect(withLink).toMatch(/<p><em>Stand: 16\.10\.2026\. Kein Rechtsrat\. Mehr im <a href="https:\/\/kirmse\.eu\/blog"[^>]*>Blog<\/a><\/em><\/p>$/);
+    const plain = assemblePostHtml("<p>Text</p>", "Gewinn <5 % & mehr", "", now);
+    expect(plain).toContain("Gewinn &lt;5 % &amp; mehr");
+    const script = assemblePostHtml("<p>Text</p>", 'x <script>alert(1)</script> <a href="javascript:alert(1)">y</a>', "", now);
+    expect(script).not.toContain("<script");
+    expect(script).not.toContain("javascript:");
+  });
+});
