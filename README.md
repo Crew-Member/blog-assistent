@@ -67,6 +67,10 @@ Bei einer Überarbeitung gibt es einen Hauptknopf **„Beitrag in WordPress aktu
 - **Beitrag mit Seitenbaukasten (Elementor, Divi, WPBakery, Beaver Builder):** Dort zeigt die Website den Inhalt des Baukastens, nicht den Beitragstext. Das Tool erkennt das und zeigt stattdessen die Schritte *Text kopieren → Beitrag im Baukasten öffnen → im Textblock einfügen und speichern*. Der kopierte Text entspricht dem, was an WordPress ginge (inklusive Hinweis auf ein KI-Bild).
 - Unter „Weitere Möglichkeiten“: **als neuen Entwurf senden** (Original bleibt unberührt, optional mit dem Datum des Originals) und – bei Baukasten-Beiträgen – den Beitragstext trotzdem ersetzen.
 
+### Beitragsaufbau und Bilder
+
+Pro Website lassen sich zwei Strukturelemente einschalten (Standard: an): **„Das Wichtigste in Kürze“** (3 bis 4 knappe Punkte direkt nach dem Einstieg) und **„Häufige Fragen“** (3 bis 4 Leserfragen mit kurzen Antworten am Ende). Zwischenüberschriften nennen das konkrete Thema statt allgemeiner Schlagwörter; bei Fristen, Beträgen oder Gegenüberstellungen darf die KI eine Tabelle setzen. Beitragsbilder werden beim Senden an WordPress auf höchstens 1600 Pixel Breite verkleinert und als JPEG gespeichert (der KI-Vermerk in der Datei bleibt erhalten); das Original im Tool bleibt unverändert.
+
 ### SEO-Potenziale und Rückwärts-Verlinkung
 
 Auf der Seite **Überarbeiten** zeigt die Karte **SEO-Potenziale** (nur bei eingetragener Search-Console-Property), welche veröffentlichten Beiträge sich am meisten lohnen: Beiträge kurz vor der ersten Google-Seite (Position 7 bis 20), Beiträge mit vielen Einblendungen und wenigen Klicks, Rückgänge gegenüber den 28 Tagen davor und Beiträge, die sich bei derselben Suchanfrage gegenseitig Platzierungen wegnehmen. Die Analyse nutzt nur Daten der Search Console und kostet nichts; die genannten Klickzahlen sind grobe Schätzungen. „Überarbeitung starten“ übernimmt eine fertige Anweisung, und die Suchdaten der Seite fließen wie sonst in die Überarbeitung ein.
