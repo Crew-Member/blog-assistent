@@ -339,7 +339,7 @@ describe("Search Console", () => {
     const fetcher = (async (url: string, init?: RequestInit) => {
       calls.push({ url, auth: (init?.headers as Record<string, string> | undefined)?.authorization, body: String(init?.body) });
       if (url.includes("oauth2")) return new Response(JSON.stringify({ access_token: "tok", expires_in: 3600 }));
-      if (url.includes(encodeURIComponent("https://geschlossen.example/"))) return new Response("{}", { status: 403 });
+      if (decodeURIComponent(url).includes("geschlossen.example")) return new Response("{}", { status: 403 });
       return new Response(JSON.stringify({ rows: [{ keys: ["dsgvo"], clicks: 3, impressions: 40, position: 7.5 }] }));
     }) as typeof fetch;
     const sc = createSearchConsole(file, fetcher);
@@ -449,5 +449,35 @@ describe("analyzeSeoPotential", () => {
     expect(items.find((i) => i.kind === "cannibalization")?.competing?.[0]?.title).toBe("Kannibale A");
     const scores = items.map((i) => i.score);
     expect([...scores].sort((a, b) => b - a)).toEqual(scores);
+  });
+});
+
+describe("Search-Console-Property-Namen", () => {
+  it("versteht Domain-Properties und probiert Alternativen", async () => {
+    const { normalizeProperty, propertyAlternatives, createSearchConsole } = await import("./gsc.js");
+    expect(normalizeProperty("kdsb.gmbh")).toBe("sc-domain:kdsb.gmbh");
+    expect(normalizeProperty(" KDSB.gmbh ")).toBe("sc-domain:kdsb.gmbh");
+    expect(normalizeProperty("sc-domain:kdsb.gmbh")).toBe("sc-domain:kdsb.gmbh");
+    expect(normalizeProperty("https://kdsb.gmbh")).toBe("https://kdsb.gmbh/");
+    expect(normalizeProperty("https://kirmse.eu/blog/")).toBe("https://kirmse.eu/blog/");
+    expect(propertyAlternatives("https://www.kdsb.gmbh/")).toEqual(["https://www.kdsb.gmbh/", "sc-domain:kdsb.gmbh"]);
+    expect(propertyAlternatives("kdsb.gmbh")).toEqual(["sc-domain:kdsb.gmbh"]);
+
+    const { generateKeyPairSync } = await import("node:crypto");
+    const { mkdtempSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const nodePath = await import("node:path");
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const file = nodePath.join(mkdtempSync(nodePath.join(tmpdir(), "gsc2-")), "key.json");
+    writeFileSync(file, JSON.stringify({ type: "service_account", client_email: "d@p.iam.gserviceaccount.com", private_key: privateKey.export({ type: "pkcs8", format: "pem" }).toString() }));
+    const tried: string[] = [];
+    const fetcher = (async (url: string) => {
+      if (url.includes("oauth2")) return new Response(JSON.stringify({ access_token: "t" }));
+      tried.push(decodeURIComponent(url.split("/sites/")[1]!.split("/searchAnalytics")[0]!));
+      return url.includes(encodeURIComponent("sc-domain:kdsb.gmbh")) ? new Response(JSON.stringify({ rows: [{ keys: ["x"], clicks: 1, impressions: 5, position: 3 }] })) : new Response(JSON.stringify({ error: { message: "User does not have sufficient permission" } }), { status: 403 });
+    }) as typeof fetch;
+    const rows = await createSearchConsole(file, fetcher).queries("https://kdsb.gmbh/", "a", "b");
+    expect(rows).toHaveLength(1);
+    expect(tried).toEqual(["https://kdsb.gmbh/", "sc-domain:kdsb.gmbh"]);
   });
 });

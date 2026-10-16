@@ -117,27 +117,33 @@ export function createSearchConsole(keyFile: string | undefined, fetcher: typeof
   type RawRow = { keys?: string[]; clicks?: number; impressions?: number; position?: number };
 
   async function search(rawProperty: string, payload: Record<string, unknown>): Promise<RawRow[]> {
-    const property = normalizeProperty(rawProperty);
     const bearer = await accessToken();
-    const res = await fetcher(`https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(property)}/searchAnalytics/query`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json" },
-      body: JSON.stringify({ dataState: "final", ...payload }),
-    });
-    if (res.status === 403 || res.status === 404) {
-      const detail = (await res.json().catch(() => ({}))) as { error?: { message?: string; status?: string; errors?: { reason?: string }[]; details?: { reason?: string }[] } };
-      const google = detail.error?.message ?? "";
-      const reasons = [...(detail.error?.errors ?? []), ...(detail.error?.details ?? [])].map((e) => e.reason ?? "").join(" ");
-      const apiOff = /accessNotConfigured|SERVICE_DISABLED|has not been used in project|is disabled/i.test(`${google} ${reasons}`);
-      const who = key?.client_email ?? "das Dienstkonto";
-      const hint = apiOff
-        ? `Die Search Console API ist im Google-Cloud-Projekt nicht aktiviert (APIs und Dienste → Bibliothek → „Google Search Console API“ → Aktivieren).`
-        : `${who} ist in der Property „${property}“ nicht als Nutzer eingetragen (Search Console → Einstellungen → Nutzer und Berechtigungen) oder die Property heißt anders (z. B. mit www. oder als sc-domain:…).`;
-      throw new GscError(`Kein Zugriff auf die Search-Console-Property „${property}“. ${hint}${google ? ` Antwort von Google: ${google}` : ""}`, res.status);
+    let firstError: GscError | undefined;
+    for (const property of propertyAlternatives(rawProperty)) {
+      const res = await fetcher(`https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(property)}/searchAnalytics/query`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json" },
+        body: JSON.stringify({ dataState: "final", ...payload }),
+      });
+      if (res.status === 403 || res.status === 404) {
+        const detail = (await res.json().catch(() => ({}))) as { error?: { message?: string; status?: string; errors?: { reason?: string }[]; details?: { reason?: string }[] } };
+        const google = detail.error?.message ?? "";
+        const reasons = [...(detail.error?.errors ?? []), ...(detail.error?.details ?? [])].map((e) => e.reason ?? "").join(" ");
+        const apiOff = /accessNotConfigured|SERVICE_DISABLED|has not been used in project|is disabled/i.test(`${google} ${reasons}`);
+        const who = key?.client_email ?? "das Dienstkonto";
+        const hint = apiOff
+          ? `Die Search Console API ist im Google-Cloud-Projekt nicht aktiviert (APIs und Dienste → Bibliothek → „Google Search Console API“ → Aktivieren).`
+          : `${who} ist in der Property „${property}“ nicht als Nutzer eingetragen (Search Console → Einstellungen → Nutzer und Berechtigungen) oder die Property heißt anders (Domain-Properties heißen sc-domain:beispiel.de, URL-Properties https://beispiel.de/).`;
+        const error = new GscError(`Kein Zugriff auf die Search-Console-Property „${property}“. ${hint}${google ? ` Antwort von Google: ${google}` : ""}`, res.status);
+        if (apiOff) throw error;
+        firstError ??= error;
+        continue; // naechste Schreibweise probieren
+      }
+      const body = (await res.json().catch(() => ({}))) as { rows?: RawRow[]; error?: { message?: string } };
+      if (!res.ok) throw new GscError(`Search Console: ${body.error?.message ?? `HTTP ${res.status}`}`, res.status);
+      return body.rows ?? [];
     }
-    const body = (await res.json().catch(() => ({}))) as { rows?: RawRow[]; error?: { message?: string } };
-    if (!res.ok) throw new GscError(`Search Console: ${body.error?.message ?? `HTTP ${res.status}`}`, res.status);
-    return body.rows ?? [];
+    throw firstError ?? new GscError("Kein Zugriff auf die Search Console.");
   }
 
   return {
@@ -160,10 +166,23 @@ export function createSearchConsole(keyFile: string | undefined, fetcher: typeof
   };
 }
 
-/** URL-Praefix-Properties heissen immer mit Schraegstrich am Ende (https://kirmse.eu/); Leerraum und fehlender Schraegstrich werden ergaenzt. */
+/**
+ * Property-Namen: URL-Praefix-Properties heissen mit Schraegstrich am Ende (https://kirmse.eu/), Domain-Properties mit Praefix
+ * (sc-domain:kdsb.gmbh). Die Search Console zeigt Domain-Properties nur als "kdsb.gmbh" an; ein Name ohne Schema und ohne Doppelpunkt
+ * wird deshalb als Domain-Property verstanden.
+ */
 export function normalizeProperty(property: string): string {
   const p = property.trim();
-  return /^https?:\/\/[^/]+$/i.test(p) ? `${p}/` : p;
+  if (/^https?:\/\/[^/]+$/i.test(p)) return `${p}/`;
+  if (/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(p)) return `sc-domain:${p.toLowerCase()}`;
+  return p;
+}
+
+/** Alternative Schreibweisen derselben Website, die bei fehlendem Zugriff zusaetzlich probiert werden (URL-Praefix an der Wurzel -> Domain-Property). */
+export function propertyAlternatives(property: string): string[] {
+  const normalized = normalizeProperty(property);
+  const root = /^https?:\/\/(?:www\.)?([^/]+)\/$/i.exec(normalized);
+  return root ? [normalized, `sc-domain:${root[1]!.toLowerCase()}`] : [normalized];
 }
 
 const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
