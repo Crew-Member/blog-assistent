@@ -29,6 +29,8 @@ model Site {
   competitionCheck Boolean @default(true)
   // Strukturelemente der Beitraege: Kurzfassung "Das Wichtigste in Kuerze" am Anfang, Abschnitt "Haeufige Fragen" am Ende
   structureSummary Boolean @default(true)
+  // Allgemeine Vorgaben fuer Beitragsbilder dieser Website (Stil, Motive, Farben, was vermieden werden soll); fliesst in jeden Bildvorschlag ein
+  imageStyleGuide String @default("")
   structureFaq     Boolean @default(true)
   // Wortlaut des sichtbaren Hinweises im Beitrag bei KI-generiertem Beitragsbild (leer = Standard). Ein/Aus ueber labelAiImages.
   aiNoticeText    String  @default("")

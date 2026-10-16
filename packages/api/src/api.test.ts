@@ -768,6 +768,20 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect((await app.inject({ method: "POST", url: `/api/sites/${siteId}/gsc/test`, headers: { cookie } })).statusCode).toBe(502);
   });
 
+  it("reicht den Bildstil der Website an den Bildvorschlag weiter", async () => {
+    const seen: (string | undefined)[] = [];
+    const fake = new FakeAiService();
+    await setup(fakeWith({ planImage: async (input) => { seen.push(input.imageStyleGuide); return fake.planImage(input); } }));
+    const mk = async (extra: Record<string, unknown>) => (await app.inject({ method: "POST", url: "/api/sites", headers: { cookie }, payload: { name: "Kanzlei Bild", audience: "Unternehmen", ...extra } })).json().id as string;
+    const withStyle = await mk({ imageStyleGuide: "Dokumentarischer Foto-Stil, ruhige Blautöne" });
+    const withoutStyle = await mk({});
+    for (const id of [withStyle, withoutStyle]) {
+      const postId = await makePost(id);
+      expect((await app.inject({ method: "POST", url: `/api/posts/${postId}/image/plan`, headers: { cookie }, payload: {} })).statusCode).toBeLessThan(300);
+    }
+    expect(seen).toEqual(["Dokumentarischer Foto-Stil, ruhige Blautöne", undefined]);
+  });
+
   it("gibt dem Bildvorschlag Sprache und zuletzt verwendete Bildideen mit", async () => {
     const seen: { language?: string; recent?: string[] }[] = [];
     const fake = new FakeAiService();

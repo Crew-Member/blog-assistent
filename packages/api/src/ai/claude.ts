@@ -606,7 +606,7 @@ export class ClaudeAiService implements AiService {
     };
   }
 
-  async planImage(input: { site: SiteProfile; post: { title: string; excerpt: string; focusKeyword: string; text: string }; style?: "illustration" | "photo"; promptLanguage?: "de" | "en"; recentPrompts?: string[] }): Promise<ImagePlan> {
+  async planImage(input: { site: SiteProfile; post: { title: string; excerpt: string; focusKeyword: string; text: string }; style?: "illustration" | "photo"; imageStyleGuide?: string; promptLanguage?: "de" | "en"; recentPrompts?: string[] }): Promise<ImagePlan> {
     const content: Anthropic.ContentBlockParam[] = [
       {
         type: "text",
@@ -614,7 +614,8 @@ export class ClaudeAiService implements AiService {
           `Website: ${input.site.name}`,
           input.site.audience && `Zielgruppe: ${input.site.audience}`,
           `Beitrag:\nTitel: ${input.post.title}\nFokus-Keyword: ${input.post.focusKeyword}\nAuszug: ${input.post.excerpt}\nText des Beitrags (Auszug): ${input.post.text.slice(0, 5000)}`,
-          input.style ? `Vorgegebener Stil: ${input.style}` : "Stil: frei waehlen",
+          input.imageStyleGuide ? `Bildstil-Vorgaben dieser Website (verbindlich; sie gehen den allgemeinen Gestaltungsvorschlaegen vor, ausser bei den Regeln zu Schrift, Logos und realen Personen):\n${input.imageStyleGuide.slice(0, 3000)}` : "",
+          input.style ? `Vorgegebener Stil: ${input.style}` : "Stil: frei waehlen (sofern die Bildstil-Vorgaben nichts festlegen)",
           `Sprache des Bild-Prompts (Feld prompt): ${input.promptLanguage === "en" ? "Englisch" : "Deutsch"}`,
           input.recentPrompts?.length ? `Zuletzt verwendete Bildideen dieser Website (nicht wiederholen):\n${input.recentPrompts.map((p) => `- ${p.slice(0, 220)}`).join("\n")}` : "",
           `Besetzung (nur verwenden, falls Menschen im Bild vorkommen; nimm die Personen der Reihe nach und uebernimm ihre Merkmale woertlich in den Prompt):\n${castPeople().join("\n")}`,

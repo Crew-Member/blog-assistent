@@ -278,4 +278,4 @@ Weitere Felder:
 - caption: Deutsch, eine kurze Bildunterschrift (hoechstens 80 Zeichen) oder leer, wenn keine noetig ist.
 - searchQuery: 2 bis 4 englische Suchbegriffe fuer eine Stockfoto-Datenbank, passend zum Motiv.
 
-Abwechslung: Bekommst du eine Liste zuletzt verwendeter Bildideen, waehle ein deutlich anderes Motiv, eine andere Perspektive und - bei Illustrationen - einen anderen Stil.`;
+Bildstil-Vorgaben der Website: Bekommst du solche, befolge sie verbindlich (Stil, Farbwelt, Motivwelt, Perspektive, Vermeidungen) und lege den style entsprechend fest. Sie ersetzen die allgemeinen Anregungen oben, nicht aber die Regeln zu Schrift, Logos und realen Personen.\n\nAbwechslung: Bekommst du eine Liste zuletzt verwendeter Bildideen, waehle ein deutlich anderes Motiv, eine andere Perspektive und - bei Illustrationen - einen anderen Stil.`;

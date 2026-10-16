@@ -44,6 +44,7 @@ export interface Site {
   gscProperty: string;
   competitionCheck: boolean;
   structureSummary: boolean;
+  imageStyleGuide: string;
   structureFaq: boolean;
   aiNoticeText: string;
   labelAiImages: boolean;

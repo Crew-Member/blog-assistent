@@ -65,6 +65,7 @@ const siteSchema = z.object({
   gscProperty: z.string().trim().max(300).default(""),
   competitionCheck: z.boolean().default(true),
   structureSummary: z.boolean().default(true),
+  imageStyleGuide: z.string().max(4000).default(""),
   structureFaq: z.boolean().default(true),
   aiNoticeText: z.string().trim().max(500).default(""),
   labelAiImages: z.boolean().default(true),
@@ -1107,6 +1108,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, sear
         site: { name: post.site.name, language: post.site.language, audience: post.site.audience, tone: post.site.tone, styleGuide: post.site.styleGuide },
         post: { title: post.title ?? "", excerpt: post.excerpt ?? "", focusKeyword: post.focusKeyword ?? "", text: stripHtml(post.contentHtml ?? "") },
         style: body.data.style,
+        ...(post.site.imageStyleGuide.trim() ? { imageStyleGuide: post.site.imageStyleGuide.trim() } : {}),
         promptLanguage: config.IMAGE_PROMPT_LANGUAGE,
         recentPrompts: (await prisma.postImage.findMany({ where: { post: { siteId: post.siteId }, postId: { not: post.id }, prompt: { not: "" } }, orderBy: { updatedAt: "desc" }, take: 8, select: { prompt: true } })).map((i) => i.prompt),
       });

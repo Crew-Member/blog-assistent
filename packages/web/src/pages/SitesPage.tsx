@@ -3,7 +3,7 @@ import { api, type Site, type StyleSample, type WpTestResult } from "../api";
 import { useLoad } from "../hooks";
 import { Chip, EmptyState, Icon, PageHeader } from "../ui";
 
-const EMPTY = { name: "", baseUrl: "", language: "de", audience: "", tone: "", styleGuide: "", disclaimer: "", closingHtml: "", closingTargets: "", preferredLinks: "", portfolio: "", gscProperty: "", competitionCheck: true, structureSummary: true, structureFaq: true, aiNoticeText: "", labelAiImages: true, wpUsername: "", wpAppPassword: "", clearWpPassword: false };
+const EMPTY = { name: "", baseUrl: "", language: "de", audience: "", tone: "", styleGuide: "", disclaimer: "", closingHtml: "", closingTargets: "", preferredLinks: "", portfolio: "", gscProperty: "", competitionCheck: true, structureSummary: true, structureFaq: true, imageStyleGuide: "", aiNoticeText: "", labelAiImages: true, wpUsername: "", wpAppPassword: "", clearWpPassword: false };
 
 function StyleSamples({ site, onApply }: { site: Site; onApply: (tone: string, styleGuide: string) => void }) {
   const { data: samples, reload } = useLoad(() => api.get<StyleSample[]>(`/api/sites/${site.id}/style-samples`));
@@ -197,6 +197,9 @@ function SiteForm({ initial, onSaved, onCancel }: { initial?: Site; onSaved: () 
       <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
         <input type="checkbox" style={{ width: "auto" }} checked={form.structureFaq} onChange={(e) => setForm({ ...form, structureFaq: e.target.checked })} />
         <span>Abschnitt „Häufige Fragen“ am Ende <span className="muted">– 3 bis 4 Leserfragen mit kurzen Antworten</span></span>
+      </label>
+      <label>Bildstil für Beitragsbilder <span className="muted">(optional – gilt für jeden KI-Bildvorschlag dieser Website: Stil, Farben, Motivwelt, Perspektive, was vermieden werden soll)</span>
+        <textarea rows={5} value={form.imageStyleGuide} onChange={set("imageStyleGuide")} placeholder={"z. B. Dokumentarischer Foto-Stil, natürliches Licht, Büro- und Werkstattumgebungen kleiner Unternehmen. Farbwelt: ruhige Blau- und Grautöne mit einem warmen Akzent. Meist Nahaufnahmen von Händen, Geräten und Dokumenten, Personen eher von hinten oder seitlich. Keine Stockfoto-Klischees (Handschlag, Schloss im Vordergrund)."} />
       </label>
       <label>Disclaimer (wird unter jeden Beitrag gesetzt)<textarea rows={3} value={form.disclaimer} onChange={set("disclaimer")} /></label>
       <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
