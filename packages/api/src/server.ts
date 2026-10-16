@@ -17,7 +17,7 @@ import { detectKind, extractDocument, stripHtml } from "./lib/extract.js";
 import { applyLinkPolicy, sanitizePostHtml, unwrapBlockedLinks, unwrapLinksNotIn, urlKey } from "./lib/html.js";
 import { selfUrls } from "./pipeline.js";
 import { demandPeriods } from "./lib/gsc.js";
-import { analyzeSeoPotential } from "./lib/seo-potential.js";
+import { analyzeSeoPotential, seoOverview, seoThresholds } from "./lib/seo-potential.js";
 import { parseClosingTargets, resolveClosing, siteClosing, targetFor } from "./lib/closing.js";
 import type { SearchConsole } from "./lib/gsc.js";
 import { keywordInText, seoChecks } from "./lib/seo.js";
@@ -792,8 +792,20 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, sear
         searchConsole.pageStats(site.gscProperty, ...periods.previous),
         searchConsole.pageQueries(site.gscProperty, ...periods.current),
       ]);
-      const items = analyzeSeoPotential({ posts: posts.map((p) => ({ id: p.id, title: p.title, url: p.url })), now, previous, queries });
-      return { period: periods.current, pagesAnalyzed: now.length, postsKnown: posts.length, items };
+      const seoPosts = posts.map((p) => ({ id: p.id, title: p.title, url: p.url }));
+      const items = analyzeSeoPotential({ posts: seoPosts, now, previous, queries });
+      const overview = seoOverview(seoPosts, now);
+      return {
+        period: periods.current,
+        pagesAnalyzed: now.length,
+        postsKnown: posts.length,
+        matchedPages: overview.matchedPages,
+        unmatchedPages: overview.unmatchedPages,
+        impressions: overview.impressions,
+        relaxed: seoThresholds(overview.impressions).relaxed,
+        overview: overview.rows.slice(0, 25),
+        items,
+      };
     } catch (error) {
       return reply.code(502).send({ error: error instanceof Error ? error.message : String(error) });
     }

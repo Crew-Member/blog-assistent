@@ -481,3 +481,22 @@ describe("Search-Console-Property-Namen", () => {
     expect(tried).toEqual(["https://kdsb.gmbh/", "sc-domain:kdsb.gmbh"]);
   });
 });
+
+describe("SEO-Potenziale bei wenig Daten", () => {
+  it("nutzt niedrigere Schwellen bei kleinen Websites und liefert eine Uebersicht", async () => {
+    const { analyzeSeoPotential, seoOverview, seoThresholds } = await import("./seo-potential.js");
+    expect(seoThresholds(500).relaxed).toBe(true);
+    expect(seoThresholds(9000).relaxed).toBe(false);
+    const posts = [{ id: 1, title: "A", url: "https://kdsb.gmbh/a/" }, { id: 2, title: "B", url: "https://kdsb.gmbh/b/" }];
+    const now = [
+      { page: "https://kdsb.gmbh/a/", impressions: 25, clicks: 0, position: 11 },
+      { page: "https://kdsb.gmbh/b/", impressions: 90, clicks: 1, position: 4 },
+      { page: "https://kdsb.gmbh/", impressions: 300, clicks: 20, position: 2 },
+    ];
+    const overview = seoOverview(posts, now);
+    expect(overview).toMatchObject({ matchedPages: 2, unmatchedPages: 1, impressions: 115 });
+    expect(overview.rows.map((r) => r.wpPostId)).toEqual([2, 1]);
+    const kinds = analyzeSeoPotential({ posts, now, previous: [], queries: [] }).map((i) => `${i.kind}:${i.wpPostId}`);
+    expect(kinds).toEqual(expect.arrayContaining(["quick_win:1", "low_ctr:2"]));
+  });
+});

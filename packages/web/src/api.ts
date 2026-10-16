@@ -338,6 +338,11 @@ export interface SeoPotentialResult {
   period: [string, string];
   pagesAnalyzed: number;
   postsKnown: number;
+  matchedPages: number;
+  unmatchedPages: number;
+  impressions: number;
+  relaxed: boolean;
+  overview: { wpPostId: number; title: string; url: string; impressions: number; clicks: number; position: number }[];
   items: SeoPotentialItem[];
 }
 

@@ -140,7 +140,28 @@ function SeoPotentialCard({ siteId }: { siteId: string }) {
         <button className="secondary" disabled={busy} onClick={() => void run()}>{busy && !result ? <><Spinner /> Analyse läuft …</> : result ? "Neu analysieren" : "Analyse starten"}</button>
         {result && <span className="muted">{result.pagesAnalyzed} Seiten mit Einblendungen, {result.items.length} Hinweise (Zeitraum {result.period[0]} bis {result.period[1]})</span>}
       </div>
-      {result && result.items.length === 0 && <span className="muted">Aktuell gibt es keine auffälligen Beiträge. Das kann bei wenigen Einblendungen auch an der Datenmenge liegen.</span>}
+      {result && (
+        <span className="muted">
+          {result.matchedPages} von {result.pagesAnalyzed} Seiten mit Einblendungen sind Beiträge ({result.impressions} Einblendungen insgesamt){result.unmatchedPages > 0 ? `; ${result.unmatchedPages} weitere sind keine Beiträge (z. B. Startseite, Rechtsgebiet-Seiten)` : ""}.
+          {result.relaxed ? " Wegen der geringen Datenmenge gelten niedrigere Mindestwerte." : ""}
+        </span>
+      )}
+      {result && result.items.length === 0 && <span className="muted">Aktuell gibt es keine auffälligen Beiträge. Bei wenigen Einblendungen ist das normal; in der Übersicht unten siehst du die Zahlen je Beitrag.</span>}
+      {result && result.overview.length > 0 && (
+        <details>
+          <summary>Übersicht: Zahlen je Beitrag (28 Tage)</summary>
+          <div className="list">
+            {result.overview.map((r) => (
+              <div key={r.wpPostId} className="list-item">
+                <div className="list-main">
+                  <div className="list-title">{r.title}</div>
+                  <div className="list-meta"><span>{r.impressions} Einblendungen</span><span>{r.clicks} Klicks</span><span>Position {r.position.toFixed(1).replace(".", ",")}</span></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
       {result?.items.map((item) => (
         <div key={`${item.kind}-${item.wpPostId}`} className="card stack" style={{ boxShadow: "none" }}>
           <div className="row spread">

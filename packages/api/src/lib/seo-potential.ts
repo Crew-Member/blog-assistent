@@ -38,6 +38,48 @@ export function expectedCtr(position: number): number {
 const pct = (x: number) => `${(x * 100).toFixed(1).replace(".", ",")} %`;
 const pos = (x: number) => x.toFixed(1).replace(".", ",");
 
+/** Schwellenwerte; bei wenig Suchverkehr gelten niedrigere Mindestmengen, damit auch kleine Websites Hinweise bekommen. */
+export function seoThresholds(totalImpressions: number) {
+  const relaxed = totalImpressions < 3000;
+  return relaxed
+    ? { relaxed, quickWinMin: 15, quickWinPosMin: 6, quickWinPosMax: 25, lowCtrMin: 60, declineMin: 40, cannibalTotal: 30, cannibalEach: 8 }
+    : { relaxed, quickWinMin: 50, quickWinPosMin: 7, quickWinPosMax: 20, lowCtrMin: 200, declineMin: 100, cannibalTotal: 80, cannibalEach: 20 };
+}
+
+export interface SeoOverviewRow {
+  wpPostId: number;
+  title: string;
+  url: string;
+  impressions: number;
+  clicks: number;
+  position: number;
+}
+
+/** Zahlen je Beitrag (nur Seiten, die einem Beitrag zugeordnet werden koennen), nach Einblendungen sortiert. */
+export function seoOverview(posts: SeoPost[], now: GscPageRow[]): { rows: SeoOverviewRow[]; matchedPages: number; unmatchedPages: number; impressions: number } {
+  const byUrl = new Map(posts.map((p) => [urlKey(p.url), p]));
+  const merged = new Map<string, SeoOverviewRow>();
+  let unmatched = 0;
+  for (const r of now) {
+    const post = byUrl.get(urlKey(r.page));
+    if (!post) {
+      unmatched++;
+      continue;
+    }
+    const prev = merged.get(post.url);
+    if (prev) {
+      const total = prev.impressions + r.impressions;
+      prev.position = total > 0 ? (prev.position * prev.impressions + r.position * r.impressions) / total : prev.position;
+      prev.impressions = total;
+      prev.clicks += r.clicks;
+    } else {
+      merged.set(post.url, { wpPostId: post.id, title: post.title, url: post.url, impressions: r.impressions, clicks: r.clicks, position: r.position });
+    }
+  }
+  const rows = [...merged.values()].sort((a, b) => b.impressions - a.impressions);
+  return { rows, matchedPages: rows.length, unmatchedPages: unmatched, impressions: rows.reduce((s, r) => s + r.impressions, 0) };
+}
+
 export function analyzeSeoPotential(input: { posts: SeoPost[]; now: GscPageRow[]; previous: GscPageRow[]; queries: GscPageQueryRow[] }): PotentialItem[] {
   const byUrl = new Map(input.posts.map((p) => [urlKey(p.url), p]));
   const prev = new Map(input.previous.map((r) => [urlKey(r.page), r]));
@@ -54,6 +96,7 @@ export function analyzeSeoPotential(input: { posts: SeoPost[]; now: GscPageRow[]
       .map((q) => ({ query: q.query, impressions: q.impressions, clicks: q.clicks, position: q.position }));
   const quoted = (list: { query: string }[]) => list.slice(0, 3).map((q) => `„${q.query}“`).join(", ");
 
+  const T = seoThresholds(seoOverview(input.posts, input.now).impressions);
   const items: PotentialItem[] = [];
   const seen = new Set<string>();
   for (const row of input.now) {
@@ -65,7 +108,7 @@ export function analyzeSeoPotential(input: { posts: SeoPost[]; now: GscPageRow[]
     const queries = top(key);
     const base = { wpPostId: post.id, title: post.title, url: post.url, topQueries: queries };
 
-    if (row.position >= 7 && row.position <= 20 && row.impressions >= 50) {
+    if (row.position >= T.quickWinPosMin && row.position <= T.quickWinPosMax && row.impressions >= T.quickWinMin) {
       const gain = Math.max(0, row.impressions * (0.08 - ctr));
       items.push({
         ...base,
@@ -76,7 +119,7 @@ export function analyzeSeoPotential(input: { posts: SeoPost[]; now: GscPageRow[]
         instructions: `SEO-Verbesserung: Der Beitrag steht bei Google im Schnitt auf Position ${pos(row.position)} (${row.impressions} Einblendungen in 28 Tagen).${queries.length ? ` Wichtigste Suchanfragen: ${quoted(queries)}.` : ""} Ziel ist eine bessere Platzierung: Inhalte zu diesen Suchanfragen klarer und vollständiger abdecken, Titel, Einstieg und Zwischenüberschriften schärfen, Aktualität prüfen. Den Text nicht unnötig aufblähen.`,
       });
     }
-    if (row.position <= 10.5 && row.impressions >= 200 && ctr < expectedCtr(row.position) * 0.6) {
+    if (row.position <= 10.5 && row.impressions >= T.lowCtrMin && ctr < expectedCtr(row.position) * 0.6) {
       const gain = row.impressions * (expectedCtr(row.position) - ctr);
       items.push({
         ...base,
@@ -88,7 +131,7 @@ export function analyzeSeoPotential(input: { posts: SeoPost[]; now: GscPageRow[]
       });
     }
     const before = prev.get(key);
-    if (before && before.impressions >= 100) {
+    if (before && before.impressions >= T.declineMin) {
       const impDrop = (before.impressions - row.impressions) / before.impressions;
       const clickDrop = before.clicks >= 10 ? (before.clicks - row.clicks) / before.clicks : 0;
       if (impDrop >= 0.3 || clickDrop >= 0.3) {
@@ -107,7 +150,7 @@ export function analyzeSeoPotential(input: { posts: SeoPost[]; now: GscPageRow[]
   // Kannibalisierung: derselbe Suchbegriff bringt mehreren eigenen Beitraegen Einblendungen, ohne dass einer vorne steht.
   const byQuery = new Map<string, GscPageQueryRow[]>();
   for (const q of input.queries) {
-    if (q.impressions < 20 || !byUrl.has(urlKey(q.page))) continue;
+    if (q.impressions < T.cannibalEach || !byUrl.has(urlKey(q.page))) continue;
     const k = q.query.toLowerCase();
     (byQuery.get(k) ?? byQuery.set(k, []).get(k)!).push(q);
   }
@@ -117,7 +160,7 @@ export function analyzeSeoPotential(input: { posts: SeoPost[]; now: GscPageRow[]
     if (distinct.size < 2) continue;
     const list = [...distinct.values()].sort((a, b) => b.impressions - a.impressions);
     const total = list.reduce((s, r) => s + r.impressions, 0);
-    if (total < 80 || Math.min(...list.map((r) => r.position)) <= 3) continue;
+    if (total < T.cannibalTotal || Math.min(...list.map((r) => r.position)) <= 3) continue;
     const weaker = byUrl.get(urlKey(list[list.length - 1]!.page))!;
     if (claimed.has(weaker.id)) continue;
     claimed.add(weaker.id);

@@ -669,6 +669,8 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.postsKnown).toBe(1);
+    expect(body).toMatchObject({ matchedPages: 1, unmatchedPages: 0, impressions: 400, relaxed: true });
+    expect(body.overview[0]).toMatchObject({ wpPostId: 7, impressions: 400, clicks: 4 });
     expect(body.items[0]).toMatchObject({ wpPostId: 7, kind: "quick_win" });
     expect(body.items[0].instructions).toContain("alter beitrag thema");
     // Ueberarbeitung aus dem Hinweis starten
