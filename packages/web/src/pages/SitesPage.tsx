@@ -146,6 +146,16 @@ function WordPressAccess({
   );
 }
 
+/** Einklappbarer Abschnitt im Website-Formular. */
+function FormSection({ title, hint, open, children }: { title: string; hint?: string; open?: boolean; children: React.ReactNode }) {
+  return (
+    <details className="fold" open={open}>
+      <summary><span className="fold-title">{title}</span>{hint && <span className="muted fold-hint">{hint}</span>}</summary>
+      <div className="fold-body stack">{children}</div>
+    </details>
+  );
+}
+
 function SiteForm({ initial, onSaved, onCancel }: { initial?: Site; onSaved: () => void; onCancel?: () => void }) {
   const [form, setForm] = useState({ ...EMPTY, ...initial, wpAppPassword: "", clearWpPassword: false });
   const [error, setError] = useState<string>();
@@ -167,14 +177,32 @@ function SiteForm({ initial, onSaved, onCancel }: { initial?: Site; onSaved: () 
         }
       }}
     >
+      <FormSection title="Grunddaten" hint="Name, Adresse und Zielgruppe der Website" open>
       <div className="row">
         <label>Name<input value={form.name} onChange={set("name")} required /></label>
         <label>Adresse (URL)<input value={form.baseUrl} onChange={set("baseUrl")} placeholder="https://" /></label>
         <label className="narrow">Sprache<input value={form.language} onChange={set("language")} /></label>
       </div>
       <label>Zielgruppe<textarea rows={2} value={form.audience} onChange={set("audience")} placeholder="z. B. Geschäftsführer und Rechtsabteilungen mittelständischer Unternehmen" /></label>
+      </FormSection>
+      <FormSection title="Schreibstil und Beitragsaufbau" hint="Tonalität, Stilleitfaden, Kurzfassung, Fragenabschnitt, Wettbewerbsvergleich">
       <label>Tonalität<textarea rows={2} value={form.tone} onChange={set("tone")} placeholder="z. B. sachlich, präzise, Sie-Ansprache, keine Werbesprache" /></label>
       <label>Stilleitfaden / Beispiele<textarea rows={5} value={form.styleGuide} onChange={set("styleGuide")} placeholder="Gewünschte Länge, Gliederung, Besonderheiten – oder Auszüge aus bestehenden Beiträgen als Stilvorlage" /></label>
+      <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
+        <input type="checkbox" style={{ width: "auto" }} checked={form.structureSummary} onChange={(e) => setForm({ ...form, structureSummary: e.target.checked })} />
+        <span>Kurzfassung „Das Wichtigste in Kürze“ direkt nach dem Einstieg <span className="muted">– 3 bis 4 knappe Punkte; hilft Lesern und Suchmaschinen</span></span>
+      </label>
+      <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
+        <input type="checkbox" style={{ width: "auto" }} checked={form.structureFaq} onChange={(e) => setForm({ ...form, structureFaq: e.target.checked })} />
+        <span>Abschnitt „Häufige Fragen“ am Ende <span className="muted">– 3 bis 4 Leserfragen mit kurzen Antworten</span></span>
+      </label>
+      <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
+        <input type="checkbox" style={{ width: "auto" }} checked={form.competitionCheck} onChange={(e) => setForm({ ...form, competitionCheck: e.target.checked })} />
+        <span>Vor dem Schreiben die Top-Ergebnisse zum Suchbegriff auswerten (Zielumfang, Gliederung) <span className="muted">– kostet eine zusätzliche Websuche je Beitrag</span></span>
+      </label>
+        {initial && <StyleSamples site={initial} onApply={(tone, styleGuide) => setForm({ ...form, tone, styleGuide })} />}
+      </FormSection>
+      <FormSection title="Schlussabsatz, Links und Disclaimer" hint="Fester Schlussabsatz, Zielseiten je Kategorie, Wunschlinks, Rechtshinweis">
       <label>Fester Schlussabsatz <span className="muted">(optional, HTML erlaubt: &lt;a&gt;, &lt;strong&gt;, &lt;em&gt;)</span>
         <textarea rows={3} value={form.closingHtml} onChange={set("closingHtml")} placeholder='z. B. <p>Haben Sie Fragen zum Datenschutz in Ihrem Unternehmen? <a href="https://…/kontakt/">Sprechen Sie uns an.</a></p>' />
       </label>
@@ -184,24 +212,12 @@ function SiteForm({ initial, onSaved, onCancel }: { initial?: Site; onSaved: () 
       <label>Bevorzugte interne Links <span className="muted">(optional, eine Zeile je Seite: „Titel | Adresse“ – die KI verlinkt sie, wo es passt)</span>
         <textarea rows={3} value={form.preferredLinks} onChange={set("preferredLinks")} placeholder={"Datenschutzberatung | https://…/leistungen/datenschutz/\nKontakt | https://…/kontakt/"} />
       </label>
-      <label>Themenportfolio <span className="muted">(optional – Rechtsgebiete und Schwerpunkte, eine Zeile je Thema. Der Themen-Scout liest zusätzlich die Kategorien der Website selbst aus)</span>
-        <textarea rows={4} value={form.portfolio} onChange={set("portfolio")} placeholder={"Datenschutzrecht (DSGVO, Beschäftigtendatenschutz, Bußgelder)\nKI-Recht (KI-Verordnung, Haftung)\nArbeitsrecht mit Datenschutzbezug"} />
-      </label>
-      <label>Search-Console-Property <span className="muted">(optional – genau so wie in der Search Console links oben, z. B. https://kirmse.eu/ oder sc-domain:kirmse.eu; der Themen-Scout nutzt damit die echten Suchanfragen der Website)</span>
-        <input value={form.gscProperty} onChange={set("gscProperty")} placeholder="https://kirmse.eu/" />
-      </label>
-      <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
-        <input type="checkbox" style={{ width: "auto" }} checked={form.structureSummary} onChange={(e) => setForm({ ...form, structureSummary: e.target.checked })} />
-        <span>Kurzfassung „Das Wichtigste in Kürze“ direkt nach dem Einstieg <span className="muted">– 3 bis 4 knappe Punkte; hilft Lesern und Suchmaschinen</span></span>
-      </label>
-      <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
-        <input type="checkbox" style={{ width: "auto" }} checked={form.structureFaq} onChange={(e) => setForm({ ...form, structureFaq: e.target.checked })} />
-        <span>Abschnitt „Häufige Fragen“ am Ende <span className="muted">– 3 bis 4 Leserfragen mit kurzen Antworten</span></span>
-      </label>
+      <label>Disclaimer (wird unter jeden Beitrag gesetzt)<textarea rows={3} value={form.disclaimer} onChange={set("disclaimer")} /></label>
+      </FormSection>
+      <FormSection title="Bilder" hint="Bildstil und Kennzeichnung KI-generierter Bilder">
       <label>Bildstil für Beitragsbilder <span className="muted">(optional – gilt für jeden KI-Bildvorschlag dieser Website: Stil, Farben, Motivwelt, Perspektive, was vermieden werden soll)</span>
         <textarea rows={5} value={form.imageStyleGuide} onChange={set("imageStyleGuide")} placeholder={"z. B. Dokumentarischer Foto-Stil, natürliches Licht, Büro- und Werkstattumgebungen kleiner Unternehmen. Farbwelt: ruhige Blau- und Grautöne mit einem warmen Akzent. Meist Nahaufnahmen von Händen, Geräten und Dokumenten, Personen eher von hinten oder seitlich. Keine Stockfoto-Klischees (Handschlag, Schloss im Vordergrund)."} />
       </label>
-      <label>Disclaimer (wird unter jeden Beitrag gesetzt)<textarea rows={3} value={form.disclaimer} onChange={set("disclaimer")} /></label>
       <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
         <input type="checkbox" style={{ width: "auto" }} checked={form.labelAiImages} onChange={(e) => setForm({ ...form, labelAiImages: e.target.checked })} />
         KI-generierte Beitragsbilder kennzeichnen: Bildunterschrift („Bild: KI-generiert“), Vermerk in der Bilddatei und sichtbarer Hinweis im Beitrag
@@ -211,12 +227,18 @@ function SiteForm({ initial, onSaved, onCancel }: { initial?: Site; onSaved: () 
           <input value={form.aiNoticeText} onChange={set("aiNoticeText")} placeholder="Beitragsbild: KI-generiert." />
         </label>
       )}
-      <label className="row" style={{ flexDirection: "row", gap: 8, flex: "0 0 auto", color: "inherit" }}>
-        <input type="checkbox" style={{ width: "auto" }} checked={form.competitionCheck} onChange={(e) => setForm({ ...form, competitionCheck: e.target.checked })} />
-        <span>Vor dem Schreiben die Top-Ergebnisse zum Suchbegriff auswerten (Zielumfang, Gliederung) <span className="muted">– kostet eine zusätzliche Websuche je Beitrag</span></span>
+      </FormSection>
+      <FormSection title="Themen und Suchdaten" hint="Themenportfolio für den Themen-Scout, Search Console">
+      <label>Themenportfolio <span className="muted">(optional – Rechtsgebiete und Schwerpunkte, eine Zeile je Thema. Der Themen-Scout liest zusätzlich die Kategorien der Website selbst aus)</span>
+        <textarea rows={4} value={form.portfolio} onChange={set("portfolio")} placeholder={"Datenschutzrecht (DSGVO, Beschäftigtendatenschutz, Bußgelder)\nKI-Recht (KI-Verordnung, Haftung)\nArbeitsrecht mit Datenschutzbezug"} />
       </label>
-      <WordPressAccess site={initial} form={form} set={set} setForm={setForm} />
-      {initial && <StyleSamples site={initial} onApply={(tone, styleGuide) => setForm({ ...form, tone, styleGuide })} />}
+      <label>Search-Console-Property <span className="muted">(optional – genau so wie in der Search Console links oben, z. B. https://kirmse.eu/ oder sc-domain:kirmse.eu; der Themen-Scout nutzt damit die echten Suchanfragen der Website)</span>
+        <input value={form.gscProperty} onChange={set("gscProperty")} placeholder="https://kirmse.eu/" />
+      </label>
+      </FormSection>
+      <FormSection title="WordPress-Zugang" hint="Benutzername und Anwendungspasswort">
+        <WordPressAccess site={initial} form={form} set={set} setForm={setForm} />
+      </FormSection>
       {error && <p className="error">{error}</p>}
       <div className="row">
         <button type="submit">{initial ? "Speichern" : "Website anlegen"}</button>

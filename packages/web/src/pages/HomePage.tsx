@@ -66,7 +66,6 @@ function Upload({ sites, onDone }: { sites: Site[]; onDone: () => void }) {
 
   return (
     <div className="card stack">
-      <div className="card-title"><Icon name="upload" /> Unterlagen hochladen</div>
       <label>
         Für welche Website?
         <select value={siteId} onChange={(e) => setSiteId(e.target.value)}>

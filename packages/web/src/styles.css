@@ -213,8 +213,29 @@ details[open] > summary { margin-bottom: 8px; }
 
 /* Ein- und ausklappbare Bereiche (Startseite) */
 .collapsible { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; }
-.collapsible-head { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; padding: 4px 0; color: inherit; text-align: left; cursor: pointer; box-shadow: none; }
+.collapsible-head { display: flex; align-items: center; justify-content: flex-start; gap: 8px; width: 100%; background: none; border: 0; padding: 4px 0; color: inherit; text-align: left; cursor: pointer; box-shadow: none; }
 .collapsible-head h2 { margin: 0; }
 .collapsible-chevron { display: inline-flex; transition: transform .15s ease; }
 .collapsible-chevron.open { transform: rotate(90deg); }
 .collapsible-head:hover, .collapsible-head:active { background: none; box-shadow: none; transform: none; }
+
+/* Einklappbare Formularabschnitte */
+.fold { border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); margin: 0 0 10px; }
+.fold:last-of-type { margin-bottom: 14px; }
+.fold > summary { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; padding: 12px 14px; cursor: pointer; list-style: none; font-weight: 600; color: var(--text); }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::before { content: "›"; display: inline-block; width: 1em; color: var(--muted); transition: transform .15s ease; font-size: 1.2em; line-height: 1; }
+.fold[open] > summary::before { transform: rotate(90deg); }
+.fold[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 0; }
+.fold-hint { font-weight: 400; font-size: .9em; }
+.fold-body { padding: 14px; }
+
+/* Beitragsseite: feststehende Kurzuebersicht, einklappbare Werkzeugkarten */
+.summary-sticky { position: sticky; top: 62px; z-index: 15; margin: 0 -8px 16px; padding: 8px; background: var(--bg); border-bottom: 1px solid var(--line); }
+.fold-card > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fold-card > summary::-webkit-details-marker { display: none; }
+.fold-card > summary::after { content: "›"; margin-left: auto; color: var(--muted); font-size: 1.3em; transition: transform .15s ease; }
+.fold-card[open] > summary::after { transform: rotate(90deg); }
+main { max-width: 1200px; }
+.card { transition: box-shadow .15s ease; }
+.card:hover { box-shadow: var(--shadow); }

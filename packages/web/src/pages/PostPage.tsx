@@ -250,8 +250,9 @@ function RefinePanel({ post, dirty, onDone }: { post: PostDetail; dirty: boolean
   }
 
   return (
-    <div className="card stack">
-      <div className="card-title"><Icon name="sparkles" /> Mit KI nachschärfen</div>
+    <details className="card fold-card">
+      <summary className="card-title"><Icon name="sparkles" /> Mit KI nachschärfen <span className="muted fold-hint">Text nach Anweisung ändern, rückgängig machbar</span></summary>
+      <div className="stack" style={{ marginTop: 12 }}>
       <span className="muted">Die KI ändert den Text nach deiner Anweisung – ohne neue Fakten, ohne neue Links. Das Ergebnis lässt sich rückgängig machen. Der Faktencheck oben bezieht sich auf die Fassung davor.</span>
       <div className="row">
         {REFINE_IDEAS.map((idea) => <button key={idea} type="button" className="secondary" disabled={busy} onClick={() => setInstruction(idea)}>{idea}</button>)}
@@ -268,7 +269,8 @@ function RefinePanel({ post, dirty, onDone }: { post: PostDetail; dirty: boolean
       </div>
       {note && <div className="notice"><Icon name="check" size={16} /> {note}</div>}
       {error && <span className="error">{error}</span>}
-    </div>
+      </div>
+    </details>
   );
 }
 
@@ -630,7 +632,7 @@ export function PostPage({ id }: { id: string }) {
       )}
 
       {data.status === "DRAFT_READY" && (
-        <div className="summary" style={{ marginBottom: 16 }} aria-label="Kurzübersicht">
+        <div className="summary summary-sticky" aria-label="Kurzübersicht">
           <button className={`chip chip-${factTone}`} onClick={() => jump("sec-check")}><Icon name={factTone === "success" ? "shield" : "alert"} size={13} /> {factText}</button>
           {data.unverifiedClaims.length > 0 && <button className="chip chip-warn" onClick={() => jump("sec-check")}><Icon name="alert" size={13} /> {data.unverifiedClaims.length} Punkt(e) prüfen</button>}
           {data.seoChecks.length > 0 && <button className={`chip chip-${seoOk === data.seoChecks.length ? "success" : "warn"}`} onClick={() => jump("sec-seo")}><Icon name="search" size={13} /> SEO {seoOk}/{data.seoChecks.length}</button>}
