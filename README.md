@@ -71,6 +71,10 @@ Bei einer Überarbeitung gibt es einen Hauptknopf **„Beitrag in WordPress aktu
 
 Unter **Bildstudio** lässt sich ein beliebiges Foto (Upload oder Drag & Drop, PNG/JPEG/WebP, bis 10 MB) im **Bildstil der gewählten Website** umgestalten (Websites → Bearbeiten → „Bildstil für Beitragsbilder“). Das Tool schickt das Foto zusammen mit dem Bildstil an die Bildbearbeitung des Anbieters; Motiv und Aufbau bleiben, Licht, Farben und Textur ändern sich. Voraussetzung ist `IMAGE_PROVIDER=openai` (Supermachine bietet keine Bildbearbeitung). Vor jeder Bearbeitung ist zu bestätigen, dass keine erkennbaren Personen zu sehen sind oder die Rechte vorliegen. Das Ergebnis ist KI-bearbeitet und in der Datei entsprechend vermerkt; es lässt sich herunterladen oder direkt als Beitragsbild eines fertigen Beitrags übernehmen. Kosten: wie ein erzeugtes Bild (`IMAGE_COST_USD`), auf der Seite „Kosten“ als „Foto im Bildstil umgestalten“.
 
+### Keyword-Dichte
+
+Die KI soll das Fokus-Keyword wörtlich mit einer Dichte von etwa 1,0 bis 1,5 % einsetzen. Weil Sprachmodelle dabei oft zu wenig liefern, prüft das Tool jeden Entwurf (ab 300 Wörtern): Liegt die Dichte unter 0,9 %, bittet es die KI einmal, das Keyword an passenden Stellen auf etwa 1,25 % zu erhöhen, ohne neue Aussagen. Das Ergebnis wird nur übernommen, wenn Links, Überschriften und Umfang gleich bleiben und die Dichte tatsächlich gestiegen ist; sonst bleibt der ursprüngliche Text. Die SEO-Prüfung am Beitrag zeigt die Dichte mit Anzahl und Prozentwert. Kosten: bei zu dünnem Text ein zusätzlicher Aufruf wie beim „Mit KI nachschärfen“.
+
 ### Beitragsaufbau und Bilder
 
 Für jede Website lässt sich unter „Bildstil für Beitragsbilder“ eine allgemeine Vorgabe hinterlegen (Stil, Farbwelt, Motivwelt, Perspektive, was vermieden werden soll). Sie gilt verbindlich für jeden KI-Bildvorschlag dieser Website; die Regeln zu Schrift, Logos und realen Personen bleiben unberührt.
