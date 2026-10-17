@@ -10,10 +10,11 @@ const URGENCY = {
 } as const;
 
 function ScoutCard({ site }: { site: Site }) {
-  const scout = useLoad(() => api.get<ScoutState>(`/api/sites/${site.id}/scout`), (s) => s.enabled && (s.runRequested || s.running));
+  const scout = useLoad(() => api.get<ScoutState>(`/api/sites/${site.id}/scout`), (s) => (s.enabled && (s.runRequested || s.running)) || s.focusPending || s.running);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [testInfo, setTestInfo] = useState<string>();
+  const [wish, setWish] = useState("");
   const state = scout.data;
 
   async function act(action: () => Promise<unknown>) {
@@ -53,6 +54,29 @@ function ScoutCard({ site }: { site: Site }) {
           </span>
         </div>
       )}
+      <div className="stack" style={{ gap: 6 }}>
+        <label>Eigenes Thema oder Stichworte
+          <textarea rows={2} value={wish} maxLength={500} placeholder="z. B. Kündigung im Homeoffice, Datenschutz bei Bewerbungsfotos" onChange={(e) => setWish(e.target.value)} />
+        </label>
+        <div className="row">
+          <button
+            className="secondary"
+            disabled={busy || wish.trim().length < 3 || state.focusPending || state.running}
+            onClick={() => void act(async () => { await api.post(`/api/sites/${site.id}/scout/focus`, { focus: wish.trim() }); setWish(""); })}
+          >
+            Dazu nach Themen suchen
+          </button>
+          <button
+            className="secondary"
+            disabled={busy || wish.trim().length < 3}
+            onClick={() => void act(async () => { await api.post(`/api/sites/${site.id}/scout/ideas`, { title: wish.trim().slice(0, 200) }); setWish(""); })}
+          >
+            Nur als Idee merken
+          </button>
+          {state.focusPending && <span className="muted"><Spinner /> Gezielte Suche wird gestartet …</span>}
+        </div>
+        <span className="muted">„Dazu nach Themen suchen“ recherchiert im Netz passende, aktuelle Themenvorschläge (Kosten wie ein Scout-Lauf, auch bei ausgeschaltetem Scout). „Nur als Idee merken“ legt dein Thema ohne Suche in die Liste.</span>
+      </div>
       {state.lastError && (state.lastError.startsWith("Hinweis:") ? <span className="muted">{state.lastError}</span> : <span className="error">Letzter Lauf fehlgeschlagen: {state.lastError}</span>)}
       <div className="row">
         <span className="muted">
@@ -80,10 +104,10 @@ function ScoutCard({ site }: { site: Site }) {
         <div key={idea.id} className="card stack" style={{ boxShadow: "none" }}>
           <div className="row spread">
             <strong>{idea.title}</strong>
-            <Chip tone={URGENCY[idea.urgency].tone}>{URGENCY[idea.urgency].label}</Chip>
+            <span className="row" style={{ flex: "0 0 auto", gap: 6 }}>{idea.origin === "own" && <Chip tone="info">Eigener Vorschlag</Chip>}{idea.origin === "focus" && <Chip tone="info">Gezielt gesucht</Chip>}{idea.origin !== "own" && <Chip tone={URGENCY[idea.urgency].tone}>{URGENCY[idea.urgency].label}</Chip>}</span>
           </div>
           <span className="muted">{[idea.area, idea.keyword && `Suchbegriff: ${idea.keyword}`].filter(Boolean).join(" · ")}</span>
-          <span><strong>Warum jetzt:</strong> {idea.whyNow}</span>
+          {idea.origin !== "own" && <span><strong>Warum jetzt:</strong> {idea.whyNow}</span>}
           {idea.demandNote && <span><strong>Suchdaten:</strong> {idea.demandNote}</span>}
           {idea.angle && <span><strong>Nutzen für Leser:</strong> {idea.angle}</span>}
           {idea.sources.length > 0 && (

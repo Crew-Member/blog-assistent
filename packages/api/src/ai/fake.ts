@@ -57,11 +57,11 @@ export class FakeAiService implements AiService {
     return { suggestions: [] };
   }
 
-  async scoutTopics(input: { portfolio: string }): Promise<ScoutResult> {
+  async scoutTopics(input: { portfolio: string; focus?: string }): Promise<ScoutResult> {
     return {
       ideas: [
         {
-          title: "Platzhalter-Themenidee",
+          title: input.focus ? `Platzhalter zu: ${input.focus}`.slice(0, 120) : "Platzhalter-Themenidee",
           keyword: "platzhalter thema",
           area: input.portfolio.split("\n")[0]?.slice(0, 60) || "Datenschutzrecht",
           urgency: "medium",

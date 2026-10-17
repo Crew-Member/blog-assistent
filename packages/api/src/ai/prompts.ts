@@ -55,6 +55,8 @@ Nutze die Websuche gezielt und mehrfach, z. B. nach:
 Beschraenke dich auf Themen aus dem Portfolio. Liefere knappe Notizen auf Deutsch: je Fund Datum, Quelle (URL), was passiert ist und fuer wen es relevant ist. Vermerke, wenn du etwas nicht belegen konntest. Keine Fakten ohne Quelle, nichts erfinden.
 Liegen Suchdaten der Website aus der Google Search Console vor, nutze sie als Hinweis, worauf die Zielgruppe gerade sucht: Suche gezielt nach dem Anlass hinter wachsenden Begriffen und nach Themen, zu denen die Website viele Einblendungen, aber schlechte Platzierungen hat.\nWichtig: Du hast KEINE allgemeinen Suchvolumen-Daten. Ohne Search-Console-Daten beurteilst du Nachfrage nur ueber Aktualitaet und Berichterstattung und sagst das offen.`;
 
+export const SCOUT_FOCUS_NOTE = `GEZIELTE SUCHE: Der Nutzer hat ein Thema oder Stichworte vorgegeben (siehe "WUNSCH DES NUTZERS"). Suche und waehle NUR Themen, die direkt dazu passen (Teilaspekte, aktuelle Anlaesse, Fragen der Zielgruppe, Abgrenzungen). Liefere ruhig auch mehrere Blickwinkel auf dasselbe Thema. Passt das Thema erkennbar nicht zu einer Rechts- oder Datenschutz-Website oder gibt es keinen belegbaren Anlass, liefere lieber weniger oder keine Ideen. Bei einem zeitlosen Thema ohne aktuellen Anlass ist urgency "low" und whyNow benennt ehrlich, dass es zeitlos ist.`;
+
 export const SCOUT_JUDGE_SYSTEM = `Du waehlst aus den Recherchenotizen die besten Themenideen fuer neue Blogbeitraege aus.
 - Hoechstens 8 Ideen, sortiert nach Dringlichkeit und Nutzen fuer die Zielgruppe der Website.
 - Jede Idee muss zum Portfolio der Website passen und durch mindestens eine Quelle aus den Notizen belegt sein. Ideen ohne belegbaren aktuellen Anlass lässt du weg.

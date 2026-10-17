@@ -18,11 +18,11 @@ export function portfolioText(freeText: string, categories: { name: string; coun
 const httpUrl = (u: string) => /^https?:\/\//i.test(u.trim());
 
 /** Sucht aktuell gefragte Themen aus dem Portfolio einer Website und speichert die Vorschlaege. Wirft nie. */
-export function runScout(deps: PipelineDeps, siteId: string, now = new Date()): Promise<void> {
-  return withUsageContext({ siteId }, () => runScoutRun(deps, siteId, now));
+export function runScout(deps: PipelineDeps, siteId: string, now = new Date(), focus = ""): Promise<void> {
+  return withUsageContext({ siteId }, () => runScoutRun(deps, siteId, now, focus.trim()));
 }
 
-async function runScoutRun(deps: PipelineDeps, siteId: string, now: Date): Promise<void> {
+async function runScoutRun(deps: PipelineDeps, siteId: string, now: Date, focus: string): Promise<void> {
   const { prisma, ai } = deps;
   try {
     const site = await prisma.site.findUniqueOrThrow({ where: { id: siteId } });
@@ -32,7 +32,7 @@ async function runScoutRun(deps: PipelineDeps, siteId: string, now: Date): Promi
     const categories = site.baseUrl ? await fetchSiteCategories(site.baseUrl, deps.fetcher as never).catch(() => []) : [];
     const posts = site.baseUrl ? await fetchAllSitePosts(site.baseUrl, 3, deps.fetcher as never).catch(() => []) : [];
     const portfolio = portfolioText(site.portfolio, categories);
-    if (!portfolio) throw new Error("Das Portfolio ist leer. Trage bei der Website Schwerpunkte ein oder gib die Adresse an, damit die Kategorien gelesen werden können.");
+    if (!portfolio && !focus) throw new Error("Das Portfolio ist leer. Trage bei der Website Schwerpunkte ein oder gib die Adresse an, damit die Kategorien gelesen werden können.");
 
     // Nachfragedaten aus der Search Console (optional). Fehler stoppen den Lauf nicht, werden aber als Hinweis gemeldet.
     let demand = "";
@@ -67,6 +67,7 @@ async function runScoutRun(deps: PipelineDeps, siteId: string, now: Date): Promi
       rejectedTitles: rejected,
       today: now.toISOString().slice(0, 10),
       ...(demand ? { demand } : {}),
+      ...(focus ? { focus } : {}),
     });
 
     const rejectedKeys = new Set(rejected.map((t) => t.toLowerCase()));
@@ -78,11 +79,13 @@ async function runScoutRun(deps: PipelineDeps, siteId: string, now: Date): Promi
 
     if (currentRows.length) info += ` ${ideas.filter((i) => demandNoteFor(i, currentRows, previousRows)).length} von ${ideas.length} Ideen konnten mit Suchdaten belegt werden.`;
 
-    // Neue Vorschlaege ersetzen die alten, soweit diese weder abgelehnt noch umgesetzt (markiert oder in einen Beitrag uebernommen) wurden.
+    // Ein automatischer Lauf ersetzt die alten automatischen Vorschlaege (nicht abgelehnte, umgesetzte oder eigene). Eine gezielte Suche fuegt nur hinzu.
+    const origin = focus ? "focus" : "scout";
+    if (focus) info = `Gezielte Suche zu „${focus.slice(0, 80)}“: ${ideas.length} Vorschläge. ${info}`.trim();
     await prisma.$transaction([
-      prisma.topicIdea.deleteMany({ where: { siteId, dismissed: false, postId: null, doneAt: null } }),
+      ...(focus ? [] : [prisma.topicIdea.deleteMany({ where: { siteId, origin: "scout", dismissed: false, postId: null, doneAt: null } })]),
       prisma.topicIdea.createMany({
-        data: ideas.map((i) => ({ siteId, title: i.title, keyword: i.keyword.trim().slice(0, 120), area: i.area.trim().slice(0, 80), urgency: i.urgency, whyNow: i.whyNow, angle: i.angle, demandNote: demandNoteFor(i, currentRows, previousRows).slice(0, 400), sources: i.sources })),
+        data: ideas.map((i) => ({ siteId, origin, title: i.title, keyword: i.keyword.trim().slice(0, 120), area: i.area.trim().slice(0, 80), urgency: i.urgency, whyNow: i.whyNow, angle: i.angle, demandNote: demandNoteFor(i, currentRows, previousRows).slice(0, 400), sources: i.sources })),
       }),
       prisma.site.update({ where: { id: siteId }, data: { scoutLastError: notice.slice(0, 600), scoutLastInfo: info.slice(0, 400) } }),
     ]);

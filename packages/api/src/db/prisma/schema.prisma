@@ -63,6 +63,8 @@ model Site {
   gscProperty       String    @default("")
   // Kurzinfo zum letzten Scout-Lauf (z. B. wie viele Suchbegriffe die Search Console lieferte)
   scoutLastInfo     String    @default("")
+  // Gewuenschtes Thema/Stichworte fuer einen gezielten Scout-Lauf (wird beim Start des Laufs geleert)
+  scoutFocus        String    @default("")
   topicIdeas        TopicIdea[]
 }
 
@@ -84,6 +86,8 @@ model TopicIdea {
   postId      String?
   // Vom Nutzer als umgesetzt markiert (auch fuer Themen, die ausserhalb des Tools erledigt wurden).
   doneAt      DateTime?
+  // "scout" = automatischer Lauf, "focus" = gezielte Suche auf Wunsch, "own" = vom Nutzer direkt gespeichert
+  origin      String   @default("scout")
   createdAt   DateTime @default(now())
 }
 

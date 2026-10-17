@@ -221,7 +221,7 @@ export interface AiService {
   /** Prueft per Websuche, ob ein veroeffentlichter Beitrag noch aktuell ist (neue Rechtsprechung, Gesetzesaenderungen, ...). */
   /** Schlaegt vor, wo in aelteren Beitraegen ein Link auf den Zielbeitrag passt (je Beitrag hoechstens ein Satz). */
   suggestBacklinks(input: { site: SiteProfile; target: { title: string; url: string; text: string }; candidates: { title: string; url: string; text: string }[] }): Promise<BacklinkResult>;
-  scoutTopics(input: { site: SiteProfile; portfolio: string; existingTitles: string[]; rejectedTitles: string[]; today: string; demand?: string }): Promise<ScoutResult>;
+  scoutTopics(input: { site: SiteProfile; portfolio: string; existingTitles: string[]; rejectedTitles: string[]; today: string; demand?: string; focus?: string }): Promise<ScoutResult>;
   checkFreshness(input: { site: SiteProfile; post: { title: string; url: string; publishedAt: string; text: string } }): Promise<FreshnessResult>;
   /** Alternative Titel (hoechstens 65 Zeichen) fuer einen fertigen Beitrag. */
   suggestTitles(input: { site: SiteProfile; title: string; focusKeyword: string; excerpt: string; text: string }): Promise<TitleSuggestions>;

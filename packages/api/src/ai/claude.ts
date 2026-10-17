@@ -2,7 +2,7 @@ import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { recordUsage } from "../lib/usage.js";
 import { castPeople } from "../lib/casting.js";
-import { COMPETITOR_SEARCH_SYSTEM, COMPETITION_SYSTEM, competitionBlock, RADAR_JUDGE_SYSTEM, RADAR_SEARCH_SYSTEM, SCOUT_JUDGE_SYSTEM, SCOUT_SEARCH_SYSTEM, BACKLINK_SYSTEM, TITLES_SYSTEM, REFINE_SYSTEM, internalLinksBlock, REVISE_SYSTEM, relatedPostsBlock, revisionBlock, structureBlock, ANALYZE_SYSTEM, CATEGORY_SYSTEM, DRAFT_SYSTEM, IMAGE_PLAN_SYSTEM, FACTCHECK_SYSTEM, RESEARCH_SYSTEM, STYLE_SYSTEM, siteBlock, styleSamplesBlock, topicBlock } from "./prompts.js";
+import { COMPETITOR_SEARCH_SYSTEM, COMPETITION_SYSTEM, competitionBlock, RADAR_JUDGE_SYSTEM, RADAR_SEARCH_SYSTEM, SCOUT_FOCUS_NOTE, SCOUT_JUDGE_SYSTEM, SCOUT_SEARCH_SYSTEM, BACKLINK_SYSTEM, TITLES_SYSTEM, REFINE_SYSTEM, internalLinksBlock, REVISE_SYSTEM, relatedPostsBlock, revisionBlock, structureBlock, ANALYZE_SYSTEM, CATEGORY_SYSTEM, DRAFT_SYSTEM, IMAGE_PLAN_SYSTEM, FACTCHECK_SYSTEM, RESEARCH_SYSTEM, STYLE_SYSTEM, siteBlock, styleSamplesBlock, topicBlock } from "./prompts.js";
 import {
   analyzeResultSchema,
   categorySuggestionSchema,
@@ -308,7 +308,7 @@ function stepOf(system: string): string {
     [DRAFT_SYSTEM, "draft"], [REVISE_SYSTEM, "draft"], [FACTCHECK_SYSTEM, "factcheck"], [REFINE_SYSTEM, "refine"], [TITLES_SYSTEM, "titles"],
     [IMAGE_PLAN_SYSTEM, "image_plan"], [CATEGORY_SYSTEM, "categories"], [STYLE_SYSTEM, "style"], [RADAR_SEARCH_SYSTEM, "radar_search"], [RADAR_JUDGE_SYSTEM, "radar"], [SCOUT_SEARCH_SYSTEM, "scout_search"], [SCOUT_JUDGE_SYSTEM, "scout"], [BACKLINK_SYSTEM, "backlinks"],
   ];
-  return table.find(([prompt]) => prompt === system)?.[1] ?? "other";
+  return table.find(([prompt]) => system.startsWith(prompt))?.[1] ?? "other";
 }
 
 export class ClaudeAiService implements AiService {
@@ -474,11 +474,14 @@ export class ClaudeAiService implements AiService {
     return this.structured(BACKLINK_SYSTEM, content, BACKLINK_SCHEMA, (v) => backlinkResultSchema.parse(v));
   }
 
-  async scoutTopics(input: { site: SiteProfile; portfolio: string; existingTitles: string[]; rejectedTitles: string[]; today: string; demand?: string }): Promise<ScoutResult> {
+  async scoutTopics(input: { site: SiteProfile; portfolio: string; existingTitles: string[]; rejectedTitles: string[]; today: string; demand?: string; focus?: string }): Promise<ScoutResult> {
     const list = (items: string[]) => (items.length ? items.map((t) => `- ${t}`).join("\n") : "(keine)");
     const demand = input.demand ? `\n\nSuchdaten der Website aus der Google Search Console (echte Suchanfragen der Nutzer):\n${input.demand}` : "";
-    const material = `Heute ist der ${input.today}.\n\nPortfolio der Website (Rechtsgebiete und Schwerpunkte):\n${input.portfolio}${demand}`;
-    const found = await this.searchNotes(SCOUT_SEARCH_SYSTEM, `${siteBlock(input.site)}\n\n${material}\n\nFinde aktuell gefragte Themen aus diesem Portfolio.`);
+    const focus = input.focus ? `\n\nWUNSCH DES NUTZERS (gezielte Suche): ${input.focus}` : "";
+    const material = `Heute ist der ${input.today}.\n\nPortfolio der Website (Rechtsgebiete und Schwerpunkte):\n${input.portfolio || "(nicht hinterlegt)"}${demand}${focus}`;
+    const searchSystem = input.focus ? `${SCOUT_SEARCH_SYSTEM}\n${SCOUT_FOCUS_NOTE}` : SCOUT_SEARCH_SYSTEM;
+    const judgeSystem = input.focus ? `${SCOUT_JUDGE_SYSTEM}\n${SCOUT_FOCUS_NOTE}` : SCOUT_JUDGE_SYSTEM;
+    const found = await this.searchNotes(searchSystem, `${siteBlock(input.site)}\n\n${material}\n\nFinde aktuell gefragte Themen aus diesem Portfolio.`);
     const sourceList = found.sources.map((s) => `- ${s.title}: ${s.url}`).join("\n") || "(keine)";
     const content: Anthropic.ContentBlockParam[] = [
       {
@@ -494,7 +497,7 @@ export class ClaudeAiService implements AiService {
         ].join("\n\n"),
       },
     ];
-    return this.structured(SCOUT_JUDGE_SYSTEM, content, SCOUT_SCHEMA, (v) => scoutResultSchema.parse(v));
+    return this.structured(judgeSystem, content, SCOUT_SCHEMA, (v) => scoutResultSchema.parse(v));
   }
 
   async checkFreshness(input: { site: SiteProfile; post: { title: string; url: string; publishedAt: string; text: string } }): Promise<FreshnessResult> {

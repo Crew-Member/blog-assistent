@@ -768,6 +768,41 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect((await app.inject({ method: "POST", url: `/api/sites/${siteId}/gsc/test`, headers: { cookie } })).statusCode).toBe(502);
   });
 
+  it("Themenideen: eigene Ideen speichern und gezielte Suche ergaenzt nur", async () => {
+    const focusSeen: (string | undefined)[] = [];
+    await setup(fakeWith({
+      scoutTopics: async (input) => {
+        focusSeen.push(input.focus);
+        return { ideas: [{ title: input.focus ? "Homeoffice-Kündigung: Was gilt" : "Automatische Idee", keyword: "k", area: "Arbeitsrecht", urgency: "medium", whyNow: "w", angle: "a", demandNote: "", sources: [] }] };
+      },
+    }));
+    const siteId = (await app.inject({ method: "POST", url: "/api/sites", headers: { cookie }, payload: { name: "S", portfolio: "Arbeitsrecht" } })).json().id as string;
+    const get = async () => (await app.inject({ method: "GET", url: `/api/sites/${siteId}/scout`, headers: { cookie } })).json();
+    expect((await app.inject({ method: "POST", url: `/api/sites/${siteId}/scout/ideas`, headers: { cookie }, payload: { title: "ab" } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "POST", url: `/api/sites/${siteId}/scout/ideas`, headers: { cookie }, payload: { title: "Eigenes Thema zur Probezeit" } })).statusCode).toBe(201);
+    await app.inject({ method: "PUT", url: `/api/sites/${siteId}/scout`, headers: { cookie }, payload: { enabled: true } });
+    await worker.tick();
+    // Automatischer Lauf ersetzt nur automatische Ideen, die eigene bleibt
+    let state = await get();
+    expect(state.ideas.map((i: { title: string }) => i.title).sort()).toEqual(["Automatische Idee", "Eigenes Thema zur Probezeit"]);
+    // Gezielte Suche fuegt hinzu, funktioniert auch bei ausgeschaltetem Scout, und ersetzt nichts
+    await app.inject({ method: "PUT", url: `/api/sites/${siteId}/scout`, headers: { cookie }, payload: { enabled: false } });
+    expect((await app.inject({ method: "POST", url: `/api/sites/${siteId}/scout/focus`, headers: { cookie }, payload: { focus: "Kündigung im Homeoffice" } })).statusCode).toBe(202);
+    expect((await get()).focusPending).toBe(true);
+    await worker.tick();
+    expect(focusSeen).toEqual([undefined, "Kündigung im Homeoffice"]);
+    state = await get();
+    expect(state.focusPending).toBe(false);
+    expect(state.ideas).toHaveLength(3);
+    expect(state.ideas.find((i: { title: string }) => i.title.startsWith("Homeoffice"))?.origin).toBe("focus");
+    expect(state.lastInfo).toContain("Gezielte Suche zu");
+    // Weiterer automatischer Lauf behaelt gezielt gesuchte und eigene Ideen
+    await app.inject({ method: "PUT", url: `/api/sites/${siteId}/scout`, headers: { cookie }, payload: { enabled: true } });
+    await app.inject({ method: "POST", url: `/api/sites/${siteId}/scout/run`, headers: { cookie } });
+    await worker.tick();
+    expect((await get()).ideas).toHaveLength(3);
+  });
+
   it("reicht den Bildstil der Website an den Bildvorschlag weiter", async () => {
     const seen: (string | undefined)[] = [];
     const fake = new FakeAiService();

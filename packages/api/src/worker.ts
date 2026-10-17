@@ -70,7 +70,7 @@ export class Worker {
         }
         const scoutSiteId = await this.claimScout();
         if (scoutSiteId) {
-          await runScout(this.deps, scoutSiteId);
+          await runScout(this.deps, scoutSiteId.id, undefined, scoutSiteId.focus);
           continue;
         }
         return;
@@ -99,15 +99,16 @@ export class Worker {
     return count === 1 ? next.id : undefined;
   }
 
-  private async claimScout(): Promise<string | undefined> {
+  private async claimScout(): Promise<{ id: string; focus: string } | undefined> {
     const { prisma } = this.deps;
     const due = new Date(Date.now() - SCOUT_INTERVAL_DAYS * 86_400_000);
-    const where = { scoutEnabled: true, OR: [{ scoutRunRequested: true }, { scoutLastRunAt: null }, { scoutLastRunAt: { lt: due } }] };
-    const next = await prisma.site.findFirst({ where, select: { id: true } });
+    // Eine gezielte Suche (Stichworte vom Nutzer) laeuft auch bei ausgeschaltetem Scout.
+    const where = { OR: [{ scoutFocus: { not: "" } }, { scoutEnabled: true, OR: [{ scoutRunRequested: true }, { scoutLastRunAt: null }, { scoutLastRunAt: { lt: due } }] }] };
+    const next = await prisma.site.findFirst({ where, select: { id: true, scoutFocus: true } });
     if (!next) return undefined;
     // Zeitstempel sofort setzen (wie beim Radar): keine Endlosschleife, keine Mehrfachkosten.
-    const { count } = await prisma.site.updateMany({ where: { id: next.id, ...where }, data: { scoutRunRequested: false, scoutRunning: true, scoutLastRunAt: new Date() } });
-    return count === 1 ? next.id : undefined;
+    const { count } = await prisma.site.updateMany({ where: { id: next.id, ...where }, data: { scoutRunRequested: false, scoutFocus: "", scoutRunning: true, scoutLastRunAt: new Date() } });
+    return count === 1 ? { id: next.id, focus: next.scoutFocus } : undefined;
   }
 
   private async claimImage(): Promise<string | undefined> {

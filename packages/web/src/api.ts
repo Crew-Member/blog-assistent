@@ -277,12 +277,14 @@ export interface TopicIdea {
   sources: { title: string; url: string }[];
   postId: string | null;
   doneAt: string | null;
+  origin: "scout" | "focus" | "own";
 }
 
 export interface ScoutState {
   enabled: boolean;
   lastRunAt: string | null;
   runRequested: boolean;
+  focusPending: boolean;
   running: boolean;
   lastError: string;
   lastInfo: string;

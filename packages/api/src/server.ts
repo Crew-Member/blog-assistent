@@ -703,7 +703,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, sear
 
   // --- Themen-Scout -----------------------------------------------------------
   app.get<{ Params: { id: string } }>("/api/sites/:id/scout", async (request, reply) => {
-    const site = await prisma.site.findUnique({ where: { id: request.params.id }, select: { scoutEnabled: true, scoutLastRunAt: true, scoutRunRequested: true, scoutRunning: true, scoutLastError: true, scoutLastInfo: true, gscProperty: true } });
+    const site = await prisma.site.findUnique({ where: { id: request.params.id }, select: { scoutEnabled: true, scoutLastRunAt: true, scoutRunRequested: true, scoutRunning: true, scoutLastError: true, scoutLastInfo: true, scoutFocus: true, gscProperty: true } });
     if (!site) return reply.code(404).send({ error: "Website nicht gefunden" });
     const all = await prisma.topicIdea.findMany({ where: { siteId: request.params.id } });
     const rank: Record<string, number> = { high: 0, medium: 1, low: 2 };
@@ -712,7 +712,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, sear
     const ideas = all
       .filter((i) => !i.dismissed && !isDone(i))
       .sort((a, b) => (rank[a.urgency] ?? 1) - (rank[b.urgency] ?? 1) || a.createdAt.getTime() - b.createdAt.getTime());
-    return { enabled: site.scoutEnabled, lastRunAt: site.scoutLastRunAt, runRequested: site.scoutRunRequested, running: site.scoutRunning && Boolean(site.scoutLastRunAt) && Date.now() - site.scoutLastRunAt!.getTime() < 20 * 60_000, lastError: site.scoutLastError, lastInfo: site.scoutLastInfo, dismissed: all.filter((i) => i.dismissed).length, ideas, done, gsc: { property: site.gscProperty, keyFound: Boolean(searchConsole?.configured()), email: searchConsole?.email() ?? null } };
+    return { enabled: site.scoutEnabled, lastRunAt: site.scoutLastRunAt, runRequested: site.scoutRunRequested, focusPending: Boolean(site.scoutFocus), running: site.scoutRunning && Boolean(site.scoutLastRunAt) && Date.now() - site.scoutLastRunAt!.getTime() < 20 * 60_000, lastError: site.scoutLastError, lastInfo: site.scoutLastInfo, dismissed: all.filter((i) => i.dismissed).length, ideas, done, gsc: { property: site.gscProperty, keyFound: Boolean(searchConsole?.configured()), email: searchConsole?.email() ?? null } };
   });
 
   app.put<{ Params: { id: string } }>("/api/sites/:id/scout", async (request, reply) => {
@@ -728,6 +728,28 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, sear
     if (!site.scoutEnabled) return reply.code(409).send({ error: "Der Themen-Scout ist für diese Website ausgeschaltet." });
     await prisma.site.update({ where: { id: request.params.id }, data: { scoutRunRequested: true } });
     return reply.code(202).send({ ok: true });
+  });
+
+  // Gezielte Suche: Der Nutzer nennt ein Thema oder Stichworte, der Worker sucht dazu Themenideen (auch bei ausgeschaltetem Scout).
+  app.post<{ Params: { id: string } }>("/api/sites/:id/scout/focus", async (request, reply) => {
+    const body = z.object({ focus: z.string().trim().min(3).max(500) }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "Bitte ein Thema oder Stichworte angeben (mindestens 3 Zeichen)." });
+    const site = await prisma.site.findUnique({ where: { id: request.params.id }, select: { scoutRunning: true, scoutLastRunAt: true, scoutFocus: true } });
+    if (!site) return reply.code(404).send({ error: "Website nicht gefunden" });
+    const busy = site.scoutRunning && site.scoutLastRunAt && Date.now() - site.scoutLastRunAt.getTime() < 20 * 60_000;
+    if (busy || site.scoutFocus) return reply.code(409).send({ error: "Es läuft bereits eine Suche. Bitte kurz warten." });
+    await prisma.site.update({ where: { id: request.params.id }, data: { scoutFocus: body.data.focus } });
+    return reply.code(202).send({ ok: true });
+  });
+
+  // Speichert einen eigenen Themenvorschlag direkt als Idee (ohne Suche).
+  app.post<{ Params: { id: string } }>("/api/sites/:id/scout/ideas", async (request, reply) => {
+    const body = z.object({ title: z.string().trim().min(3).max(200), keyword: z.string().trim().max(120).default(""), area: z.string().trim().max(80).default(""), angle: z.string().trim().max(500).default("") }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "Bitte einen Titel oder ein Thema angeben (mindestens 3 Zeichen)." });
+    const site = await prisma.site.findUnique({ where: { id: request.params.id }, select: { id: true } });
+    if (!site) return reply.code(404).send({ error: "Website nicht gefunden" });
+    const idea = await prisma.topicIdea.create({ data: { siteId: site.id, origin: "own", ...body.data, whyNow: "Eigener Vorschlag" } });
+    return reply.code(201).send(idea);
   });
 
   // Prueft die Verbindung zur Search Console fuer die Property dieser Website.
@@ -771,7 +793,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, sear
           submissionId: submission.id,
           title: idea.title,
           angle: idea.angle || "Aktuelles Thema verständlich einordnen und Handlungsempfehlungen geben",
-          summary: [`Anlass: ${idea.whyNow}`, sources.length ? `Erste Quellen:\n${sources.map((s) => `- ${s.title || s.url}: ${s.url}`).join("\n")}` : ""].filter(Boolean).join("\n\n"),
+          summary: [idea.origin === "own" ? "Eigener Themenvorschlag des Nutzers." : `Anlass: ${idea.whyNow}`, sources.length ? `Erste Quellen:\n${sources.map((s) => `- ${s.title || s.url}: ${s.url}`).join("\n")}` : ""].filter(Boolean).join("\n\n"),
           keyFacts: [],
           keywords: idea.keyword ? [idea.keyword] : [],
         },
