@@ -88,7 +88,7 @@ describe("seoChecks", () => {
     slug: "datenschutzverstoesse-konkurrenten-abmahnen",
     metaDescription: "Datenschutzverstöße Konkurrenten: Das OLG Naumburg lässt Abmahnungen zu. Was Unternehmen jetzt wissen und prüfen sollten.",
     focusKeyword: "Datenschutzverstöße Konkurrenten",
-    contentHtml: `<p>Datenschutzverstöße Konkurrenten ${"wort ".repeat(520)} Datenschutzverstöße Konkurrenten und Datenschutzverstöße Konkurrenten</p><h2>Datenschutzverstöße Konkurrenten</h2><h2>B</h2>`,
+    contentHtml: `<p>Datenschutzverstöße Konkurrenten ${"wort ".repeat(170)} Datenschutzverstöße Konkurrenten ${"wort ".repeat(170)} Datenschutzverstöße Konkurrenten ${"wort ".repeat(180)} Datenschutzverstöße Konkurrenten und Datenschutzverstöße Konkurrenten</p><h2>Datenschutzverstöße Konkurrenten</h2><h2>B</h2>`,
   };
   it("besteht bei sauberem Beitrag", () => {
     expect(seoChecks(good).filter((c) => !c.ok)).toEqual([]);

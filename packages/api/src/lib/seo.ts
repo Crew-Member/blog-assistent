@@ -30,6 +30,13 @@ function countOccurrences(text: string, keyword: string): number {
   return ` ${norm(text, text.length + 10)} `.split(` ${k} `).length - 1;
 }
 
+/** Woertliche Vorkommen des Keywords, Wortzahl und Dichte in Prozent. */
+export function keywordStats(text: string, keyword: string): { count: number; words: number; density: number } {
+  const words = text.split(/\s+/).filter(Boolean).length;
+  const count = countOccurrences(text, keyword);
+  return { count, words, density: words > 0 ? (count / words) * 100 : 0 };
+}
+
 /** Steht das Keyword woertlich (Umlaute/Gross-Kleinschreibung egal) im Text? */
 export function keywordInText(text: string, keyword: string): boolean {
   return contains(text, keyword);
@@ -53,7 +60,8 @@ export function seoChecks(post: SeoInput): SeoCheck[] {
     const h2s = [...post.contentHtml.matchAll(/<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/g)].map((m) => stripHtml(m[1] ?? ""));
     add("kw-h2", "Fokus-Keyword in einer Zwischenüberschrift", h2s.some((h) => contains(h, kw)), kw);
     const count = countOccurrences(text, kw);
-    add("kw-count", "Fokus-Keyword im Text (mindestens 3×)", count >= 3, `${count}× wörtlich im Text`);
+    const density = words.length > 0 ? (count / words.length) * 100 : 0;
+    add("kw-count", "Keyword-Dichte (Ziel: etwa 1–1,5 %)", count >= 3 && density >= 0.8 && density <= 2.5, `${count}× wörtlich im Text = ${density.toFixed(1).replace(".", ",")} % bei ${words.length} Wörtern`);
     const kwSlug = slugify(kw, 200);
     add("kw-slug", "Fokus-Keyword im Slug", kwSlug.length > 0 && post.slug.includes(kwSlug), post.slug || "(leer)");
   } else {

@@ -12,6 +12,8 @@ import { recordUsage, withUsageContext } from "./lib/usage.js";
 import { clampWords, fetchCompetitorPages, median, pickCompetitorUrls } from "./lib/competition.js";
 import { checkReferences, type ReferenceCheck } from "./lib/references.js";
 import { slugWithKeyword } from "./lib/slug.js";
+import { keywordStats } from "./lib/seo.js";
+import { stripHtml } from "./lib/extract.js";
 import type { ImageProvider } from "./image/provider.js";
 import { markAsAiGenerated } from "./lib/png.js";
 import type { FileStorage } from "./lib/storage.js";
@@ -102,6 +104,48 @@ export function assemblePostHtml(contentHtml: string, disclaimer: string, closin
   const noteHtml = /<\/?[a-z][^>]*>/i.test(note) ? sanitizePostHtml(`<p>${note}</p>`).replace(/^<p>/, "").replace(/<\/p>\s*$/, "") : escapeHtml(note);
   const footer = `<p><em>${[escapeHtml(standText), noteHtml].filter(Boolean).join(" ")}</em></p>`;
   return `${body}\n${footer}`;
+}
+
+/** Mindestdichte, unter der der Text automatisch mit dem Fokus-Keyword nachgebessert wird, und Zieldichte. */
+export const KEYWORD_MIN_DENSITY = 0.9;
+export const KEYWORD_TARGET_DENSITY = 1.25;
+
+const hrefsOf = (html: string) => [...html.matchAll(/href="([^"]+)"/g)].map((m) => (m[1] ?? "").replace(/&amp;/g, "&")).sort();
+
+/**
+ * Sprachmodelle setzen das Fokus-Keyword meist zu selten ein. Liegt die Dichte unter 0,9 %, bittet dieser Schritt das Modell, es auf etwa
+ * 1,25 % zu erhoehen, ohne neue Aussagen. Das Ergebnis wird nur uebernommen, wenn Links, Ueberschriften und Umfang im Wesentlichen gleich
+ * bleiben und die Dichte tatsaechlich gestiegen ist; sonst bleibt der urspruengliche Text. Wirft nie.
+ */
+export async function ensureKeywordDensity(
+  ai: AiService,
+  input: { site: SiteProfile; title: string; focusKeyword: string; contentHtml: string },
+): Promise<{ contentHtml: string; changed: boolean }> {
+  const keyword = input.focusKeyword.trim();
+  const before = keywordStats(stripHtml(input.contentHtml), keyword);
+  if (!keyword || before.words < 300 || before.density >= KEYWORD_MIN_DENSITY) return { contentHtml: input.contentHtml, changed: false };
+  const target = Math.ceil((before.words * KEYWORD_TARGET_DENSITY) / 100);
+  try {
+    const refined = await ai.refine({
+      site: input.site,
+      title: input.title,
+      focusKeyword: keyword,
+      contentHtml: input.contentHtml,
+      instruction: [
+        `Das Fokus-Keyword „${keyword}“ kommt nur ${before.count}-mal wörtlich vor (${before.density.toFixed(1).replace(".", ",")} % bei ${before.words} Wörtern). Erhöhe die Dichte auf etwa 1,25 %, also auf rund ${target} wörtliche Vorkommen (etwa ${Math.max(1, target - before.count)} zusätzliche).`,
+        `Setze „${keyword}“ in genau dieser Schreibweise (gleiche Beugung) an passenden Stellen ein: im Einstieg, in höchstens jeder zweiten Zwischenüberschrift, in Absätzen und Listenpunkten. Ersetze dafür bevorzugt Umschreibungen und Pronomen („das Urteil“, „diese Pflicht“, „die Regelung“) durch das Keyword oder passe Sätze leicht an.`,
+        "Es entstehen keine neuen Aussagen, Fakten oder Zahlen, keine Wiederholung im selben Satz, kein erkennbares Keyword-Stopfen. Alle Links, Fundstellen und Überschriften bleiben ansonsten unverändert.",
+      ].join(" "),
+    });
+    const after = keywordStats(stripHtml(refined.contentHtml), keyword);
+    const sameLinks = JSON.stringify(hrefsOf(refined.contentHtml)) === JSON.stringify(hrefsOf(input.contentHtml));
+    const sameHeadings = (refined.contentHtml.match(/<h2[\s>]/g) ?? []).length === (input.contentHtml.match(/<h2[\s>]/g) ?? []).length;
+    const sizeOk = after.words >= before.words * 0.9 && after.words <= before.words * 1.15;
+    if (sameLinks && sameHeadings && sizeOk && after.count > before.count && after.density <= 2.5) return { contentHtml: refined.contentHtml, changed: true };
+  } catch {
+    /* ohne Nachbesserung weiter */
+  }
+  return { contentHtml: input.contentHtml, changed: false };
 }
 
 function clip(text: string, max: number): string {
@@ -308,6 +352,8 @@ async function generatePostRun(deps: PipelineDeps, postId: string): Promise<void
     // Zitierte Entscheidungen verlinken (bevorzugt auf die Gerichtswebsite), soweit die Recherche eine Quelle dazu gefunden hat.
     const rulingSources = [...research.sources, ...draft.sources.map((s) => ({ url: s.url, title: s.title, note: s.note }))];
     draft.contentHtml = applyLinkPolicy(autoLinkRulings(draft.contentHtml, rulingSources), post.site.baseUrl, knownInternal, linkOptions);
+    // Keyword-Dichte pruefen und bei Bedarf nachbessern (vor dem Faktencheck, damit dieser den endgueltigen Text sieht).
+    draft.contentHtml = (await ensureKeywordDensity(ai, { site, title: draft.title, focusKeyword: draft.focusKeyword, contentHtml: draft.contentHtml })).contentHtml;
     if (draft.changeSummary.trim()) {
       await prisma.post.update({ where: { id: postId }, data: { researchNotes: `Änderungen gegenüber dem Original:\n${draft.changeSummary.trim()}\n\n${research.notes}` } });
     }

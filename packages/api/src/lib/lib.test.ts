@@ -538,3 +538,48 @@ describe("structureBlock", () => {
     expect(structureBlock({ summary: true, faq: false })).not.toContain("Fragenabschnitt");
   });
 });
+
+describe("Keyword-Dichte", () => {
+  const site = { name: "S", language: "de", audience: "", tone: "", styleGuide: "" };
+  const filler = "Das ist ein ganz normaler Satz ohne das besondere Thema darin. ".repeat(60);
+  const base = `<p>Einstieg zum Thema Haushaltsausnahme der DSGVO.</p><h2>Überblick</h2><p>${filler}</p><p><a href="https://www.bag.example/x">Link</a></p>`;
+
+  it("misst Anzahl und Dichte des woertlichen Keywords", async () => {
+    const { keywordStats, seoChecks } = await import("./seo.js");
+    const stats = keywordStats("Die Haushaltsausnahme der DSGVO gilt. Die Haushaltsausnahme der DSGVO ist eng. Sonst nichts hier.", "Haushaltsausnahme der DSGVO");
+    expect(stats).toMatchObject({ count: 2, words: 14 });
+    expect(stats.density).toBeCloseTo(14.3, 0);
+    const thin = seoChecks({ title: "Haushaltsausnahme der DSGVO: Urteil", slug: "haushaltsausnahme-dsgvo", metaDescription: "x".repeat(100), focusKeyword: "Haushaltsausnahme der DSGVO", contentHtml: base });
+    const check = thin.find((c) => c.id === "kw-count")!;
+    expect(check.ok).toBe(false);
+    expect(check.detail).toContain("%");
+  });
+
+  it("bessert zu duenne Keyword-Dichte per KI nach, aber nur bei unveraenderten Links und Ueberschriften", async () => {
+    const { ensureKeywordDensity } = await import("../pipeline.js");
+    const { keywordStats } = await import("./seo.js");
+    const { stripHtml } = await import("./extract.js");
+    const kw = "Haushaltsausnahme der DSGVO";
+    const calls: string[] = [];
+    let n = 0;
+    const better = base.replace(filler, filler.replace(/besondere Thema/g, (m) => (n++ < 8 ? `${m} der Haushaltsausnahme der DSGVO` : m)));
+    const ai = { refine: async (i: { instruction: string }) => { calls.push(i.instruction); return { contentHtml: better, note: "" }; } };
+    const done = await ensureKeywordDensity(ai as never, { site, title: "T", focusKeyword: kw, contentHtml: base });
+    expect(done.changed).toBe(true);
+    expect(calls[0]).toContain(`„${kw}“`);
+    expect(keywordStats(stripHtml(done.contentHtml), kw).density).toBeGreaterThan(keywordStats(stripHtml(base), kw).density);
+
+    // Link veraendert -> verworfen
+    const evil = better.replace("https://www.bag.example/x", "https://anders.example/");
+    const rejected = await ensureKeywordDensity({ refine: async () => ({ contentHtml: evil, note: "" }) } as never, { site, title: "T", focusKeyword: kw, contentHtml: base });
+    expect(rejected).toEqual({ contentHtml: base, changed: false });
+    // Fehler der KI -> Original
+    const failed = await ensureKeywordDensity({ refine: async () => { throw new Error("down"); } } as never, { site, title: "T", focusKeyword: kw, contentHtml: base });
+    expect(failed.changed).toBe(false);
+    // bereits ausreichend oder zu kurz -> keine KI-Anfrage
+    const never = { refine: async () => { throw new Error("darf nicht aufgerufen werden"); } };
+    const dense = `<p>${("Haushaltsausnahme der DSGVO ist wichtig und klar. " + "Wort ".repeat(50)).repeat(8)}</p>`;
+    expect((await ensureKeywordDensity(never as never, { site, title: "T", focusKeyword: kw, contentHtml: dense })).changed).toBe(false);
+    expect((await ensureKeywordDensity(never as never, { site, title: "T", focusKeyword: kw, contentHtml: "<p>kurz</p>" })).changed).toBe(false);
+  });
+});
