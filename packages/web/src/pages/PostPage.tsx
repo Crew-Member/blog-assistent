@@ -575,12 +575,16 @@ function WordPressPanel({ post, dirty, onDone }: { post: PostDetail; dirty: bool
   );
 }
 
+type PostTab = "check" | "text" | "seo" | "image" | "wp";
+const POST_TABS: { id: PostTab }[] = [{ id: "check" }, { id: "text" }, { id: "seo" }, { id: "image" }, { id: "wp" }];
+
 export function PostPage({ id }: { id: string }) {
   const { data, error, reload } = useLoad(() => api.get<PostDetail>(`/api/posts/${id}`), (p) => isBusy(p.status) || p.image?.status === "QUEUED" || p.image?.status === "GENERATING");
   const [form, setForm] = useState({ title: "", slug: "", metaDescription: "", focusKeyword: "", excerpt: "", contentHtml: "" });
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [saveError, setSaveError] = useState<string>();
+  const [tab, setTabState] = useState<PostTab>();
 
   useEffect(() => {
     if (data?.status === "DRAFT_READY") {
@@ -598,12 +602,30 @@ export function PostPage({ id }: { id: string }) {
   if (error) return <p className="error">{error}</p>;
   if (!data) return <SkeletonPage />;
   const set = (key: keyof typeof form) => (e: { target: { value: string } }) => { setForm({ ...form, [key]: e.target.value }); setSaved(false); setDirty(true); };
-  const jump = (sectionId: string) => document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
   const steps = ["Warteschlange", "Recherche", "Entwurf", "Faktencheck", "Fertig"];
   const stepIndex = { QUEUED: 0, RESEARCHING: 1, DRAFTING: 2, FACTCHECKING: 3, DRAFT_READY: 4, FAILED: 1 }[data.status];
   const seoOk = data.seoChecks.filter((c) => c.ok).length;
   const factTone: Tone = !data.factCheck ? "neutral" : data.factCheck.status === "passed" || data.factCheck.status === "revised" ? "success" : "warn";
   const factText = !data.factCheck ? "Faktencheck offen" : { passed: "Faktencheck bestanden", revised: "Faktencheck: korrigiert", needs_review: "Faktencheck: prüfen", skipped: "Faktencheck fehlt" }[data.factCheck.status];
+  const needsCheck = !data.factCheck || data.factCheck.status === "needs_review" || data.factCheck.status === "skipped" || data.unverifiedClaims.length > 0;
+  const savedTab = (() => {
+    try {
+      const v = sessionStorage.getItem(`post-tab-${id}`);
+      return POST_TABS.some((t) => t.id === v) ? (v as PostTab) : undefined;
+    } catch {
+      return undefined;
+    }
+  })();
+  const activeTab: PostTab = tab ?? savedTab ?? (needsCheck ? "check" : "text");
+  const setTab = (next: PostTab) => {
+    setTabState(next);
+    try {
+      sessionStorage.setItem(`post-tab-${id}`, next);
+    } catch {
+      /* ohne Speicher nur fuer diese Sitzung */
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   return (
     <>
@@ -615,7 +637,7 @@ export function PostPage({ id }: { id: string }) {
       {data.revisionOf && (
         <div className="notice">
           <Icon name="pen" size={16} /> Überarbeitung von{" "}
-          <a href={data.revisionOf.url} target="_blank" rel="noreferrer noopener">„{data.revisionOf.title}“</a>. Beim Senden an WordPress entsteht ein <strong>neuer Entwurf</strong>; der veröffentlichte Beitrag bleibt unverändert. Übernimm danach die Änderungen in WordPress (oder ersetze den alten Beitrag) – die Änderungsliste steht unten bei den Recherchenotizen.
+          <a href={data.revisionOf.url} target="_blank" rel="noreferrer noopener">„{data.revisionOf.title}“</a>. Beim Senden an WordPress entsteht ein <strong>neuer Entwurf</strong>; der veröffentlichte Beitrag bleibt unverändert. Übernimm danach die Änderungen in WordPress (oder ersetze den alten Beitrag) – die Änderungsliste steht im Reiter „Prüfung“ bei den Recherchenotizen.
         </div>
       )}
       {data.status !== "DRAFT_READY" && (
@@ -632,71 +654,43 @@ export function PostPage({ id }: { id: string }) {
       )}
 
       {data.status === "DRAFT_READY" && (
-        <div className="summary summary-sticky" aria-label="Kurzübersicht">
-          <button className={`chip chip-${factTone}`} onClick={() => jump("sec-check")}><Icon name={factTone === "success" ? "shield" : "alert"} size={13} /> {factText}</button>
-          {data.unverifiedClaims.length > 0 && <button className="chip chip-warn" onClick={() => jump("sec-check")}><Icon name="alert" size={13} /> {data.unverifiedClaims.length} Punkt(e) prüfen</button>}
-          {data.seoChecks.length > 0 && <button className={`chip chip-${seoOk === data.seoChecks.length ? "success" : "warn"}`} onClick={() => jump("sec-seo")}><Icon name="search" size={13} /> SEO {seoOk}/{data.seoChecks.length}</button>}
-          <button className={`chip chip-${data.image?.hasFile ? "success" : "neutral"}`} onClick={() => jump("sec-image")}><Icon name="image" size={13} /> {data.image?.hasFile ? "Beitragsbild" : "Kein Bild"}</button>
-          <button className={`chip chip-${data.wpPostId ? "success" : "neutral"}`} onClick={() => jump("sec-wp")}><Icon name="send" size={13} /> {data.wpPostId ? "Entwurf in WordPress" : "Nicht in WordPress"}</button>
-        </div>
-      )}
-
-      {data.status === "DRAFT_READY" && (
-        <div className="stack-lg">
-          <div id="sec-check" className="card-section">
-            {data.factCheck ? (
-              <FactCheckPanel check={data.factCheck} claims={data.unverifiedClaims} />
-            ) : (
-              data.unverifiedClaims.length > 0 && (
-                <div className="card warn">
-                  <div className="card-title"><Icon name="alert" /> Bitte vor Veröffentlichung prüfen – nicht belegt</div>
-                  <ul>{data.unverifiedClaims.map((c, i) => <li key={i}>{c}</li>)}</ul>
-                </div>
-              )
-            )}
+        <>
+          <div className="tabbar" role="tablist" aria-label="Bereiche des Beitrags">
+            <button role="tab" aria-selected={activeTab === "check"} className={`tab${activeTab === "check" ? " active" : ""}`} onClick={() => setTab("check")}>
+              <Icon name={factTone === "success" && data.unverifiedClaims.length === 0 ? "shield" : "alert"} size={15} /> Prüfung
+              <span className={`tab-badge tab-${factTone === "success" && data.unverifiedClaims.length === 0 ? "success" : "warn"}`}>{data.unverifiedClaims.length > 0 ? `${data.unverifiedClaims.length} prüfen` : factTone === "success" ? "ok" : "offen"}</span>
+            </button>
+            <button role="tab" aria-selected={activeTab === "text"} className={`tab${activeTab === "text" ? " active" : ""}`} onClick={() => setTab("text")}>
+              <Icon name="pen" size={15} /> Text
+              {dirty && <span className="tab-badge tab-warn">ungespeichert</span>}
+            </button>
+            <button role="tab" aria-selected={activeTab === "seo"} className={`tab${activeTab === "seo" ? " active" : ""}`} onClick={() => setTab("seo")}>
+              <Icon name="search" size={15} /> SEO
+              {data.seoChecks.length > 0 && <span className={`tab-badge tab-${seoOk === data.seoChecks.length ? "success" : "warn"}`}>{seoOk}/{data.seoChecks.length}</span>}
+            </button>
+            <button role="tab" aria-selected={activeTab === "image"} className={`tab${activeTab === "image" ? " active" : ""}`} onClick={() => setTab("image")}>
+              <Icon name="image" size={15} /> Bild
+              <span className={`tab-badge tab-${data.image?.hasFile ? "success" : "neutral"}`}>{data.image?.hasFile ? "ok" : "fehlt"}</span>
+            </button>
+            <button role="tab" aria-selected={activeTab === "wp"} className={`tab${activeTab === "wp" ? " active" : ""}`} onClick={() => setTab("wp")}>
+              <Icon name="send" size={15} /> WordPress
+              <span className={`tab-badge tab-${data.wpPostId ? "success" : "neutral"}`}>{data.wpPostId ? "gesendet" : "offen"}</span>
+            </button>
           </div>
 
-          <div className="grid">
-            <div className="stack">
-              <RefinePanel post={data} dirty={dirty} onDone={() => void reload()} />
-              <div className="card stack">
-                <div className="card-title"><Icon name="pen" /> Text bearbeiten</div>
-                <label>Titel<input value={form.title} onChange={set("title")} /></label>
-                <TitleSuggestions postId={id} current={form.title} onPick={(title) => { setForm({ ...form, title }); setSaved(false); setDirty(true); }} />
-                <div className="row">
-                  <label>Slug<input value={form.slug} onChange={set("slug")} /></label>
-                  <label>Fokus-Keyword<input value={form.focusKeyword} onChange={set("focusKeyword")} /></label>
-                </div>
-                <label>Meta-Description <span className="muted">({form.metaDescription.length}/155)</span><textarea rows={2} value={form.metaDescription} onChange={set("metaDescription")} /></label>
-                <label>Auszug<textarea rows={3} value={form.excerpt} onChange={set("excerpt")} /></label>
-                <label>Inhalt (HTML)<textarea rows={18} value={form.contentHtml} onChange={set("contentHtml")} className="mono" /></label>
-                {saveError && <p className="error">{saveError}</p>}
-                <div className="row">
-                  <button
-                    onClick={async () => {
-                      try {
-                        await api.put(`/api/posts/${id}`, form);
-                        setSaved(true);
-                        setDirty(false);
-                        setSaveError(undefined);
-                        void reload();
-                      } catch (e) {
-                        setSaveError(e instanceof Error ? e.message : String(e));
-                      }
-                    }}
-                  >
-                    <Icon name="check" size={16} /> Änderungen speichern
-                  </button>
-                  {saved && <Chip tone="success" icon="check">Gespeichert</Chip>}
-                  {dirty && !saved && <Chip tone="warn">Ungespeicherte Änderungen</Chip>}
-                  <button className="secondary" onClick={async () => { if (confirm("Neu recherchieren und schreiben? Manuelle Änderungen gehen verloren.")) { await api.post(`/api/posts/${id}/regenerate`); void reload(); } }}><Icon name="refresh" size={16} /> Neu erstellen</button>
-                </div>
-              </div>
-            </div>
-            <div className="stack">
-              <div className="card preview">
-                <h1>{form.title}</h1>
-                <div dangerouslySetInnerHTML={{ __html: form.contentHtml }} />
+          <div className="stack-lg">
+            <div role="tabpanel" hidden={activeTab !== "check"} className="stack-lg">
+              <div id="sec-check" className="card-section">
+                {data.factCheck ? (
+                  <FactCheckPanel check={data.factCheck} claims={data.unverifiedClaims} />
+                ) : (
+                  data.unverifiedClaims.length > 0 && (
+                    <div className="card warn">
+                      <div className="card-title"><Icon name="alert" /> Bitte vor Veröffentlichung prüfen – nicht belegt</div>
+                      <ul>{data.unverifiedClaims.map((c, i) => <li key={i}>{c}</li>)}</ul>
+                    </div>
+                  )
+                )}
               </div>
               {data.sources.length > 0 && (
                 <div className="card">
@@ -704,27 +698,80 @@ export function PostPage({ id }: { id: string }) {
                   <ul>{data.sources.map((s, i) => <li key={i}><a href={s.url} target="_blank" rel="noreferrer noopener">{s.title || s.url}</a><div className="muted">{s.note}</div></li>)}</ul>
                 </div>
               )}
-              {data.seoChecks.length > 0 && (
-                <div id="sec-seo" className="card card-section">
-                  <div className="card-title"><Icon name="search" /> SEO-Prüfung <span className="muted" style={{ fontWeight: 500 }}>({seoOk}/{data.seoChecks.length})</span></div>
-                  <ul className="seo-list">
-                    {data.seoChecks.map((c) => (
-                      <li key={c.id}>
-                        <span className={c.ok ? "ok" : "error"}>{c.ok ? "✓" : "✗"}</span> <span>{c.label} <span className="muted">– {c.detail}</span></span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {data.competition && <CompetitionPanel c={data.competition} ownWords={(form.contentHtml.replace(/<[^>]+>/g, " ").match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? []).length} />}
-              {data.secondaryKeywords.length > 0 && <div>{data.secondaryKeywords.map((k) => <span key={k} className="tag">{k}</span>)}</div>}
+              {data.researchNotes && <details className="card"><summary>Recherchenotizen der KI{data.revisionOf ? " und Änderungsliste" : ""}</summary><pre>{data.researchNotes}</pre></details>}
             </div>
-          </div>
 
-          <div id="sec-image" className="card-section"><ImagePanel post={data} onChanged={() => void reload()} /></div>
-          <div id="sec-wp" className="card-section"><WordPressPanel post={data} dirty={dirty} onDone={() => void reload()} /></div>
-          {data.researchNotes && <details className="card"><summary>Recherchenotizen der KI</summary><pre>{data.researchNotes}</pre></details>}
-        </div>
+            <div role="tabpanel" hidden={activeTab !== "text"} className="grid">
+              <div className="stack">
+                <RefinePanel post={data} dirty={dirty} onDone={() => void reload()} />
+                <div className="card stack">
+                  <div className="card-title"><Icon name="pen" /> Text bearbeiten</div>
+                  <label>Titel<input value={form.title} onChange={set("title")} /></label>
+                  <TitleSuggestions postId={id} current={form.title} onPick={(title) => { setForm({ ...form, title }); setSaved(false); setDirty(true); }} />
+                  <div className="row">
+                    <label>Slug<input value={form.slug} onChange={set("slug")} /></label>
+                    <label>Fokus-Keyword<input value={form.focusKeyword} onChange={set("focusKeyword")} /></label>
+                  </div>
+                  <label>Meta-Description <span className="muted">({form.metaDescription.length}/155)</span><textarea rows={2} value={form.metaDescription} onChange={set("metaDescription")} /></label>
+                  <label>Auszug<textarea rows={3} value={form.excerpt} onChange={set("excerpt")} /></label>
+                  <label>Inhalt (HTML)<textarea rows={18} value={form.contentHtml} onChange={set("contentHtml")} className="mono" /></label>
+                  {saveError && <p className="error">{saveError}</p>}
+                  <div className="row">
+                    <button
+                      onClick={async () => {
+                        try {
+                          await api.put(`/api/posts/${id}`, form);
+                          setSaved(true);
+                          setDirty(false);
+                          setSaveError(undefined);
+                          void reload();
+                        } catch (e) {
+                          setSaveError(e instanceof Error ? e.message : String(e));
+                        }
+                      }}
+                    >
+                      <Icon name="check" size={16} /> Änderungen speichern
+                    </button>
+                    {saved && <Chip tone="success" icon="check">Gespeichert</Chip>}
+                    {dirty && !saved && <Chip tone="warn">Ungespeicherte Änderungen</Chip>}
+                    <button className="secondary" onClick={async () => { if (confirm("Neu recherchieren und schreiben? Manuelle Änderungen gehen verloren.")) { await api.post(`/api/posts/${id}/regenerate`); void reload(); } }}><Icon name="refresh" size={16} /> Neu erstellen</button>
+                  </div>
+                </div>
+              </div>
+              <div className="stack">
+                <div className="card preview">
+                  <h1>{form.title}</h1>
+                  <div dangerouslySetInnerHTML={{ __html: form.contentHtml }} />
+                </div>
+              </div>
+            </div>
+
+            <div role="tabpanel" hidden={activeTab !== "seo"} className="grid">
+              <div className="stack">
+                {data.seoChecks.length > 0 && (
+                  <div id="sec-seo" className="card card-section">
+                    <div className="card-title"><Icon name="search" /> SEO-Prüfung <span className="muted" style={{ fontWeight: 500 }}>({seoOk}/{data.seoChecks.length})</span></div>
+                    <ul className="seo-list">
+                      {data.seoChecks.map((c) => (
+                        <li key={c.id}>
+                          <span className={c.ok ? "ok" : "error"}>{c.ok ? "✓" : "✗"}</span> <span>{c.label} <span className="muted">– {c.detail}</span></span>
+                        </li>
+                      ))}
+                    </ul>
+                    <span className="muted">Gespeicherte Änderungen aus dem Reiter „Text“ fließen in die Prüfung ein.</span>
+                  </div>
+                )}
+                {data.secondaryKeywords.length > 0 && <div className="card"><div className="card-title">Weitere Keywords</div><div>{data.secondaryKeywords.map((k) => <span key={k} className="tag">{k}</span>)}</div></div>}
+              </div>
+              <div className="stack">
+                {data.competition ? <CompetitionPanel c={data.competition} ownWords={(form.contentHtml.replace(/<[^>]+>/g, " ").match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? []).length} /> : <div className="card muted">Für diesen Beitrag gibt es keinen Vergleich mit den Top-Ergebnissen.</div>}
+              </div>
+            </div>
+
+            <div role="tabpanel" hidden={activeTab !== "image"} id="sec-image" className="card-section"><ImagePanel post={data} onChanged={() => void reload()} /></div>
+            <div role="tabpanel" hidden={activeTab !== "wp"} id="sec-wp" className="card-section"><WordPressPanel post={data} dirty={dirty} onDone={() => void reload()} /></div>
+          </div>
+        </>
       )}
       <UsageNote postId={id} status={data.status} />
       <hr />

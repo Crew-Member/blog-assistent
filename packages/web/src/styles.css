@@ -239,3 +239,14 @@ details[open] > summary { margin-bottom: 8px; }
 main { max-width: 1200px; }
 .card { transition: box-shadow .15s ease; }
 .card:hover { box-shadow: var(--shadow); }
+
+/* Reiter der Beitragsseite */
+.tabbar { position: sticky; top: 62px; z-index: 15; display: flex; gap: 4px; flex-wrap: wrap; margin: 0 -8px 18px; padding: 8px; background: var(--bg); border-bottom: 1px solid var(--line); }
+button.tab { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border-radius: 999px; border: 1px solid transparent; background: transparent; color: var(--muted); font-weight: 600; box-shadow: none; }
+button.tab:hover:not(:disabled) { background: var(--surface-2); color: var(--text); box-shadow: none; transform: none; }
+button.tab.active, button.tab.active:hover:not(:disabled) { background: var(--brand-soft); color: var(--brand-strong); border-color: color-mix(in srgb, var(--brand) 25%, transparent); }
+.tab-badge { font-size: .75rem; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+.tab-badge.tab-success { background: var(--success-soft); color: var(--success); border-color: transparent; }
+.tab-badge.tab-warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+[role="tabpanel"][hidden] { display: none !important; }
+@media (max-width: 700px) { button.tab { padding: 7px 10px; } .tab-badge { display: none; } }
