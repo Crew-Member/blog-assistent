@@ -1251,6 +1251,39 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     return { payload: Buffer.concat(parts), headers: { "content-type": `multipart/form-data; boundary=${boundary}`, cookie } };
   }
 
+  it("Bildstudio: gestaltet ein Foto im Bildstil der Website um, nur mit Bildstil, Bestaetigung und Anbieter mit Bildbearbeitung", async () => {
+    const provider = new FakeImageProvider();
+    await setup(new FakeAiService(), provider);
+    const mk = async (extra: Record<string, unknown>) => (await app.inject({ method: "POST", url: "/api/sites", headers: { cookie }, payload: { name: "Kanzlei Studio", ...extra } })).json().id as string;
+    const withStyle = await mk({ imageStyleGuide: "Fotorealistisch, weiches Licht, Petrol und Bernstein" });
+    const withoutStyle = await mk({});
+    const photo = makePlaceholderPng(300, 200);
+
+    // ohne Bildstil, ohne Bestaetigung: abgelehnt
+    expect((await app.inject({ method: "POST", url: `/api/sites/${withoutStyle}/image-restyle`, ...uploadBody(photo, { confirmRights: "true" }) })).statusCode).toBe(400);
+    const noConfirm = await app.inject({ method: "POST", url: `/api/sites/${withStyle}/image-restyle`, ...uploadBody(photo, { confirmRights: "false" }) });
+    expect(noConfirm.statusCode).toBe(400);
+    expect(noConfirm.json().error).toContain("bestätigen");
+    const fake = await app.inject({ method: "POST", url: `/api/sites/${withStyle}/image-restyle`, ...uploadBody(Buffer.from("<script>x</script>"), { confirmRights: "true" }) });
+    expect(fake.statusCode).toBe(400);
+    expect(provider.edits).toHaveLength(0);
+
+    const ok = await app.inject({ method: "POST", url: `/api/sites/${withStyle}/image-restyle`, ...uploadBody(photo, { confirmRights: "true", instruction: "Himmel heller" }) });
+    expect(ok.statusCode).toBe(200);
+    const body = ok.json();
+    expect(body.mimeType).toBe("image/png");
+    expect(Buffer.from(body.dataBase64, "base64").toString("latin1")).toContain("trainedAlgorithmicMedia");
+    expect(provider.edits).toHaveLength(1);
+    expect(provider.edits[0]!.prompt).toContain("Petrol und Bernstein");
+    expect(provider.edits[0]!.prompt).toContain("Himmel heller");
+
+    // Anbieter ohne Bildbearbeitung (z. B. Supermachine)
+    await setup(new FakeAiService(), { name: "supermachine", generate: async () => provider.generate({ prompt: "" }) });
+    const noEdit = await app.inject({ method: "POST", url: `/api/sites/${(await app.inject({ method: "POST", url: "/api/sites", headers: { cookie }, payload: { name: "X", imageStyleGuide: "Stil" } })).json().id}/image-restyle`, ...uploadBody(photo, { confirmRights: "true" }) });
+    expect(noEdit.statusCode).toBe(409);
+    expect(noEdit.json().error).toContain("OpenAI");
+  });
+
   it("nimmt hochgeladene Bilder nur mit Quellenangabe und echtem Bildformat an", async () => {
     const postId = await makePost(await createSite());
     const png = makePlaceholderPng(40, 20);

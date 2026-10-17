@@ -67,6 +67,10 @@ Bei einer Überarbeitung gibt es einen Hauptknopf **„Beitrag in WordPress aktu
 - **Beitrag mit Seitenbaukasten (Elementor, Divi, WPBakery, Beaver Builder):** Dort zeigt die Website den Inhalt des Baukastens, nicht den Beitragstext. Das Tool erkennt das und zeigt stattdessen die Schritte *Text kopieren → Beitrag im Baukasten öffnen → im Textblock einfügen und speichern*. Der kopierte Text entspricht dem, was an WordPress ginge (inklusive Hinweis auf ein KI-Bild).
 - Unter „Weitere Möglichkeiten“: **als neuen Entwurf senden** (Original bleibt unberührt, optional mit dem Datum des Originals) und – bei Baukasten-Beiträgen – den Beitragstext trotzdem ersetzen.
 
+### Bildstudio
+
+Unter **Bildstudio** lässt sich ein beliebiges Foto (Upload oder Drag & Drop, PNG/JPEG/WebP, bis 10 MB) im **Bildstil der gewählten Website** umgestalten (Websites → Bearbeiten → „Bildstil für Beitragsbilder“). Das Tool schickt das Foto zusammen mit dem Bildstil an die Bildbearbeitung des Anbieters; Motiv und Aufbau bleiben, Licht, Farben und Textur ändern sich. Voraussetzung ist `IMAGE_PROVIDER=openai` (Supermachine bietet keine Bildbearbeitung). Vor jeder Bearbeitung ist zu bestätigen, dass keine erkennbaren Personen zu sehen sind oder die Rechte vorliegen. Das Ergebnis ist KI-bearbeitet und in der Datei entsprechend vermerkt; es lässt sich herunterladen oder direkt als Beitragsbild eines fertigen Beitrags übernehmen. Kosten: wie ein erzeugtes Bild (`IMAGE_COST_USD`), auf der Seite „Kosten“ als „Foto im Bildstil umgestalten“.
+
 ### Beitragsaufbau und Bilder
 
 Für jede Website lässt sich unter „Bildstil für Beitragsbilder“ eine allgemeine Vorgabe hinterlegen (Stil, Farbwelt, Motivwelt, Perspektive, was vermieden werden soll). Sie gilt verbindlich für jeden KI-Bildvorschlag dieser Website; die Regeln zu Schrift, Logos und realen Personen bleiben unberührt.

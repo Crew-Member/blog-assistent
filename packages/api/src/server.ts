@@ -1,5 +1,5 @@
 import { imageNoticeHtml, withImageNotice } from "./lib/ainotice.js";
-import { STEP_LABELS, useUsageContext } from "./lib/usage.js";
+import { STEP_LABELS, recordUsage, useUsageContext } from "./lib/usage.js";
 import { explainAiError } from "./ai/errors.js";
 import { timingSafeEqual } from "node:crypto";
 import path from "node:path";
@@ -27,6 +27,7 @@ import { detectPageBuilder, fetchAllSitePosts, fetchSitePost, fetchSitePosts, fe
 import { WordPressClient, WordPressError, type WpDraftInput } from "./lib/wp-client.js";
 import { markAsAiGenerated, sniffImageType } from "./lib/png.js";
 import { optimizeForWeb } from "./lib/webimage.js";
+import { prepareForRestyle, restylePrompt } from "./lib/restyle.js";
 import type { ImageProvider } from "./image/provider.js";
 import { finalCaption } from "./pipeline.js";
 
@@ -1186,6 +1187,45 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, sear
       caption: (fields["caption"] ?? post.image?.caption ?? "").slice(0, 300),
     };
     return publicImage(await prisma.postImage.upsert({ where: { postId: post.id }, create: { postId: post.id, prompt: "", ...values }, update: values }));
+  });
+
+  // --- Bildstudio: beliebiges Foto im Bildstil der Website umgestalten -------------
+  app.post<{ Params: { id: string } }>("/api/sites/:id/image-restyle", async (request, reply) => {
+    const site = await prisma.site.findUnique({ where: { id: request.params.id }, select: { id: true, imageStyleGuide: true } });
+    if (!site) return reply.code(404).send({ error: "Website nicht gefunden" });
+    if (!images) return reply.code(409).send({ error: "Es ist kein Bildanbieter eingerichtet (IMAGE_PROVIDER in der .env)." });
+    if (!images.edit) return reply.code(409).send({ error: `Der Bildanbieter „${images.name}“ kann vorhandene Fotos nicht umgestalten. Dafür ist OpenAI nötig (IMAGE_PROVIDER=openai).` });
+    if (!site.imageStyleGuide.trim()) return reply.code(400).send({ error: "Für diese Website ist noch kein Bildstil hinterlegt (Websites → Bearbeiten → Bildstil für Beitragsbilder)." });
+
+    const fields: Record<string, string> = {};
+    let file: Buffer | undefined;
+    try {
+      for await (const part of request.parts()) {
+        if (part.type === "field") {
+          if (typeof part.value === "string") fields[part.fieldname] = part.value;
+        } else {
+          file = await part.toBuffer();
+        }
+      }
+    } catch (error) {
+      if ((error as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE") return reply.code(413).send({ error: "Das Foto ist zu groß (höchstens 10 MB)." });
+      throw error;
+    }
+    if (!file) return reply.code(400).send({ error: "Kein Foto hochgeladen." });
+    if (file.length > IMAGE_MAX_BYTES) return reply.code(413).send({ error: "Das Foto ist zu groß (höchstens 10 MB)." });
+    if (!sniffImage(file)) return reply.code(400).send({ error: "Nur PNG-, JPEG- und WebP-Bilder sind erlaubt." });
+    if (fields["confirmRights"] !== "true") return reply.code(400).send({ error: "Bitte bestätigen, dass auf dem Foto keine erkennbaren Personen zu sehen sind oder die Rechte vorliegen." });
+
+    useUsageContext({ siteId: site.id });
+    try {
+      const prepared = await prepareForRestyle(file);
+      const result = await images.edit({ image: prepared.data, mimeType: prepared.mimeType, prompt: restylePrompt(site.imageStyleGuide, fields["instruction"] ?? "") });
+      recordUsage({ step: "image_restyle", model: images.name, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, webSearches: 0, fixedCostUsd: config.IMAGE_COST_USD });
+      const marked = markAsAiGenerated(result.data, `KI-bearbeitet (${images.name})`);
+      return { mimeType: result.mimeType, dataBase64: marked.toString("base64"), provider: images.name };
+    } catch (error) {
+      return reply.code(502).send({ error: `Das Foto konnte nicht umgestaltet werden: ${error instanceof Error ? error.message : String(error)}` });
+    }
   });
 
   app.get<{ Params: { id: string } }>("/api/posts/:id/image/file", async (request, reply) => {

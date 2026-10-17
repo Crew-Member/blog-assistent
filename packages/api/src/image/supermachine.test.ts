@@ -137,3 +137,26 @@ describe("KI-Vermerk in JPEG-Dateien", () => {
     expect(markAsAiGenerated(other)).toBe(other);
   });
 });
+
+describe("OpenAiImageProvider.edit", () => {
+  it("schickt Foto und Anweisung als Formular an /v1/images/edits und liefert das Bild", async () => {
+    const calls: { url: string; auth: string | null; fields: Record<string, string>; fileType?: string }[] = [];
+    const fetchStub = (async (url: string, init?: RequestInit) => {
+      const form = init?.body as FormData;
+      const fields: Record<string, string> = {};
+      for (const [k, v] of form.entries()) if (typeof v === "string") fields[k] = v;
+      const file = form.get("image") as File | null;
+      calls.push({ url, auth: new Headers(init?.headers).get("authorization"), fields, fileType: file?.type });
+      return new Response(JSON.stringify({ data: [{ b64_json: Buffer.from("PNGDATA").toString("base64") }] }));
+    }) as typeof fetch;
+    const { OpenAiImageProvider } = await import("./provider.js");
+    const provider = new OpenAiImageProvider({ apiKey: "sk-test", model: "gpt-image-1", quality: "medium", baseUrl: "https://api.openai.com/", fetch: fetchStub });
+    const out = await provider.edit!({ image: Buffer.from("JPEGDATA"), mimeType: "image/jpeg", prompt: "Im Stil umgestalten" });
+    expect(out.data.toString()).toBe("PNGDATA");
+    expect(calls[0]).toMatchObject({ url: "https://api.openai.com/v1/images/edits", auth: "Bearer sk-test", fileType: "image/jpeg" });
+    expect(calls[0]!.fields["prompt"]).toContain("Im Stil umgestalten");
+    expect(calls[0]!.fields["model"]).toBe("gpt-image-1");
+    const failing = new OpenAiImageProvider({ apiKey: "k", model: "m", quality: "low", baseUrl: "https://api.openai.com", fetch: (async () => new Response(JSON.stringify({ error: { message: "content_policy blocked" } }), { status: 400 })) as typeof fetch });
+    await expect(failing.edit!({ image: Buffer.from("x"), mimeType: "image/png", prompt: "p" })).rejects.toThrow(/Sicherheitsfilter/);
+  });
+});

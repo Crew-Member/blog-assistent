@@ -44,6 +44,7 @@ export const STEP_LABELS: Record<string, string> = {
   titles: "Titelvorschläge",
   image_plan: "Bildvorschlag",
   image_generate: "Bild erzeugen",
+  image_restyle: "Foto im Bildstil umgestalten",
   categories: "Kategorie-Vorschläge",
   style: "Stil ableiten",
   radar_search: "Radar: Suche",

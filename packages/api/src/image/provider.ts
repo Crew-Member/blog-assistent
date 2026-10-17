@@ -6,6 +6,8 @@ export interface GeneratedImage {
 export interface ImageProvider {
   readonly name: string;
   generate(input: { prompt: string }): Promise<GeneratedImage>;
+  /** Gestaltet ein vorhandenes Bild nach Anweisung um (nur bei Anbietern mit Bildbearbeitung, z. B. OpenAI). */
+  edit?(input: { image: Buffer; mimeType: string; prompt: string }): Promise<GeneratedImage>;
 }
 
 /** Wird an jeden Bild-Prompt angehaengt - unabhaengig davon, was das Sprachmodell geschrieben hat. */
@@ -61,6 +63,41 @@ export class OpenAiImageProvider implements ImageProvider {
           n: 1,
           output_format: "png",
         }),
+      });
+    } catch (error) {
+      throw new Error(`Keine Verbindung zum Bildanbieter: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    const text = await res.text();
+    let body: { data?: { b64_json?: string }[]; error?: { message?: string; code?: string } } = {};
+    try {
+      body = JSON.parse(text);
+    } catch {
+      // Antwort ohne JSON: unten behandelt
+    }
+    if (!res.ok) throw new Error(explainImageError(res.status, body.error?.message ?? body.error?.code ?? text));
+    const b64 = body.data?.[0]?.b64_json;
+    if (!b64) throw new Error("Der Bildanbieter hat kein Bild geliefert.");
+    return { data: Buffer.from(b64, "base64"), mimeType: "image/png" };
+  }
+
+  async edit({ image, mimeType, prompt }: { image: Buffer; mimeType: string; prompt: string }): Promise<GeneratedImage> {
+    const options = this.options;
+    const fetchFn = options.fetch ?? fetch;
+    const form = new FormData();
+    form.append("model", options.model);
+    form.append("prompt", `${prompt.trim()}\n\nKeine neue Schrift, keine Buchstaben oder Zahlen, keine Logos, Markennamen, Wasserzeichen oder Signaturen hinzufügen.`);
+    form.append("size", "auto");
+    form.append("quality", options.quality);
+    form.append("n", "1");
+    form.append("output_format", "png");
+    form.append("image", new Blob([new Uint8Array(image)], { type: mimeType }), mimeType === "image/png" ? "foto.png" : mimeType === "image/webp" ? "foto.webp" : "foto.jpg");
+    let res: Response;
+    try {
+      res = await fetchFn(`${options.baseUrl.replace(/\/+$/, "")}/v1/images/edits`, {
+        method: "POST",
+        signal: AbortSignal.timeout(300_000),
+        headers: { authorization: `Bearer ${options.apiKey}` },
+        body: form,
       });
     } catch (error) {
       throw new Error(`Keine Verbindung zum Bildanbieter: ${error instanceof Error ? error.message : String(error)}`);
