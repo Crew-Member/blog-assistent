@@ -19,6 +19,7 @@ import { selfUrls } from "./pipeline.js";
 import { demandPeriods } from "./lib/gsc.js";
 import { analyzeSeoPotential, seoOverview, seoThresholds } from "./lib/seo-potential.js";
 import { parseClosingTargets, resolveClosing, siteClosing, targetFor } from "./lib/closing.js";
+import { escapeHtml } from "./lib/html.js";
 import type { SearchConsole } from "./lib/gsc.js";
 import { keywordInText, seoChecks } from "./lib/seo.js";
 import { slugify } from "./lib/slug.js";
@@ -1094,6 +1095,52 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, sear
       where: { id: request.params.id },
       data: { ...rest, ...(slug !== undefined && { slug: slugify(slug) }), ...(contentHtml !== undefined && { contentHtml: sanitizePostHtml(contentHtml) }) },
     });
+  });
+
+  /**
+   * Verlegt einen noch nicht an WordPress gesendeten Beitrag samt Upload (und den uebrigen Beitraegen daraus) auf eine andere Website.
+   * Disclaimer, Schlussabsatz und Datum werden fuer die neue Website neu gesetzt; WordPress-Verknuepfungen (Kategorien, Mediathek) werden geleert.
+   * Der Text selbst bleibt unveraendert (Stil der neuen Website: per KI-Nachschaerfung anpassen).
+   */
+  app.post<{ Params: { id: string } }>("/api/posts/:id/site", async (request, reply) => {
+    const body = z.object({ siteId: z.string().min(1) }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "Bitte eine Website wählen." });
+    const post = await prisma.post.findUnique({ where: { id: request.params.id }, include: { site: true, topic: { select: { submissionId: true } } } });
+    if (!post) return reply.code(404).send({ error: "Beitrag nicht gefunden" });
+    if (post.siteId === body.data.siteId) return reply.code(409).send({ error: "Der Beitrag gehört bereits zu dieser Website." });
+    const target = await prisma.site.findUnique({ where: { id: body.data.siteId } });
+    if (!target) return reply.code(404).send({ error: "Website nicht gefunden" });
+    const siblings = await prisma.post.findMany({ where: { topic: { submissionId: post.topic.submissionId } }, include: { site: true } });
+    const blocked = siblings.find((x) => x.wpPostId || x.revisionSource || !["DRAFT_READY", "FAILED"].includes(x.status));
+    if (blocked) {
+      const why = blocked.wpPostId ? "wurde schon an WordPress gesendet" : blocked.revisionSource ? "ist eine Überarbeitung (gehört zu einem Beitrag der alten Website)" : "wird gerade erstellt";
+      return reply.code(409).send({ error: `Ein Beitrag aus diesem Upload (${blocked.title ?? "ohne Titel"}) ${why}. Die Website lässt sich nur wechseln, solange kein Beitrag aus dem Upload gesendet, überarbeitet oder in Arbeit ist.` });
+    }
+    const footerRe = /\n?<p><em>Stand:[\s\S]*?<\/em><\/p>\s*$/;
+    const warnings: string[] = [];
+    await prisma.$transaction(async (tx) => {
+      for (const sib of siblings) {
+        let html = sib.contentHtml;
+        if (html) {
+          const stamp = html.match(footerRe)?.[0] ?? "";
+          let body = html.replace(footerRe, "").trimEnd();
+          const oldClosing = siteClosing(sib.site);
+          const newClosing = siteClosing(target);
+          if (oldClosing && body.endsWith(oldClosing)) body = `${body.slice(0, -oldClosing.length).trimEnd()}${newClosing ? `\n${newClosing}` : ""}`;
+          else if (!oldClosing && newClosing) body = `${body}\n${newClosing}`;
+          else if (oldClosing) warnings.push(`„${sib.title ?? "Beitrag"}“: Der Schlussabsatz der alten Website wurde nicht gefunden (vermutlich geändert) und bleibt unverändert.`);
+          const date = stamp.match(/Stand: \d{2}\.\d{2}\.\d{4}\./)?.[0];
+          const note = target.disclaimer.trim();
+          const noteHtml = /<\/?[a-z][^>]*>/i.test(note) ? sanitizePostHtml(`<p>${note}</p>`).replace(/^<p>/, "").replace(/<\/p>\s*$/, "") : escapeHtml(note);
+          html = `${body}\n<p><em>${[date ? escapeHtml(date) : "", noteHtml].filter(Boolean).join(" ")}</em></p>`;
+        }
+        await tx.post.update({ where: { id: sib.id }, data: { siteId: target.id, contentHtml: html, previousContentHtml: null, wpCategoryIds: [] } });
+        await tx.postImage.updateMany({ where: { postId: sib.id }, data: { wpMediaId: null } });
+        await tx.aiUsage.updateMany({ where: { postId: sib.id }, data: { siteId: target.id } });
+      }
+      await tx.submission.update({ where: { id: post.topic.submissionId }, data: { siteId: target.id } });
+    });
+    return { ok: true, moved: siblings.length, site: { id: target.id, name: target.name }, warnings };
   });
 
   app.post<{ Params: { id: string } }>("/api/posts/:id/regenerate", async (request, reply) => {

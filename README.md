@@ -133,6 +133,10 @@ Ebenso ist der WordPress-Import nur gegen simulierte Antworten getestet.
 - Prompts liegen gesammelt in `packages/api/src/ai/prompts.ts`
 - Testdaten: `packages/api/src/fixtures/` enthält zwei echte Beiträge (OLG Naumburg, Deutsche Wohnen) für die Belegprüfung
 
+### Website wechseln
+
+Auf der Beitragsseite lässt sich ein Beitrag samt Upload auf eine andere Website verlegen („Falsche Website gewählt? Website wechseln“), solange kein Beitrag aus dem Upload an WordPress gesendet, überarbeitet oder in Arbeit ist. Disclaimer, Schlussabsatz und Datumszeile werden neu gesetzt, WordPress-Kategorien und Mediathek-Verknüpfung zurückgesetzt; der Text bleibt (Stil per KI-Nachschärfung anpassen).
+
 ## Windows: Doppelklick-Start
 
 `start.cmd` doppelklicken. Die Datei erledigt der Reihe nach: Update holen (`git pull`), `.env` prüfen

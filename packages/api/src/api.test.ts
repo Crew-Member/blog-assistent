@@ -119,6 +119,39 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect(done.sources).toHaveLength(1);
   });
 
+  it("verlegt einen Beitrag samt Upload auf eine andere Website (Disclaimer und Schlussabsatz neu)", async () => {
+    const mk = async (name: string, extra: Record<string, unknown>) => (await app.inject({ method: "POST", url: "/api/sites", headers: { cookie }, payload: { name, ...extra } })).json().id as string;
+    const a = await mk("Alt", { disclaimer: "Disclaimer ALT.", closingHtml: "<p>Schluss ALT.</p>" });
+    const b = await mk("Neu", { disclaimer: "Disclaimer NEU.", closingHtml: "<p>Schluss NEU.</p>" });
+    const up = multipart([{ name: "mail.eml", type: "message/rfc822", content: "From: a@b.de\r\nSubject: X\r\nContent-Type: text/plain\r\n\r\nInhalt." }]);
+    const submissionId = (await app.inject({ method: "POST", url: `/api/sites/${a}/submissions`, payload: up.payload, headers: up.headers })).json().id as string;
+    await worker.tick();
+    const detail = (await app.inject({ method: "GET", url: `/api/submissions/${submissionId}`, headers: { cookie } })).json();
+    const post = (await app.inject({ method: "POST", url: `/api/topics/${detail.topics[0].id}/posts`, headers: { cookie } })).json();
+    // Noch in Arbeit: kein Wechsel
+    expect((await app.inject({ method: "POST", url: `/api/posts/${post.id}/site`, headers: { cookie }, payload: { siteId: b } })).statusCode).toBe(409);
+    await worker.tick();
+    const before = (await app.inject({ method: "GET", url: `/api/posts/${post.id}`, headers: { cookie } })).json();
+    expect(before.contentHtml).toContain("Schluss ALT.");
+    expect(before.contentHtml).toContain("Disclaimer ALT.");
+
+    expect((await app.inject({ method: "POST", url: `/api/posts/${post.id}/site`, headers: { cookie }, payload: { siteId: a } })).statusCode).toBe(409);
+    const moved = await app.inject({ method: "POST", url: `/api/posts/${post.id}/site`, headers: { cookie }, payload: { siteId: b } });
+    expect(moved.statusCode).toBe(200);
+    expect(moved.json()).toMatchObject({ moved: 1, warnings: [] });
+    const after = (await app.inject({ method: "GET", url: `/api/posts/${post.id}`, headers: { cookie } })).json();
+    expect(after.site.id).toBe(b);
+    expect(after.contentHtml).toContain("Schluss NEU.");
+    expect(after.contentHtml).toContain("Disclaimer NEU.");
+    expect(after.contentHtml).not.toContain("ALT.");
+    expect(after.contentHtml).toMatch(/Stand: \d{2}\.\d{2}\.\d{4}\./);
+    expect((await app.inject({ method: "GET", url: `/api/submissions/${submissionId}`, headers: { cookie } })).json().site.id).toBe(b);
+
+    // Nach dem Senden an WordPress ist kein Wechsel mehr moeglich
+    await prisma.post.update({ where: { id: post.id }, data: { wpPostId: 5 } });
+    expect((await app.inject({ method: "POST", url: `/api/posts/${post.id}/site`, headers: { cookie }, payload: { siteId: a } })).statusCode).toBe(409);
+  });
+
   it("uebergibt PDF als Base64 und Mails als Text an die KI", async () => {
     const seen: { kind: string; hasBase64: boolean; text?: string }[] = [];
     await setup(

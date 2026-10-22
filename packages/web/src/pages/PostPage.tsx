@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { POST_LABEL, api, isBusy, type Competition, type PostUsage, type FactCheck, type PostDetail, type PostImage, type TitleSuggestion, type WpPrepare, type WpPublishResult } from "../api";
+import { POST_LABEL, api, isBusy, type Competition, type PostUsage, type FactCheck, type PostDetail, type Site, type PostImage, type TitleSuggestion, type WpPrepare, type WpPublishResult } from "../api";
 import { useLoad } from "../hooks";
 import { usd } from "./CostsPage";
 import { Chip, Icon, PageHeader, POST_TONE, SkeletonPage, Spinner, Stepper, StatusChip, type Tone } from "../ui";
@@ -269,6 +269,54 @@ function RefinePanel({ post, dirty, onDone }: { post: PostDetail; dirty: boolean
       </div>
       {note && <div className="notice"><Icon name="check" size={16} /> {note}</div>}
       {error && <span className="error">{error}</span>}
+      </div>
+    </details>
+  );
+}
+
+function SiteSwitch({ post, dirty, onDone }: { post: PostDetail; dirty: boolean; onDone: () => void }) {
+  const sites = useLoad(() => api.get<Site[]>("/api/sites"));
+  const others = (sites.data ?? []).filter((s) => s.id !== post.site.id);
+  const [target, setTarget] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const [info, setInfo] = useState<string[]>();
+  const chosen = others.find((s) => s.id === (target || others[0]?.id));
+  if (others.length === 0 && !info) return null;
+
+  async function move() {
+    if (!chosen) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      const r = await api.post<{ moved: number; site: { name: string }; warnings: string[] }>(`/api/posts/${post.id}/site`, { siteId: chosen.id });
+      setInfo([`Der Beitrag${r.moved > 1 ? ` und ${r.moved - 1} weitere aus demselben Upload gehören` : " gehört"} jetzt zu „${r.site.name}“.`, ...r.warnings]);
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <details className="card fold-card" style={{ marginBottom: 16 }}>
+      <summary>Falsche Website gewählt? Website wechseln</summary>
+      <div className="stack" style={{ marginTop: 10 }}>
+        <span className="muted">
+          Der Beitrag (samt Upload und den übrigen Beiträgen daraus) wechselt zu einer anderen Website. Disclaimer, Schlussabsatz und Datumszeile werden für die neue Website neu gesetzt; WordPress-Kategorien und Mediathek-Verknüpfung werden zurückgesetzt. Der Text bleibt unverändert und ist noch im Stil der bisherigen Website geschrieben: Passe ihn danach mit „KI-Nachschärfung“ an (z. B. „Passe Ansprache, Ton und Stil an die neue Website an“). Bildstil und Bildvorschlag ggf. im Reiter „Bild“ neu erstellen. Möglich, solange nichts aus dem Upload an WordPress gesendet wurde.
+        </span>
+        <div className="row">
+          <label>Neue Website
+            <select value={chosen?.id ?? ""} disabled={busy} onChange={(e) => setTarget(e.target.value)}>
+              {others.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </label>
+          <button className="secondary" disabled={busy || dirty || !chosen} onClick={() => void move()}>{busy ? <><Spinner /> Wechsle …</> : `Zu „${chosen?.name ?? ""}“ wechseln`}</button>
+        </div>
+        {dirty && <span className="muted">Bitte zuerst die ungespeicherten Änderungen im Reiter „Text“ speichern.</span>}
+        {error && <span className="error">{error}</span>}
+        {info && info.map((line, i) => <span key={i} className={i === 0 ? "ok" : "muted"}>{line}</span>)}
       </div>
     </details>
   );
@@ -633,6 +681,8 @@ export function PostPage({ id }: { id: string }) {
       <PageHeader title={data.title ?? data.topic.title} subtitle={data.site.name}>
         <StatusChip status={data.status} label={POST_LABEL[data.status]} tones={POST_TONE} />
       </PageHeader>
+
+      {!data.wpPostId && !data.revisionOf && (data.status === "DRAFT_READY" || data.status === "FAILED") && <SiteSwitch post={data} dirty={dirty} onDone={() => void reload()} />}
 
       {data.revisionOf && (
         <div className="notice">
