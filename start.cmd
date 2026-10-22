@@ -73,7 +73,7 @@ timeout /t 2 /nobreak >nul
 
 rem ---- 4. Abhaengigkeiten ---------------------------------------------------
 echo [4/6] Installiere Abhaengigkeiten ...
-call npm install
+call npm install --no-audit --no-fund
 if errorlevel 1 goto :npm_failed
 
 rem ---- 5. Datenbank-Schema --------------------------------------------------
