@@ -1,3 +1,4 @@
+import { autoLinkNorms } from "./lib/norms.js";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { explainAiError } from "./ai/errors.js";
 import { demandPeriods, summarizePageDemand, type SearchConsole } from "./lib/gsc.js";
@@ -93,7 +94,7 @@ async function analyzeSubmissionRun(deps: PipelineDeps, submissionId: string): P
 
 export function assemblePostHtml(contentHtml: string, disclaimer: string, closingHtml = "", now = new Date(), originalDate?: string): string {
   const closing = sanitizePostHtml(closingHtml);
-  const main = sanitizePostHtml(contentHtml);
+  const main = sanitizePostHtml(autoLinkNorms(sanitizePostHtml(contentHtml)));
   const body = closing ? `${main}\n${closing}` : main;
   const stand = now.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Berlin" });
   // Bei Ueberarbeitungen: Datum der Erstveroeffentlichung mit nennen ("Stand:" bleibt der Anfang der Zeile).

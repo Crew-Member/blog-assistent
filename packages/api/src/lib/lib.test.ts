@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { detectKind, extractDocument } from "./extract.js";
-import { sanitizePostHtml } from "./html.js";
+import { applyLinkPolicy, sanitizePostHtml } from "./html.js";
+import { autoLinkNorms } from "./norms.js";
 import { slugify } from "./slug.js";
 
 describe("slugify", () => {
@@ -581,5 +582,39 @@ describe("Keyword-Dichte", () => {
     const dense = `<p>${("Haushaltsausnahme der DSGVO ist wichtig und klar. " + "Wort ".repeat(50)).repeat(8)}</p>`;
     expect((await ensureKeywordDensity(never as never, { site, title: "T", focusKeyword: kw, contentHtml: dense })).changed).toBe(false);
     expect((await ensureKeywordDensity(never as never, { site, title: "T", focusKeyword: kw, contentHtml: "<p>kurz</p>" })).changed).toBe(false);
+  });
+});
+
+describe("autoLinkNorms", () => {
+  const link = (n: string, path: string) => `<a href="https://dsgvo-online.net/${path}/">${n}</a>`;
+
+  it("verlinkt DSGVO- und BDSG-Normen auf dsgvo-online.net, je Norm nur die erste Fundstelle", () => {
+    const html = "<p>Nach Art. 6 Abs. 1 lit. f DSGVO ist das zulässig; vgl. nochmals Art. 6 DSGVO. Für Beschäftigte gilt § 26 Abs. 1 BDSG, außerdem Artikel 88 DS-GVO.</p>";
+    const out = autoLinkNorms(html);
+    expect(out).toContain(link("Art. 6 Abs. 1 lit. f DSGVO", "dsgvo/art-6-dsgvo"));
+    expect(out).toContain("nochmals Art. 6 DSGVO.");
+    expect(out).toContain(link("§ 26 Abs. 1 BDSG", "bdsg/26-bdsg"));
+    expect(out).toContain(link("Artikel 88 DS-GVO", "dsgvo/art-88-dsgvo"));
+    expect(out.match(/<a /g)).toHaveLength(3);
+  });
+
+  it("lässt Überschriften, bestehende Links und andere Gesetze unberührt", () => {
+    const html = '<h2>Art. 6 DSGVO im Überblick</h2><p>Siehe <a href="https://example.org/x">Art. 15 DSGVO bei uns</a> und Art. 5 GG sowie § 823 BGB.</p>';
+    expect(autoLinkNorms(html)).toBe(html);
+  });
+
+  it("stellt einen vorhandenen Link, der nur aus der Norm besteht, auf dsgvo-online.net um", () => {
+    const html = '<p>Maßgeblich ist <a href="https://eur-lex.europa.eu/eli/reg/2016/679/oj">Art. 17 DSGVO</a> und <a href="https://www.gesetze-im-internet.de/bdsg_2018/__38.html">§ 38 BDSG</a>.</p>';
+    const out = autoLinkNorms(html);
+    expect(out).toContain('<a href="https://dsgvo-online.net/dsgvo/art-17-dsgvo/">Art. 17 DSGVO</a>');
+    expect(out).toContain('<a href="https://dsgvo-online.net/bdsg/38-bdsg/">§ 38 BDSG</a>');
+    expect(out).not.toContain("eur-lex");
+  });
+
+  it("ist idempotent, und die Linkregeln lassen Normlinks stehen", () => {
+    const once = autoLinkNorms("<p>Art. 6 DSGVO und § 26 BDSG.</p>");
+    expect(autoLinkNorms(once)).toBe(once);
+    const kept = applyLinkPolicy(once, "https://kirmse.eu", []);
+    expect(kept.match(/<a /g)).toHaveLength(2);
   });
 });

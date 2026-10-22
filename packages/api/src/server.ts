@@ -20,6 +20,7 @@ import { demandPeriods } from "./lib/gsc.js";
 import { analyzeSeoPotential, seoOverview, seoThresholds } from "./lib/seo-potential.js";
 import { parseClosingTargets, resolveClosing, siteClosing, targetFor } from "./lib/closing.js";
 import { escapeHtml } from "./lib/html.js";
+import { autoLinkNorms } from "./lib/norms.js";
 import type { SearchConsole } from "./lib/gsc.js";
 import { keywordInText, seoChecks } from "./lib/seo.js";
 import { slugify } from "./lib/slug.js";
@@ -984,7 +985,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, sear
     });
     const html = applyLinkPolicy(unwrapLinksNotIn(sanitizePostHtml(result.contentHtml), existing), post.site.baseUrl, existing, { generalAllowed: existing, blockedHosts: competitorHosts, blockedUrls: selfUrls(post.site.baseUrl, post.revisionSource as { url?: string; wpPostId?: number } | null) });
     if (html.length < current.length * 0.3) return reply.code(422).send({ error: "Die KI hat den Text stark gekürzt – die Änderung wurde nicht übernommen. Bitte die Anweisung genauer fassen." });
-    await prisma.post.update({ where: { id: post.id }, data: { previousContentHtml: post.contentHtml, contentHtml: `${html}${footer}` } });
+    await prisma.post.update({ where: { id: post.id }, data: { previousContentHtml: post.contentHtml, contentHtml: `${sanitizePostHtml(autoLinkNorms(html))}${footer}` } });
     return { note: result.note };
   });
 

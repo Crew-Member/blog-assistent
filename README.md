@@ -133,6 +133,10 @@ Ebenso ist der WordPress-Import nur gegen simulierte Antworten getestet.
 - Prompts liegen gesammelt in `packages/api/src/ai/prompts.ts`
 - Testdaten: `packages/api/src/fixtures/` enthält zwei echte Beiträge (OLG Naumburg, Deutsche Wohnen) für die Belegprüfung
 
+### Normlinks (DSGVO, BDSG)
+
+Beim Erstellen und bei der KI-Nachschärfung verlinkt das Tool Verweise wie „Art. 6 Abs. 1 lit. f DSGVO“ oder „§ 26 BDSG“ automatisch auf dsgvo-online.net (`/dsgvo/art-6-dsgvo/`, `/bdsg/26-bdsg/`). Es wird nur die erste Fundstelle je Norm verlinkt, nicht in Überschriften; vorhandene Links, die nur aus einer solchen Norm bestehen, werden auf dsgvo-online.net umgestellt. Normlinks zählen nicht gegen die Obergrenze externer Links. Bereits gespeicherte Beiträge bleiben unverändert.
+
 ### Website wechseln
 
 Auf der Beitragsseite lässt sich ein Beitrag samt Upload auf eine andere Website verlegen („Falsche Website gewählt? Website wechseln“), solange kein Beitrag aus dem Upload an WordPress gesendet, überarbeitet oder in Arbeit ist. Disclaimer, Schlussabsatz und Datumszeile werden neu gesetzt, WordPress-Kategorien und Mediathek-Verknüpfung zurückgesetzt; der Text bleibt (Stil per KI-Nachschärfung anpassen).

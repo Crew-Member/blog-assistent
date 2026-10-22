@@ -22,6 +22,7 @@ export function escapeHtml(text: string): string {
 }
 
 import { isTrustedSource } from "./links.js";
+import { isNormLink } from "./norms.js";
 
 const normUrl = (u: string) => u.trim().replace(/#.*$/, "").replace(/\/+$/, "").toLowerCase();
 
@@ -133,6 +134,12 @@ export function applyLinkPolicy(html: string, siteOrigin: string, internalAllowe
     const url = parse(href);
     if (!url) return inner;
     const key = normUrl(url.toString());
+    // Normlinks (dsgvo-online.net) setzt das Tool selbst; sie zaehlen nicht gegen die Obergrenzen.
+    if (isNormLink(href)) {
+      if (seen.has(key)) return inner;
+      seen.add(key);
+      return whole;
+    }
     if (seen.has(key) || blockedUrls.has(urlKey(url.toString()))) return inner;
     if (isInternal(url)) {
       if (!known.has(urlKey(url.toString())) || internal >= MAX_INTERNAL_LINKS) return inner;
