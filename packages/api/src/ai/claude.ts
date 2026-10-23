@@ -523,10 +523,13 @@ export class ClaudeAiService implements AiService {
 
   async draft(input: DraftInput): Promise<DraftResult> {
     const sourceList = input.research.sources.map((s) => `- ${s.title}: ${s.url}`).join("\n") || "(keine)";
+    const docs = input.documents ?? [];
     const content: Anthropic.ContentBlockParam[] = [
+      ...docs.map(documentBlock),
       {
         type: "text",
         text: [
+          docs.length ? `Die Originalunterlagen stehen oben (${docs.map((d) => d.filename).join("; ")}). Sie sind die massgebliche Grundlage des Beitrags.` : "",
           siteBlock(input.site),
           styleSamplesBlock(input.styleSamples),
           topicBlock(input.topic),

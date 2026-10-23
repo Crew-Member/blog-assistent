@@ -133,6 +133,10 @@ Ebenso ist der WordPress-Import nur gegen simulierte Antworten getestet.
 - Prompts liegen gesammelt in `packages/api/src/ai/prompts.ts`
 - Testdaten: `packages/api/src/fixtures/` enthält zwei echte Beiträge (OLG Naumburg, Deutsche Wohnen) für die Belegprüfung
 
+### Originalquellen (Urteil per Link)
+
+Links im Hinweisfeld des Uploads (z. B. das Urteil auf der Seite des Gerichts) ruft das Tool bei der Analyse selbst ab (jede öffentliche Adresse außer Bezahlportalen, HTML bis 150.000 Zeichen, PDF bis 12 MB) und speichert sie als Unterlage („Link: …“). Ein Upload ist auch nur mit Link möglich. Der **Entwurf** erhält jetzt die Originalunterlagen (Urteil, Mail, PDF) und orientiert sich hauptsächlich an deren Wortlaut; die Recherche ergänzt nur. Ist ein Link nicht abrufbar, steht das als Hinweis auf der Upload-Seite (bei reinem Link-Upload als Fehler): dann das Original als PDF hochladen. Meta-Sätze wie „Das Original-Urteil stand nicht zur Verfügung“ gehören nicht in den Beitragstext. Mehrkosten: Der Entwurf liest die Unterlagen mit (je nach Länge einige Cent).
+
 ### Normlinks (DSGVO, BDSG)
 
 Beim Erstellen und bei der KI-Nachschärfung verlinkt das Tool Verweise wie „Art. 6 Abs. 1 lit. f DSGVO“ oder „§ 26 BDSG“ automatisch auf dsgvo-online.net (`/dsgvo/art-6-dsgvo/`, `/bdsg/26-bdsg/`). Es wird nur die erste Fundstelle je Norm verlinkt, nicht in Überschriften; vorhandene Links, die nur aus einer solchen Norm bestehen, werden auf dsgvo-online.net umgestellt. Normlinks zählen nicht gegen die Obergrenze externer Links. Bereits gespeicherte Beiträge bleiben unverändert.

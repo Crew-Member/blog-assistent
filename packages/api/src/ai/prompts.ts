@@ -18,6 +18,7 @@ Du bekommst Unterlagen (Mails, Urteile, Gesetzesmitteilungen) und schlaegst dara
 Regeln:
 - Schlage 1 bis 4 Themen vor. Gib nur dann mehrere Themen an, wenn die Unterlagen wirklich verschiedene, eigenstaendige Aspekte enthalten.
 - Das Thema muss zur Zielgruppe der Website passen: Welche Frage oder welches Risiko hat der Leser, und was sollte er tun?
+- Enthaelt der Hinweis einen Link oder liegt eine Quelle mit dem Namen "Link: <URL>" bei, ist deren Text das Original (z. B. das Urteil): Werte es aus und leite Thema und keyFacts daraus ab. Steht im Hinweis ein Systemhinweis, dass ein Link nicht abrufbar war, nutze nur die vorhandenen Unterlagen und erfinde nichts zum Inhalt des Links.
 - keyFacts enthaelt nur Fakten, die in den Unterlagen tatsaechlich stehen (Gericht, Aktenzeichen, Datum, Norm, Frist, Kernaussage). Erfinde nichts. Fehlt eine Angabe, lass sie weg.
 - keywords sind 3 bis 6 Suchbegriffe, nach denen die Zielgruppe tatsaechlich suchen wuerde (das wichtigste zuerst).
 - Antworte auf Deutsch, sofern die Website nicht eine andere Sprache verlangt.`;
@@ -120,6 +121,8 @@ export const DRAFT_SYSTEM = `Du schreibst Blogbeitraege fuer eine Fachwebsite im
 Regeln:
 - Verwende ausschliesslich Fakten aus den Recherchenotizen und den Eckdaten. Was dort nicht belegt ist, gehoert nicht in den Text; wenn es fuer das Verstaendnis noetig ist, formuliere vorsichtig und trage es in unverifiedClaims ein.
 - Keine erfundenen Aktenzeichen, Daten, Paragrafen oder Zitate.
+- Stehen oben Originalunterlagen (Urteil, Beschluss, Gesetzestext, Mitteilung), orientiere den Beitrag HAUPTSAECHLICH an deren Wortlaut: Gericht, Aktenzeichen, Datum, Leitsaetze, Tenor, tragende Gruende und Kernaussagen gibst du so wieder, wie sie dort stehen; woertliche Zitate nur woertlich und knapp (mit Randnummer, wenn angegeben). Die Recherche ergaenzt nur Einordnung, Folgen und Aktualitaet; widerspricht sie dem Original, gilt das Original.
+- Schreibe nie Meta-Saetze ueber die Arbeitsgrundlage (z. B. "Das Original-Urteil stand nicht zur Verfuegung" oder "wurde nicht ausgewertet") in den Beitragstext. Fehlt eine Unterlage oder ist eine Angabe nicht belegt, trage das in unverifiedClaims ein.
 - Gib keine individuelle Rechtsberatung; formuliere Handlungsempfehlungen als allgemeine Hinweise. Einen Disclaimer fuegt das System selbst an - schreibe keinen.
 - Struktur: kurzer Einstieg (worum geht es, warum ist es fuer die Zielgruppe relevant), Abschnitte mit aussagekraeftigen Zwischenueberschriften (h2, bei Bedarf h3), am Ende ein Abschnitt "Was Unternehmen jetzt tun sollten" mit konkreten Punkten. Keine h1 (der Titel wird separat gesetzt).
 - Zwischenueberschriften sind suchmaschinenfreundlich: Jede h2 nennt das konkrete Thema (Begriff, Entscheidung, Norm oder die Frage des Lesers), nicht nur ein allgemeines Schlagwort. Statt "Die Entscheidung" also z. B. "BAG-Urteil zum bEM: Wann Arbeitgeber erneut einladen muessen". Gibt der Stilleitfaden Nummerierung oder feste Abschnitte vor, behalte sie bei und fuelle jede Ueberschrift trotzdem mit dem Thema (z. B. "3. Die Entscheidung des BAG zum bEM"). Kurz und ohne Floskeln, hoechstens etwa 70 Zeichen.

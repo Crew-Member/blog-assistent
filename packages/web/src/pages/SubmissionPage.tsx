@@ -31,6 +31,9 @@ export function SubmissionPage({ id }: { id: string }) {
         </div>
       </div>
 
+      {data.status === "ANALYZED" && data.error && (
+        <div className="notice" style={{ marginTop: 16 }}><Icon name="alert" size={16} /> {data.error}</div>
+      )}
       {data.status === "FAILED" && (
         <div className="card stack" style={{ marginTop: 16 }}>
           <p className="error"><Icon name="alert" /> Analyse fehlgeschlagen: {data.error}</p>

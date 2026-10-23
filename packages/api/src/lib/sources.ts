@@ -40,10 +40,30 @@ function decode(buffer: ArrayBuffer, contentType: string): string {
   }
 }
 
-async function fetchOne(start: string, fetcher: Fetcher): Promise<PrimarySource> {
+interface FetchOptions {
+  /** Vom Nutzer genannte Links: jede oeffentliche Adresse (ausser Bezahlportale), groessere Grenzen. */
+  anyHost?: boolean;
+}
+
+const LINKED_MAX_BYTES = 12 * 1024 * 1024;
+const LINKED_MAX_TEXT_CHARS = 150_000;
+
+const isPaywalled = (url: string) => {
+  try {
+    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+    return PAYWALLED.some((p) => host === p || host.endsWith(`.${p}`));
+  } catch {
+    return true;
+  }
+};
+
+async function fetchOne(start: string, fetcher: Fetcher, options: FetchOptions = {}): Promise<PrimarySource> {
   let url = start;
+  const maxBytes = options.anyHost ? LINKED_MAX_BYTES : MAX_BYTES;
+  const maxPdf = options.anyHost ? LINKED_MAX_BYTES : MAX_PDF_BYTES;
+  const maxText = options.anyHost ? LINKED_MAX_TEXT_CHARS : MAX_TEXT_CHARS;
   for (let hop = 0; hop <= MAX_HOPS; hop++) {
-    if (!isFreeSource(url)) return { url: start, ok: false, reason: "keine frei zugängliche Primärquelle" };
+    if (options.anyHost ? isPaywalled(url) : !isFreeSource(url)) return { url: start, ok: false, reason: options.anyHost ? "Bezahlportal (ohne Anmeldung nicht abrufbar)" : "keine frei zugängliche Primärquelle" };
     try {
       await assertPublicHttpUrl(url);
     } catch (error) {
@@ -66,15 +86,15 @@ async function fetchOne(start: string, fetcher: Fetcher): Promise<PrimarySource>
     if (!res.ok) return { url: start, ok: false, reason: `Status ${res.status}` };
     const type = (res.headers.get("content-type") ?? "").toLowerCase();
     const buffer = await res.arrayBuffer();
-    if (buffer.byteLength > MAX_BYTES) return { url: start, ok: false, reason: "zu groß" };
+    if (buffer.byteLength > maxBytes) return { url: start, ok: false, reason: "zu groß" };
     if (type.includes("application/pdf")) {
-      if (buffer.byteLength > MAX_PDF_BYTES) return { url: start, ok: false, reason: "PDF zu groß" };
-      return { url: start, ok: true, document: { filename: `Quelle: ${start}`, kind: "pdf", mimeType: "application/pdf", base64: Buffer.from(buffer).toString("base64") } };
+      if (buffer.byteLength > maxPdf) return { url: start, ok: false, reason: "PDF zu groß" };
+      return { url: start, ok: true, document: { filename: `${options.anyHost ? "Link" : "Quelle"}: ${start}`, kind: "pdf", mimeType: "application/pdf", base64: Buffer.from(buffer).toString("base64") } };
     }
     if (type.includes("text/html") || type.includes("text/plain") || type === "") {
-      const text = stripHtml(decode(buffer, type)).slice(0, MAX_TEXT_CHARS);
+      const text = stripHtml(decode(buffer, type)).slice(0, maxText);
       if (text.length < 200) return { url: start, ok: false, reason: "kein auswertbarer Text" };
-      return { url: start, ok: true, document: { filename: `Quelle: ${start}`, kind: "text", mimeType: "text/plain", text } };
+      return { url: start, ok: true, document: { filename: `${options.anyHost ? "Link" : "Quelle"}: ${start}`, kind: "text", mimeType: "text/plain", text } };
     }
     return { url: start, ok: false, reason: `Typ ${type} nicht auswertbar` };
   }
@@ -90,4 +110,18 @@ export async function fetchPrimarySources(urls: string[], fetcher: Fetcher = fet
   const unique = [...new Set(urls.map((u) => u.trim().replace(/#.*$/, "")).filter(Boolean))];
   const candidates = unique.filter(isFreeSource).slice(0, max);
   return Promise.all(candidates.map((u) => fetchOne(u, fetcher)));
+}
+
+/** Adressen (http/https) aus einem Freitext, in der Reihenfolge des Auftretens, ohne Satzzeichen am Ende. */
+export function urlsIn(text: string, max = 3): string[] {
+  const found = [...text.matchAll(/https?:\/\/[^\s<>"')\]]+/gi)].map((m) => (m[1] ?? m[0]).replace(/[.,;:!?)]+$/, ""));
+  return [...new Set(found)].slice(0, max);
+}
+
+/**
+ * Ruft vom Nutzer genannte Links (z. B. zum Original-Urteil) ab - von jeder oeffentlichen Adresse, nur nicht von Bezahlportalen.
+ * Nie fatal: Fehler werden je Link gemeldet.
+ */
+export async function fetchLinkedSources(urls: string[], fetcher: Fetcher = fetch as unknown as Fetcher): Promise<PrimarySource[]> {
+  return Promise.all(urls.map((u) => fetchOne(u.trim().replace(/#.*$/, ""), fetcher, { anyHost: true })));
 }

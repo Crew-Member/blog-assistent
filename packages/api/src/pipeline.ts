@@ -7,7 +7,7 @@ import type { RevisionInput, AiDocument, AiService, CompetitionGuidance, DraftRe
 import { escapeHtml, sanitizePostHtml, applyLinkPolicy, urlKey } from "./lib/html.js";
 import { fetchSitePosts } from "./lib/wordpress.js";
 import { parsePreferredLinks } from "./lib/links.js";
-import { fetchPrimarySources } from "./lib/sources.js";
+import { fetchLinkedSources, fetchPrimarySources, urlsIn } from "./lib/sources.js";
 import { autoLinkRulings } from "./lib/rulings.js";
 import { recordUsage, withUsageContext } from "./lib/usage.js";
 import { clampWords, fetchCompetitorPages, median, pickCompetitorUrls } from "./lib/competition.js";
@@ -65,13 +65,54 @@ export function analyzeSubmission(deps: PipelineDeps, submissionId: string): Pro
   return withUsageContext({ submissionId }, () => analyzeSubmissionRun(deps, submissionId));
 }
 
+/**
+ * Ruft Links aus dem Hinweis der Auftraggebers ab (z. B. das Original-Urteil) und legt sie als Unterlagen an.
+ * Gibt je nicht abrufbarem Link eine Meldung zurueck; schon abgerufene Links werden nicht erneut geladen.
+ */
+async function fetchNoteLinks(deps: PipelineDeps, submissionId: string, note: string): Promise<string[]> {
+  const { prisma, storage } = deps;
+  const urls = urlsIn(note);
+  if (urls.length === 0) return [];
+  const existing = new Set((await prisma.document.findMany({ where: { submissionId }, select: { filename: true } })).map((d) => d.filename));
+  const todo = urls.filter((u) => !existing.has(`Link: ${u}`.slice(0, 255)));
+  const failures: string[] = [];
+  const results = await fetchLinkedSources(todo, deps.fetcher as never);
+  for (const r of results) {
+    const doc = r.document;
+    if (!r.ok || !doc) {
+      failures.push(`${r.url}: ${r.reason ?? "nicht abrufbar"}`);
+      continue;
+    }
+    const data = doc.kind === "pdf" ? Buffer.from(doc.base64 ?? "", "base64") : Buffer.from(doc.text ?? "", "utf8");
+    await prisma.document.create({
+      data: {
+        submissionId,
+        filename: doc.filename.slice(0, 255),
+        mimeType: doc.kind === "pdf" ? "application/pdf" : "text/plain",
+        sizeBytes: data.length,
+        storageKey: await storage.save(data),
+        extractedText: doc.kind === "text" ? (doc.text ?? "") : null,
+      },
+    });
+  }
+  return failures;
+}
+
 async function analyzeSubmissionRun(deps: PipelineDeps, submissionId: string): Promise<void> {
   const { prisma, ai } = deps;
   try {
     const submission = await prisma.submission.findUniqueOrThrow({ where: { id: submissionId }, include: { site: true } });
+    const failures = await fetchNoteLinks(deps, submissionId, submission.note);
     const documents = await loadAiDocuments(deps, submissionId);
+    if (documents.length === 0) {
+      throw new Error(failures.length ? `Der Link konnte nicht abgerufen werden (${failures.join("; ")}). Bitte das Dokument (z. B. das Urteil als PDF) hochladen.` : "Es liegen keine Unterlagen vor.");
+    }
+    const warning = failures.length
+      ? `Nicht abrufbar: ${failures.join("; ")}. Der Beitrag stützt sich dann nur auf die übrigen Unterlagen. Lade das Original (z. B. das Urteil als PDF) hoch, damit sich der Beitrag am Wortlaut orientiert.`
+      : null;
+    const note = warning ? `${submission.note}\n\n[Systemhinweis: ${warning}]` : submission.note;
 
-    const topics = await ai.analyze({ site: profileOf(submission.site), note: submission.note, documents });
+    const topics = await ai.analyze({ site: profileOf(submission.site), note, documents });
 
     await prisma.$transaction([
       prisma.topic.deleteMany({ where: { submissionId } }),
@@ -85,7 +126,7 @@ async function analyzeSubmissionRun(deps: PipelineDeps, submissionId: string): P
           keywords: t.keywords,
         })),
       }),
-      prisma.submission.update({ where: { id: submissionId }, data: { status: "ANALYZED", error: null } }),
+      prisma.submission.update({ where: { id: submissionId }, data: { status: "ANALYZED", error: warning } }),
     ]);
   } catch (error) {
     await prisma.submission.update({ where: { id: submissionId }, data: { status: "FAILED", error: errorMessage(error) } });
@@ -338,7 +379,8 @@ async function generatePostRun(deps: PipelineDeps, postId: string): Promise<void
         await prisma.post.update({ where: { id: postId }, data: { competition: result.stored as unknown as Prisma.InputJsonValue } });
       }
     }
-    const draft = await ai.draft({ site, topic, research, styleSamples, relatedPosts, ...(competition ? { competition } : {}), ...(revision ? { revision } : {}), structure: { summary: post.site.structureSummary, faq: post.site.structureFaq } });
+    const uploaded = await loadAiDocuments(deps, post.topic.submissionId);
+    const draft = await ai.draft({ site, topic, research, styleSamples, documents: uploaded, relatedPosts, ...(competition ? { competition } : {}), ...(revision ? { revision } : {}), structure: { summary: post.site.structureSummary, faq: post.site.structureFaq } });
     // Bekannte interne Ziele: Liste der Website plus Links, die schon im Originalbeitrag standen.
     const originalLinks = [...(revision?.html ?? "").matchAll(/href="([^"]+)"/g)].map((m) => (m[1] ?? "").replace(/&amp;/g, "&"));
     const internalLinks = [...relatedPosts.map((p) => ({ title: p.title, url: p.url })), ...originalLinks.map((url) => ({ title: "", url }))];
@@ -373,7 +415,6 @@ async function generatePostRun(deps: PipelineDeps, postId: string): Promise<void
       data: { ...draftFields, status: "FACTCHECKING", contentHtml: assemblePostHtml(draft.contentHtml, post.site.disclaimer, siteClosing(post.site), new Date(), rev?.publishedAt), unverifiedClaims: draft.unverifiedClaims },
     });
 
-    const uploaded = await loadAiDocuments(deps, post.topic.submissionId);
     // Primaerquellen direkt abrufen: Quellen aus der Recherche und im Entwurf verlinkte amtliche Seiten.
     const hrefs = [...draft.contentHtml.matchAll(/href="([^"]+)"/g)].map((m) => (m[1] ?? "").replace(/&amp;/g, "&"));
     const primary = await fetchPrimarySources([...research.sources.map((s) => s.url), ...draft.sources.map((s) => s.url), ...hrefs], deps.fetcher as never).catch(() => []);

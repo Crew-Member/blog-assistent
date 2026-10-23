@@ -84,6 +84,8 @@ export interface DraftInput {
   revision?: RevisionInput;
   /** Strukturelemente je Website (Kurzfassung am Anfang, Fragenabschnitt am Ende). */
   structure?: { summary: boolean; faq: boolean };
+  /** Originalunterlagen des Uploads (Urteile, Mails, abgerufene Links): der Beitrag orientiert sich hauptsaechlich an deren Wortlaut. */
+  documents?: AiDocument[];
 }
 
 export const refineResultSchema = z.object({ contentHtml: z.string().min(1), note: z.string() });

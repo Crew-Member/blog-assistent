@@ -152,6 +152,57 @@ describe.skipIf(!hasDb)("API + Pipeline (mit Postgres)", () => {
     expect((await app.inject({ method: "POST", url: `/api/posts/${post.id}/site`, headers: { cookie }, payload: { siteId: a } })).statusCode).toBe(409);
   });
 
+  it("ruft Links aus dem Hinweis ab (Original-Urteil), nutzt den Text fuer Analyse und Entwurf und meldet Nicht-Abrufbares", async () => {
+    const ruling = `<html><body><h1>BAG, Urteil vom 01.01.2026 - 2 AZR 1/26</h1><p>${"Der Arbeitgeber darf Beschaeftigtendaten nur verarbeiten, wenn dies erforderlich ist. ".repeat(6)}</p></body></html>`;
+    wpFetcher = (async (url: string | URL | Request) => (String(url).includes("/urteil") ? new Response(ruling, { headers: { "content-type": "text/html; charset=utf-8" } }) : new Response("nicht da", { status: 404 }))) as typeof fetch;
+    const seen: { analyze: string[]; draft: string[] } = { analyze: [], draft: [] };
+    const base = new FakeAiService();
+    await setup(fakeWith({
+      analyze: async (input) => { seen.analyze.push(...input.documents.map((d) => `${d.filename}|${d.text ?? ""}`), input.note); return base.analyze(input); },
+      draft: async (input) => { seen.draft.push(...(input.documents ?? []).map((d) => d.filename)); return base.draft(input); },
+    }));
+    const siteId = await createSite();
+    const post = async (note: string, withFile: boolean) => {
+      const up = multipart(withFile ? [{ name: "mail.eml", type: "message/rfc822", content: "From: a@b.de\r\nSubject: X\r\nContent-Type: text/plain\r\n\r\nInhalt." }] : [], note);
+      const created = await app.inject({ method: "POST", url: `/api/sites/${siteId}/submissions`, payload: up.payload, headers: up.headers });
+      return created;
+    };
+
+    // ohne Datei und ohne Link: abgelehnt
+    expect((await post("nur Text", false)).statusCode).toBe(400);
+
+    // nur ein Link: wird abgerufen, als Unterlage gespeichert und ausgewertet
+    const created = await post("Bitte auswerten: https://93.184.216.34/urteil.html.", false);
+    expect(created.statusCode).toBe(201);
+    const submissionId = created.json().id as string;
+    await worker.tick();
+    const detail = (await app.inject({ method: "GET", url: `/api/submissions/${submissionId}`, headers: { cookie } })).json();
+    expect(detail.status).toBe("ANALYZED");
+    expect(detail.error).toBeNull();
+    expect(detail.documents.map((d: { filename: string }) => d.filename)).toEqual(["Link: https://93.184.216.34/urteil.html"]);
+    expect(seen.analyze.join("\n")).toContain("2 AZR 1/26");
+    const topicId = detail.topics[0].id as string;
+    await app.inject({ method: "POST", url: `/api/topics/${topicId}/posts`, headers: { cookie } });
+    await worker.tick();
+    expect(seen.draft).toEqual(["Link: https://93.184.216.34/urteil.html"]);
+
+    // Link nicht abrufbar, aber Datei vorhanden: Analyse laeuft mit Warnung
+    const second = await post("Siehe https://93.184.216.34/weg.html", true);
+    await worker.tick();
+    const warned = (await app.inject({ method: "GET", url: `/api/submissions/${second.json().id}`, headers: { cookie } })).json();
+    expect(warned.status).toBe("ANALYZED");
+    expect(warned.error).toContain("Nicht abrufbar");
+    expect(warned.error).toContain("Status 404");
+    expect(seen.analyze.join("\n")).toContain("Systemhinweis");
+
+    // nur ein nicht abrufbarer Link: Fehler mit Hinweis auf den Upload
+    const third = await post("https://93.184.216.34/weg.html", false);
+    await worker.tick();
+    const failed = (await app.inject({ method: "GET", url: `/api/submissions/${third.json().id}`, headers: { cookie } })).json();
+    expect(failed.status).toBe("FAILED");
+    expect(failed.error).toContain("Urteil als PDF) hochladen");
+  });
+
   it("uebergibt PDF als Base64 und Mails als Text an die KI", async () => {
     const seen: { kind: string; hasBase64: boolean; text?: string }[] = [];
     await setup(

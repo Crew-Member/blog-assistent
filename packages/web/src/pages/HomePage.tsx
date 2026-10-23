@@ -95,11 +95,12 @@ function Upload({ sites, onDone }: { sites: Site[]; onDone: () => void }) {
         </ul>
       )}
       <label>
-        Hinweis zur Aufgabe (optional)
-        <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="z. B. Schwerpunkt auf Folgen für Arbeitgeber legen" />
+        Hinweis zur Aufgabe oder Link zum Original (optional)
+        <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="z. B. Schwerpunkt auf Folgen für Arbeitgeber legen – oder ein Link zum Original-Urteil (https://…)" />
       </label>
+      <span className="muted">Links im Hinweis (z. B. zum Urteil auf der Seite des Gerichts) ruft das Tool selbst ab und wertet den Text aus; auch ohne Datei möglich. Ist ein Link nicht abrufbar, steht das nach der Analyse hier – dann das Original als PDF hochladen.</span>
       {error && <p className="error">{error}</p>}
-      <button className="lg" disabled={busy || files.length === 0 || !siteId} onClick={submit}>{busy ? "Lade hoch …" : "Hochladen & Themen vorschlagen lassen"}</button>
+      <button className="lg" disabled={busy || (files.length === 0 && !/https?:\/\//i.test(note)) || !siteId} onClick={submit}>{busy ? "Lade hoch …" : "Hochladen & Themen vorschlagen lassen"}</button>
     </div>
   );
 }

@@ -20,6 +20,7 @@ import { demandPeriods } from "./lib/gsc.js";
 import { analyzeSeoPotential, seoOverview, seoThresholds } from "./lib/seo-potential.js";
 import { parseClosingTargets, resolveClosing, siteClosing, targetFor } from "./lib/closing.js";
 import { escapeHtml } from "./lib/html.js";
+import { urlsIn } from "./lib/sources.js";
 import { autoLinkNorms } from "./lib/norms.js";
 import type { SearchConsole } from "./lib/gsc.js";
 import { keywordInText, seoChecks } from "./lib/seo.js";
@@ -508,7 +509,7 @@ export function buildServer({ config, prisma, storage, ai, images, fetcher, sear
       if (code === "FST_REQ_FILE_TOO_LARGE") return reply.code(413).send({ error: "Datei ist groesser als 25 MB" });
       throw error;
     }
-    if (files.length === 0) return reply.code(400).send({ error: "Keine Datei hochgeladen" });
+    if (files.length === 0 && urlsIn(note, 1).length === 0) return reply.code(400).send({ error: "Keine Datei hochgeladen. Alternativ einen Link (https://…) im Hinweisfeld angeben." });
 
     const unsupported = files.filter((f) => detectKind(f.filename, f.mimeType).kind === "unsupported").map((f) => f.filename);
     if (unsupported.length) {
