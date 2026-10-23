@@ -28,7 +28,7 @@ const schema = z.object({
   // Bildgenerierung (optional). "none": nur Prompts, Stockfoto-Links und Upload.
   IMAGE_PROVIDER: z.enum(["none", "openai", "supermachine", "fake"]).default("none"),
   IMAGE_API_KEY: cleaned,
-  // Ohne Angabe gilt der Standard des jeweiligen Anbieters (openai: gpt-image-1, supermachine: Supermachine NextGen)
+  // Ohne Angabe gilt der Standard des jeweiligen Anbieters (openai: gpt-image-2 mit Ausweichmodellen, supermachine: Supermachine NextGen; gpt-image-1 wurde am 23.10.2026 von OpenAI abgeschaltet)
   IMAGE_MODEL: cleaned,
   IMAGE_BASE_URL: cleaned,
   // Sprache der Bild-Prompts. Deutsch ist Standard; manche Bildmodelle (z. B. aeltere Stable-Diffusion-Modelle) liefern mit Englisch bessere Ergebnisse.

@@ -33,9 +33,24 @@ export function explainImageError(status: number | undefined, raw: string): stri
   return hint ? `${hint} (Details: ${details})` : details;
 }
 
+/**
+ * gpt-image-1 (und -mini) wurden von OpenAI am 23.10.2026 abgeschaltet. Ohne eigene Angabe (IMAGE_MODEL) wird die Reihe der
+ * Nachfolger der Reihe nach versucht; der erste, den OpenAI fuer den Schluessel kennt, wird fuer die Laufzeit gemerkt.
+ */
+export const OPENAI_DEFAULT_MODELS = ["gpt-image-2", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst"];
+export const OPENAI_RETIRED_MODELS = ["gpt-image-1", "gpt-image-1-mini", "gpt-image-1.5", "chatgpt-image-latest"];
+
+/** Fehler der API, die dafuer sprechen, dass das Modell (nicht der Prompt oder Schluessel) das Problem ist. */
+export function isModelProblem(status: number | undefined, raw: string): boolean {
+  if (/must be verified|organization.*verif|billing|insufficient_quota|content_policy|safety|moderation/i.test(raw)) return false;
+  return status === 404 || /(model|modell).*(not found|does not exist|deprecat|shut ?down|no longer|unavailable|not available|retired|unknown|invalid)|(invalid|unknown|unsupported|deprecated|retired) model/i.test(raw);
+}
+
 export interface OpenAiImageOptions {
   apiKey: string;
   model: string;
+  /** Weitere Modelle, die nacheinander versucht werden, wenn das Modell nicht (mehr) verfuegbar ist. */
+  fallbackModels?: string[];
   quality: "low" | "medium" | "high";
   baseUrl: string;
   fetch?: typeof fetch;
@@ -44,75 +59,75 @@ export interface OpenAiImageOptions {
 /** Bildgenerierung ueber die OpenAI-Images-API (Antwort als Base64-PNG). */
 export class OpenAiImageProvider implements ImageProvider {
   readonly name = "openai";
+  private working?: string;
 
   constructor(private readonly options: OpenAiImageOptions) {}
 
-  async generate({ prompt }: { prompt: string }): Promise<GeneratedImage> {
-    const fetchFn = this.options.fetch ?? fetch;
-    let res: Response;
-    try {
-      res = await fetchFn(`${this.options.baseUrl.replace(/\/+$/, "")}/v1/images/generations`, {
-        method: "POST",
-        signal: AbortSignal.timeout(240_000),
-        headers: { "content-type": "application/json", authorization: `Bearer ${this.options.apiKey}` },
-        body: JSON.stringify({
-          model: this.options.model,
-          prompt: withGuardrails(prompt),
-          size: "1536x1024",
-          quality: this.options.quality,
-          n: 1,
-          output_format: "png",
-        }),
-      });
-    } catch (error) {
-      throw new Error(`Keine Verbindung zum Bildanbieter: ${error instanceof Error ? error.message : String(error)}`);
+  /** Modelle in der Reihenfolge der Versuche (das zuletzt funktionierende zuerst). */
+  private candidates(): string[] {
+    const all = [this.options.model, ...(this.options.fallbackModels ?? [])];
+    return this.working ? [this.working, ...all.filter((m) => m !== this.working)] : all;
+  }
+
+  /** Fuehrt die Anfrage mit dem ersten verfuegbaren Modell aus. Nur bei Modellproblemen wird das naechste versucht. */
+  private async withModel(run: (model: string) => Promise<{ status: number; body: { data?: { b64_json?: string }[]; error?: { message?: string; code?: string } }; text: string }>): Promise<GeneratedImage> {
+    let lastError = "";
+    for (const model of this.candidates()) {
+      let res;
+      try {
+        res = await run(model);
+      } catch (error) {
+        throw new Error(`Keine Verbindung zum Bildanbieter: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      const raw = res.body.error?.message ?? res.body.error?.code ?? res.text;
+      if (res.status >= 200 && res.status < 300) {
+        const b64 = res.body.data?.[0]?.b64_json;
+        if (!b64) throw new Error("Der Bildanbieter hat kein Bild geliefert.");
+        this.working = model;
+        return { data: Buffer.from(b64, "base64"), mimeType: "image/png" };
+      }
+      lastError = `${explainImageError(res.status, raw)}${model ? ` [Modell: ${model}]` : ""}`;
+      if (!isModelProblem(res.status, raw)) throw new Error(lastError);
     }
+    throw new Error(`${lastError} Das Bildmodell ist nicht (mehr) verfügbar. In der .env bei IMAGE_MODEL ein aktuelles OpenAI-Bildmodell eintragen (z. B. gpt-image-2).`);
+  }
+
+  private async post(path: string, init: { body: BodyInit; headers: Record<string, string>; timeout: number }) {
+    const fetchFn = this.options.fetch ?? fetch;
+    const res = await fetchFn(`${this.options.baseUrl.replace(/\/+$/, "")}${path}`, { method: "POST", signal: AbortSignal.timeout(init.timeout), headers: { authorization: `Bearer ${this.options.apiKey}`, ...init.headers }, body: init.body });
     const text = await res.text();
     let body: { data?: { b64_json?: string }[]; error?: { message?: string; code?: string } } = {};
     try {
       body = JSON.parse(text);
     } catch {
-      // Antwort ohne JSON: unten behandelt
+      // Antwort ohne JSON: wird ueber text behandelt
     }
-    if (!res.ok) throw new Error(explainImageError(res.status, body.error?.message ?? body.error?.code ?? text));
-    const b64 = body.data?.[0]?.b64_json;
-    if (!b64) throw new Error("Der Bildanbieter hat kein Bild geliefert.");
-    return { data: Buffer.from(b64, "base64"), mimeType: "image/png" };
+    return { status: res.status, body, text };
+  }
+
+  async generate({ prompt }: { prompt: string }): Promise<GeneratedImage> {
+    return this.withModel((model) =>
+      this.post("/v1/images/generations", {
+        timeout: 240_000,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model, prompt: withGuardrails(prompt), size: "1536x1024", quality: this.options.quality, n: 1, output_format: "png" }),
+      }),
+    );
   }
 
   async edit({ image, mimeType, prompt }: { image: Buffer; mimeType: string; prompt: string }): Promise<GeneratedImage> {
     const options = this.options;
-    const fetchFn = options.fetch ?? fetch;
-    const form = new FormData();
-    form.append("model", options.model);
-    form.append("prompt", `${prompt.trim()}\n\nKeine neue Schrift, keine Buchstaben oder Zahlen, keine Logos, Markennamen, Wasserzeichen oder Signaturen hinzufügen.`);
-    form.append("size", "auto");
-    form.append("quality", options.quality);
-    form.append("n", "1");
-    form.append("output_format", "png");
-    form.append("image", new Blob([new Uint8Array(image)], { type: mimeType }), mimeType === "image/png" ? "foto.png" : mimeType === "image/webp" ? "foto.webp" : "foto.jpg");
-    let res: Response;
-    try {
-      res = await fetchFn(`${options.baseUrl.replace(/\/+$/, "")}/v1/images/edits`, {
-        method: "POST",
-        signal: AbortSignal.timeout(300_000),
-        headers: { authorization: `Bearer ${options.apiKey}` },
-        body: form,
-      });
-    } catch (error) {
-      throw new Error(`Keine Verbindung zum Bildanbieter: ${error instanceof Error ? error.message : String(error)}`);
-    }
-    const text = await res.text();
-    let body: { data?: { b64_json?: string }[]; error?: { message?: string; code?: string } } = {};
-    try {
-      body = JSON.parse(text);
-    } catch {
-      // Antwort ohne JSON: unten behandelt
-    }
-    if (!res.ok) throw new Error(explainImageError(res.status, body.error?.message ?? body.error?.code ?? text));
-    const b64 = body.data?.[0]?.b64_json;
-    if (!b64) throw new Error("Der Bildanbieter hat kein Bild geliefert.");
-    return { data: Buffer.from(b64, "base64"), mimeType: "image/png" };
+    return this.withModel((model) => {
+      const form = new FormData();
+      form.append("model", model);
+      form.append("prompt", `${prompt.trim()}\n\nKeine neue Schrift, keine Buchstaben oder Zahlen, keine Logos, Markennamen, Wasserzeichen oder Signaturen hinzufügen.`);
+      form.append("size", "auto");
+      form.append("quality", options.quality);
+      form.append("n", "1");
+      form.append("output_format", "png");
+      form.append("image", new Blob([new Uint8Array(image)], { type: mimeType }), mimeType === "image/png" ? "foto.png" : mimeType === "image/webp" ? "foto.webp" : "foto.jpg");
+      return this.post("/v1/images/edits", { timeout: 300_000, headers: {}, body: form });
+    });
   }
 }
 

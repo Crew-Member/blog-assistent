@@ -95,8 +95,8 @@ describe("Voreinstellungen und Startanzeige", () => {
   const cfg = (extra: Record<string, string>) => loadConfig({ ...base, ...extra } as NodeJS.ProcessEnv);
 
   it("setzt je Anbieter passende Standardwerte, die sich ueberschreiben lassen", () => {
-    expect(resolveImageSettings(cfg({ IMAGE_PROVIDER: "supermachine", IMAGE_API_KEY: "sk-x" }))).toEqual({ model: "Supermachine NextGen", baseUrl: "https://dev.supermachine.art/v1", width: 1024, height: 768 });
-    expect(resolveImageSettings(cfg({ IMAGE_PROVIDER: "openai", IMAGE_API_KEY: "sk-x" }))).toMatchObject({ model: "gpt-image-1", baseUrl: "https://api.openai.com" });
+    expect(resolveImageSettings(cfg({ IMAGE_PROVIDER: "supermachine", IMAGE_API_KEY: "sk-x" }))).toEqual({ model: "Supermachine NextGen", fallbackModels: [], baseUrl: "https://dev.supermachine.art/v1", width: 1024, height: 768 });
+    expect(resolveImageSettings(cfg({ IMAGE_PROVIDER: "openai", IMAGE_API_KEY: "sk-x" }))).toMatchObject({ model: "gpt-image-2", fallbackModels: ["gpt-image-2.5-flare", "gpt-image-2.5-sunburst"], baseUrl: "https://api.openai.com" });
     expect(resolveImageSettings(cfg({ IMAGE_PROVIDER: "supermachine", IMAGE_API_KEY: "sk-x", IMAGE_MODEL: "Anderes Modell", IMAGE_WIDTH: "1152", IMAGE_HEIGHT: "768" }))).toMatchObject({ model: "Anderes Modell", width: 1152, height: 768 });
   });
 
@@ -158,5 +158,41 @@ describe("OpenAiImageProvider.edit", () => {
     expect(calls[0]!.fields["model"]).toBe("gpt-image-1");
     const failing = new OpenAiImageProvider({ apiKey: "k", model: "m", quality: "low", baseUrl: "https://api.openai.com", fetch: (async () => new Response(JSON.stringify({ error: { message: "content_policy blocked" } }), { status: 400 })) as typeof fetch });
     await expect(failing.edit!({ image: Buffer.from("x"), mimeType: "image/png", prompt: "p" })).rejects.toThrow(/Sicherheitsfilter/);
+  });
+});
+
+describe("OpenAI-Modellwahl nach Abschaltung von gpt-image-1", () => {
+  const cfg = (extra: Record<string, string>) => loadConfig({ DATABASE_URL: "postgresql://x", ADMIN_PASSWORD: "geheim-passwort", SESSION_SECRET: "x".repeat(40), AI_PROVIDER: "fake", IMAGE_PROVIDER: "openai", IMAGE_API_KEY: "sk-x", ...extra } as NodeJS.ProcessEnv);
+
+  it("ersetzt abgeschaltete Modelle aus der .env durch die Nachfolger, eigene Angaben bleiben", () => {
+    expect(resolveImageSettings(cfg({ IMAGE_MODEL: "gpt-image-1" }))).toMatchObject({ model: "gpt-image-2" });
+    expect(resolveImageSettings(cfg({ IMAGE_MODEL: "gpt-image-2.5-sunburst" }))).toMatchObject({ model: "gpt-image-2.5-sunburst", fallbackModels: [] });
+  });
+
+  it("probiert bei nicht verfuegbarem Modell das naechste und merkt sich das funktionierende", async () => {
+    const { OpenAiImageProvider } = await import("./provider.js");
+    const models: string[] = [];
+    const png = Buffer.from("png-bytes").toString("base64");
+    const fetchStub = (async (_url: string, init: { body: string }) => {
+      const model = (JSON.parse(init.body) as { model: string }).model;
+      models.push(model);
+      return model === "gpt-image-2" ? new Response(JSON.stringify({ error: { message: "The model `gpt-image-2` does not exist or you do not have access to it." } }), { status: 404 }) : new Response(JSON.stringify({ data: [{ b64_json: png }] }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const provider = new OpenAiImageProvider({ apiKey: "k", model: "gpt-image-2", fallbackModels: ["gpt-image-2.5-flare"], quality: "medium", baseUrl: "https://api.openai.com", fetch: fetchStub });
+    expect((await provider.generate({ prompt: "x" })).data.toString()).toBe("png-bytes");
+    await provider.generate({ prompt: "y" });
+    expect(models).toEqual(["gpt-image-2", "gpt-image-2.5-flare", "gpt-image-2.5-flare"]);
+  });
+
+  it("wechselt das Modell nicht bei anderen Fehlern (Schluessel, Guthaben, Sicherheitsfilter)", async () => {
+    const { OpenAiImageProvider } = await import("./provider.js");
+    let calls = 0;
+    const fetchStub = (async () => {
+      calls++;
+      return new Response(JSON.stringify({ error: { message: "Incorrect API key provided" } }), { status: 401 });
+    }) as unknown as typeof fetch;
+    const provider = new OpenAiImageProvider({ apiKey: "k", model: "gpt-image-2", fallbackModels: ["gpt-image-2.5-flare"], quality: "low", baseUrl: "https://api.openai.com", fetch: fetchStub });
+    await expect(provider.generate({ prompt: "x" })).rejects.toThrow(/Schlüssel/);
+    expect(calls).toBe(1);
   });
 });
